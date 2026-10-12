@@ -3,11 +3,10 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import db from '../config/db.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, JWT_SECRET } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'eaglepower_secure_jwt_token_secret_key_2025_amikwo';
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username, phone or admission number is required'),
@@ -43,28 +42,27 @@ function getRoleProfileDetails(role, referenceId, username, email) {
   }
 
   if (role === 'parent') {
-    // Match by reference_id (admission number) or guardian phone / email
+    // Match children strictly by verified guardian phone / email or matched admission number with guardian check
     const cleanRef = referenceId ? referenceId.trim().toUpperCase() : '';
     const cleanUser = username ? username.trim() : '';
     const cleanEmail = email ? email.trim().toLowerCase() : '';
 
     const cleanPhoneDigits = cleanUser.replace(/\D/g, '');
-    const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : '___invalid___';
+    const last10 = cleanPhoneDigits.length >= 7 ? cleanPhoneDigits.slice(-10) : '___invalid___';
 
     children = db.prepare(`
       SELECT s.*, c.name as class_name, c.division, sec.name as section_name
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN sections sec ON s.section_id = sec.id
-      WHERE UPPER(s.admission_no) = ?
-         OR (s.guardian_phone IS NOT NULL AND (
-             s.guardian_phone = ? 
-             OR REPLACE(s.guardian_phone, ' ', '') = ?
-             OR REPLACE(REPLACE(s.guardian_phone, '+', ''), ' ', '') LIKE ?
-         ))
+      WHERE (s.guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(s.guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
          OR (s.guardian_email IS NOT NULL AND LOWER(s.guardian_email) = ?)
+         OR (UPPER(s.admission_no) = ? AND (
+             (s.guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(s.guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+             OR (s.guardian_email IS NOT NULL AND LOWER(s.guardian_email) = ?)
+         ))
       ORDER BY s.id ASC
-    `).all(cleanRef, cleanUser, cleanUser.replace(/\s+/g, ''), `%${last10}%`, cleanEmail);
+    `).all(`%${last10}%`, cleanEmail, cleanRef, `%${last10}%`, cleanEmail);
   }
 
   if (['teacher', 'bursar', 'admin'].includes(role) && referenceId) {
@@ -120,22 +118,42 @@ router.post('/register', (req, res, next) => {
     }
 
     // 2. Validate reference_id if provided for parent / student
-    if (role === 'parent' && cleanRef) {
-      const student = db.prepare('SELECT id, first_name, last_name, admission_no FROM students WHERE UPPER(admission_no) = ?').get(cleanRef);
+    if (role === 'parent') {
+      if (!cleanRef) {
+        return res.status(400).json({
+          success: false,
+          message: 'Child Admission Number is required for Parent Portal account creation.'
+        });
+      }
+
+      const student = db.prepare('SELECT id, first_name, last_name, admission_no, guardian_phone, guardian_email FROM students WHERE UPPER(admission_no) = ?').get(cleanRef);
       if (!student) {
         return res.status(404).json({
           success: false,
           message: `Child with Admission Number '${cleanRef}' not found in school records.`
         });
       }
-    } else if (role === 'student' && cleanRef) {
-      const student = db.prepare('SELECT id, first_name, last_name, admission_no FROM students WHERE UPPER(admission_no) = ?').get(cleanRef);
-      if (!student) {
-        return res.status(404).json({
+
+      // Strict Guardian Match: Registrant's phone or email must match emergency guardian contact on file!
+      const regPhoneDigits = (phone || cleanUsername).replace(/\D/g, '');
+      const regLast7 = regPhoneDigits.length >= 7 ? regPhoneDigits.slice(-7) : regPhoneDigits;
+      const guardianPhoneDigits = (student.guardian_phone || '').replace(/\D/g, '');
+      const guardianLast7 = guardianPhoneDigits.length >= 7 ? guardianPhoneDigits.slice(-7) : guardianPhoneDigits;
+
+      const phoneMatches = Boolean(regLast7 && guardianLast7 && (regPhoneDigits.includes(guardianLast7) || guardianPhoneDigits.includes(regLast7)));
+      const emailMatches = Boolean(cleanEmail && student.guardian_email && cleanEmail.toLowerCase() === student.guardian_email.toLowerCase());
+
+      if (!phoneMatches && !emailMatches) {
+        return res.status(403).json({
           success: false,
-          message: `Admission Number '${cleanRef}' does not exist in student registry.`
+          message: `Verification failed: The provided contact phone (${phone || cleanUsername}) does not match the registered guardian records on file for ${cleanRef}. Please contact the school administrative desk.`
         });
       }
+    } else if (role === 'student') {
+      return res.status(403).json({
+        success: false,
+        message: 'Direct self-registration for students is disabled for institutional integrity. Student accounts are officially provisioned upon school enrollment. Please obtain your login credentials from your Class Teacher or the School Administrator.'
+      });
     }
 
     // 3. Hash password

@@ -11,7 +11,7 @@ const router = express.Router();
  * 1. GET /api/homework
  * List homework assignments with optional class_id or subject_id filters
  */
-router.get('/', (req, res, next) => {
+router.get('/', authenticate, (req, res, next) => {
   try {
     const { class_id, subject_id, status = 'Active' } = req.query;
     let conditions = [];
@@ -60,9 +60,9 @@ router.get('/', (req, res, next) => {
 
 /**
  * 2. GET /api/homework/:id
- * Retrieve a specific assignment with all student submissions
+ * Retrieve a specific assignment with scoped student submissions
  */
-router.get('/:id', (req, res, next) => {
+router.get('/:id', authenticate, (req, res, next) => {
   try {
     const assignment = db.prepare(`
       SELECT 
@@ -81,19 +81,46 @@ router.get('/:id', (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
 
+    // Determine submissions visibility based on role
+    let submissionsWhere = 'WHERE sub.assignment_id = ?';
+    const subParams = [req.params.id];
+
+    if (req.user.role === 'student') {
+      const student = db.prepare('SELECT id FROM students WHERE UPPER(admission_no) = ?').get((req.user.reference_id || req.user.username).toUpperCase());
+      submissionsWhere += ' AND sub.student_id = ?';
+      subParams.push(student ? student.id : -1);
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const children = db.prepare(`
+        SELECT id FROM students 
+        WHERE (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+           OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+           OR UPPER(admission_no) = ?
+      `).all(`%${last10}%`, cleanEmail, cleanRef);
+      const childIds = children.map(c => c.id);
+      if (childIds.length === 0) {
+        submissionsWhere += ' AND 1 = 0';
+      } else {
+        submissionsWhere += ` AND sub.student_id IN (${childIds.map(() => '?').join(',')})`;
+        subParams.push(...childIds);
+      }
+    }
+
     const submissions = db.prepare(`
       SELECT 
         sub.*,
         stu.first_name,
         stu.last_name,
-        stu.admission_no,
-        stu.guardian_name,
-        stu.guardian_phone
+        stu.admission_no
       FROM homework_submissions sub
       JOIN students stu ON sub.student_id = stu.id
-      WHERE sub.assignment_id = ?
+      ${submissionsWhere}
       ORDER BY sub.id DESC
-    `).all(req.params.id);
+    `).all(...subParams);
 
     res.json({
       success: true,
@@ -122,7 +149,7 @@ const createHomeworkSchema = z.object({
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'due_date must be YYYY-MM-DD')
 });
 
-router.post('/', authenticate, requireRoles(['teacher', 'admin', 'superadmin']), (req, res, next) => {
+router.post('/', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
   try {
     const validated = createHomeworkSchema.parse(req.body);
     
@@ -195,7 +222,7 @@ const submitHomeworkSchema = z.object({
   attachment_path: z.string().optional()
 });
 
-router.post('/:id/submit', (req, res, next) => {
+router.post('/:id/submit', authenticate, (req, res, next) => {
   try {
     const assignment = db.prepare(`
       SELECT h.*, c.name as class_name, s.name as subject_name 
@@ -214,6 +241,14 @@ router.post('/:id/submit', (req, res, next) => {
 
     if (!student) {
       return res.status(404).json({ success: false, message: 'Student not found.' });
+    }
+
+    // Student can only submit for themselves
+    if (req.user.role === 'student') {
+      const selfStudent = db.prepare('SELECT id FROM students WHERE UPPER(admission_no) = ?').get((req.user.reference_id || req.user.username).toUpperCase());
+      if (!selfStudent || selfStudent.id !== student.id) {
+        return res.status(403).json({ success: false, message: 'Students can only submit their own homework.' });
+      }
     }
 
     // In-House AI Evaluation
@@ -265,7 +300,7 @@ router.post('/:id/submit', (req, res, next) => {
  * 5. PATCH /api/homework/submissions/:id/grade
  * Teachers review, confirm, or adjust score and feedback
  */
-router.patch('/submissions/:id/grade', authenticate, requireRoles(['teacher', 'admin', 'superadmin']), (req, res, next) => {
+router.patch('/submissions/:id/grade', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
   try {
     const { teacher_score, teacher_feedback } = req.body;
     if (teacher_score === undefined || teacher_score === null) {

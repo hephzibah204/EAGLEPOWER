@@ -10,11 +10,39 @@ const router = express.Router();
 
 /**
  * 1. GET /api/progress/student/:id
- * Full academic trajectory, learning gap radar, and attendance correlations
+ * Full academic trajectory, learning gap radar, and attendance correlations (Authenticated)
  */
-router.get('/student/:id', (req, res, next) => {
+router.get('/student/:id', authenticate, (req, res, next) => {
   try {
-    const analysis = analyzeStudentProgress(req.params.id);
+    const targetStudentId = parseInt(req.params.id);
+
+    // Ownership check for student and parent
+    if (req.user.role === 'student') {
+      const student = db.prepare('SELECT id FROM students WHERE UPPER(admission_no) = ?').get((req.user.reference_id || req.user.username).toUpperCase());
+      if (!student || student.id !== targetStudentId) {
+        return res.status(403).json({ success: false, message: 'Access denied: You may only view your own progress.' });
+      }
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const child = db.prepare(`
+        SELECT id FROM students 
+        WHERE id = ? AND (
+          (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+          OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+          OR UPPER(admission_no) = ?
+        )
+      `).get(targetStudentId, `%${last10}%`, cleanEmail, cleanRef);
+
+      if (!child) {
+        return res.status(403).json({ success: false, message: 'Access denied: Not your registered ward.' });
+      }
+    }
+
+    const analysis = analyzeStudentProgress(targetStudentId);
     if (!analysis) {
       return res.status(404).json({ success: false, message: 'Student not found.' });
     }
@@ -30,12 +58,40 @@ router.get('/student/:id', (req, res, next) => {
 
 /**
  * 2. GET /api/progress/student/:id/recommendations
- * Personalized, pedagogical parent coaching recommendations
+ * Personalized, pedagogical parent coaching recommendations (Authenticated)
  */
-router.get('/student/:id/recommendations', (req, res, next) => {
+router.get('/student/:id/recommendations', authenticate, (req, res, next) => {
   try {
+    const targetStudentId = parseInt(req.params.id);
+
+    // Ownership check for student and parent
+    if (req.user.role === 'student') {
+      const student = db.prepare('SELECT id FROM students WHERE UPPER(admission_no) = ?').get((req.user.reference_id || req.user.username).toUpperCase());
+      if (!student || student.id !== targetStudentId) {
+        return res.status(403).json({ success: false, message: 'Access denied: You may only view your own recommendations.' });
+      }
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const child = db.prepare(`
+        SELECT id FROM students 
+        WHERE id = ? AND (
+          (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+          OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+          OR UPPER(admission_no) = ?
+        )
+      `).get(targetStudentId, `%${last10}%`, cleanEmail, cleanRef);
+
+      if (!child) {
+        return res.status(403).json({ success: false, message: 'Access denied: Not your registered ward.' });
+      }
+    }
+
     // Generate or fetch fresh in-house AI recommendations
-    const recommendations = generateParentRecommendations(req.params.id);
+    const recommendations = generateParentRecommendations(targetStudentId);
 
     res.json({
       success: true,
@@ -51,7 +107,7 @@ router.get('/student/:id/recommendations', (req, res, next) => {
  * 3. GET /api/progress/class/:classId/summary
  * Class-wide performance insights, learning gaps, and high-risk flags for teachers/admin
  */
-router.get('/class/:classId/summary', (req, res, next) => {
+router.get('/class/:classId/summary', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
   try {
     const students = db.prepare(`
       SELECT id, admission_no, first_name, last_name 

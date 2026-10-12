@@ -40,20 +40,35 @@ import { errorHandler } from './middleware/errorHandler.js';
 const app = express();
 const PORT = process.env.PORT || 5050;
 
+// Enable trust proxy for accurate rate-limiting behind reverse proxies (Nginx, Cloudflare)
+app.set('trust proxy', 1);
+
 // Security Middleware: Helmet HTTP Headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
-// CORS Configuration
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,http://localhost:3000').split(',');
+// CORS Configuration - Restrict to authorized client origins
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, server-to-server)
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    // Allow non-browser requests (mobile apps, server-side fetch, CLI tests)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*') || origin.endsWith('.pages.dev')) {
       return callback(null, true);
     }
-    return callback(null, true); // Dev-friendly fallback
+
+    // In non-production, permit standard local dev origins
+    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS origin '${origin}' is not permitted.`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],

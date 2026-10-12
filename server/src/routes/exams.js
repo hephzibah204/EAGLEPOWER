@@ -1,6 +1,6 @@
 import express from 'express';
 import db from '../config/db.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate, requireRoles, requireStudentAccess } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 
 const router = express.Router();
@@ -19,11 +19,38 @@ function calculateGrade(total) {
 
 /**
  * GET /api/exams/marks/:studentId
- * Marks by student ID
+ * Marks by student ID (Authenticated & ownership checked)
  */
-router.get('/marks/:studentId', (req, res, next) => {
+router.get('/marks/:studentId', authenticate, (req, res, next) => {
   try {
     const { session = '2024/2025', term = 'Second Term' } = req.query;
+    const targetStudentId = parseInt(req.params.studentId);
+
+    // Ownership check for student and parent
+    if (req.user.role === 'student') {
+      const student = db.prepare('SELECT id FROM students WHERE UPPER(admission_no) = ?').get((req.user.reference_id || req.user.username).toUpperCase());
+      if (!student || student.id !== targetStudentId) {
+        return res.status(403).json({ success: false, message: 'Access denied: You can only view your own marks.' });
+      }
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const child = db.prepare(`
+        SELECT id FROM students 
+        WHERE id = ? AND (
+          (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+          OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+          OR UPPER(admission_no) = ?
+        )
+      `).get(targetStudentId, `%${last10}%`, cleanEmail, cleanRef);
+
+      if (!child) {
+        return res.status(403).json({ success: false, message: 'Access denied: Not your registered ward.' });
+      }
+    }
 
     const marks = db.prepare(`
       SELECT m.*, s.name as subject_name, s.code as subject_code, s.category
@@ -31,7 +58,7 @@ router.get('/marks/:studentId', (req, res, next) => {
       JOIN subjects s ON m.subject_id = s.id
       WHERE m.student_id = ? AND m.session = ? AND m.term = ?
       ORDER BY s.name ASC
-    `).all(req.params.studentId, session, term);
+    `).all(targetStudentId, session, term);
 
     res.json({
       success: true,
@@ -45,9 +72,9 @@ router.get('/marks/:studentId', (req, res, next) => {
 
 /**
  * GET /api/exams/class-sheet
- * Teacher Gradebook Class Marks Sheet
+ * Teacher Gradebook Class Marks Sheet (Teacher/Admin only)
  */
-router.get('/class-sheet', (req, res, next) => {
+router.get('/class-sheet', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
   try {
     const { class_id, subject_id, session = '2024/2025', term = 'Second Term' } = req.query;
 
@@ -90,12 +117,39 @@ router.get('/class-sheet', (req, res, next) => {
 
 /**
  * GET /api/exams/report-card/:admissionNo
- * Comprehensive Official E-Report Card with Auto Class Ranking
+ * Comprehensive Official E-Report Card with Auto Class Ranking (Authenticated & ownership checked)
  */
-router.get('/report-card/:admissionNo', (req, res, next) => {
+router.get('/report-card/:admissionNo', authenticate, (req, res, next) => {
   try {
     const { admissionNo } = req.params;
     const { session = '2024/2025', term = 'Second Term' } = req.query;
+    const cleanAdmNo = admissionNo.trim().toUpperCase();
+
+    // Check authorization:
+    if (req.user.role === 'student') {
+      const selfAdm = (req.user.reference_id || req.user.username || '').toUpperCase();
+      if (selfAdm !== cleanAdmNo) {
+        return res.status(403).json({ success: false, message: 'Students can only view their own report card.' });
+      }
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const child = db.prepare(`
+        SELECT id FROM students 
+        WHERE UPPER(admission_no) = ? AND (
+          (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+          OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+          OR UPPER(admission_no) = ?
+        )
+      `).get(cleanAdmNo, `%${last10}%`, cleanEmail, cleanRef);
+
+      if (!child) {
+        return res.status(403).json({ success: false, message: 'Access denied: Not your registered ward.' });
+      }
+    }
 
     const student = db.prepare(`
       SELECT s.*, c.name as class_name, c.division, sec.name as section_name
@@ -103,7 +157,7 @@ router.get('/report-card/:admissionNo', (req, res, next) => {
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN sections sec ON s.section_id = sec.id
       WHERE UPPER(s.admission_no) = ?
-    `).get(admissionNo.trim().toUpperCase());
+    `).get(cleanAdmNo);
 
     if (!student) {
       return res.status(404).json({
@@ -424,9 +478,9 @@ router.post('/marks/batch', authenticate, requireRoles('teacher', 'admin', 'supe
 
 /**
  * GET /api/exams/class-broadsheet
- * Complete Master Broadsheet Matrix for an entire class
+ * Complete Master Broadsheet Matrix for an entire class (Teacher/Admin only)
  */
-router.get('/class-broadsheet', (req, res, next) => {
+router.get('/class-broadsheet', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
   try {
     const { class_id, session = '2024/2025', term = 'Second Term' } = req.query;
 
@@ -595,9 +649,9 @@ router.get('/class-broadsheet', (req, res, next) => {
 
 /**
  * GET /api/exams/class-reports/:classId
- * Bulk compiled report cards for an entire class (for batch printing)
+ * Bulk compiled report cards for an entire class (Teacher/Admin only)
  */
-router.get('/class-reports/:classId', (req, res, next) => {
+router.get('/class-reports/:classId', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
   try {
     const { classId } = req.params;
     const { session = '2024/2025', term = 'Second Term' } = req.query;

@@ -23,8 +23,9 @@ const staffSchema = z.object({
  * GET /api/staff
  * Public & authenticated staff faculty roster
  */
-router.get('/', (req, res, next) => {
+router.get('/', authenticate, (req, res, next) => {
   try {
+    const isStaffOrAdmin = ['superadmin', 'admin', 'bursar', 'teacher'].includes(req.user.role);
     const staff = db.prepare(`
       SELECT s.*, u.username, u.is_active as user_active
       FROM staff s
@@ -33,10 +34,20 @@ router.get('/', (req, res, next) => {
       ORDER BY s.id ASC
     `).all();
 
+    const sanitizedStaff = isStaffOrAdmin 
+      ? staff 
+      : staff.map(s => ({
+          id: s.id,
+          name: s.name,
+          role: s.role,
+          assigned_class: s.assigned_class,
+          qualification: s.qualification
+        }));
+
     res.json({
       success: true,
-      count: staff.length,
-      data: staff
+      count: sanitizedStaff.length,
+      data: sanitizedStaff
     });
   } catch (err) {
     next(err);

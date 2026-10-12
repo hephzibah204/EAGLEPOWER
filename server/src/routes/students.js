@@ -1,19 +1,21 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../config/db.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate, requireRoles, requireStudentAccess } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 
 const router = express.Router();
 
 /**
  * GET /api/students
- * List or search students
+ * List or search students (Restricted to Faculty and Admin)
  */
-router.get('/', authenticate, (req, res, next) => {
+router.get('/', authenticate, requireRoles('superadmin', 'admin', 'teacher', 'bursar'), (req, res, next) => {
   try {
     const { q, class_id, section_id, limit = 50, page = 1 } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
+    const safePage = Math.max(parseInt(page) || 1, 1);
+    const offset = (safePage - 1) * safeLimit;
 
     let conditions = ['s.is_active = 1'];
     const params = [];
@@ -51,13 +53,13 @@ router.get('/', authenticate, (req, res, next) => {
       LIMIT ? OFFSET ?
     `);
 
-    const students = dataStmt.all(...params, parseInt(limit), offset);
+    const students = dataStmt.all(...params, safeLimit, offset);
 
     res.json({
       success: true,
       total,
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page: safePage,
+      limit: safeLimit,
       data: students
     });
   } catch (err) {
@@ -67,12 +69,38 @@ router.get('/', authenticate, (req, res, next) => {
 
 /**
  * GET /api/students/lookup/:admissionNo
- * Student Portal quick lookup by admission number
+ * Student Portal quick lookup by admission number (Authenticated & ownership checked)
  */
-router.get('/lookup/:admissionNo', (req, res, next) => {
+router.get('/lookup/:admissionNo', authenticate, (req, res, next) => {
   try {
     const { admissionNo } = req.params;
     const cleanNo = admissionNo.trim().toUpperCase();
+
+    // Authorization check
+    if (req.user.role === 'student') {
+      const selfAdm = (req.user.reference_id || req.user.username || '').toUpperCase();
+      if (selfAdm !== cleanNo) {
+        return res.status(403).json({ success: false, message: 'Students may only look up their own records.' });
+      }
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const child = db.prepare(`
+        SELECT id FROM students 
+        WHERE UPPER(admission_no) = ? AND (
+          (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+          OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+          OR UPPER(admission_no) = ?
+        )
+      `).get(cleanNo, `%${last10}%`, cleanEmail, cleanRef);
+
+      if (!child) {
+        return res.status(403).json({ success: false, message: 'Access denied: Not your registered ward.' });
+      }
+    }
 
     const student = db.prepare(`
       SELECT 
@@ -141,9 +169,9 @@ router.get('/lookup/:admissionNo', (req, res, next) => {
 
 /**
  * GET /api/students/:id
- * Retrieve detailed student record
+ * Retrieve detailed student record (Protected by Object-Level Access)
  */
-router.get('/:id', authenticate, (req, res, next) => {
+router.get('/:id', authenticate, requireStudentAccess('id', 'id'), (req, res, next) => {
   try {
     const student = db.prepare(`
       SELECT 

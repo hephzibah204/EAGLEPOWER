@@ -57,8 +57,8 @@ export default function PortalDashboard({ isOpen, onClose }) {
   });
 
   // Login form state
-  const [loginUsername, setLoginUsername] = useState('admin');
-  const [loginPassword, setLoginPassword] = useState('EagleAdmin2025!');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -253,41 +253,41 @@ export default function PortalDashboard({ isOpen, onClose }) {
       const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
       // 1. Classes
-      const cRes = await fetch(`${API_BASE}/academics/classes`).catch(() => null);
+      const cRes = await fetch(`${API_BASE}/academics/classes`, { headers }).catch(() => null);
       if (cRes?.ok) {
         const d = await cRes.json();
         setClasses(d.data || []);
       }
 
       // 2. Subjects
-      const subRes = await fetch(`${API_BASE}/academics/subjects`).catch(() => null);
+      const subRes = await fetch(`${API_BASE}/academics/subjects`, { headers }).catch(() => null);
       if (subRes?.ok) {
         const d = await subRes.json();
         setSubjects(d.data || []);
       }
 
       // 3. Students
-      const sRes = await fetch(`${API_BASE}/students?limit=100`).catch(() => null);
+      const sRes = await fetch(`${API_BASE}/students?limit=100`, { headers }).catch(() => null);
       if (sRes?.ok) {
         const d = await sRes.json();
         setStudents(d.data || []);
       }
 
       // 4. Staff
-      const stRes = await fetch(`${API_BASE}/staff`).catch(() => null);
+      const stRes = await fetch(`${API_BASE}/staff`, { headers }).catch(() => null);
       if (stRes?.ok) {
         const d = await stRes.json();
         setStaff(d.data || []);
       }
 
       // 5. Finance Stats & Invoices
-      const fRes = await fetch(`${API_BASE}/finance/stats`).catch(() => null);
+      const fRes = await fetch(`${API_BASE}/finance/stats`, { headers }).catch(() => null);
       if (fRes?.ok) {
         const d = await fRes.json();
         setFinanceStats(d.data || null);
       }
 
-      const invRes = await fetch(`${API_BASE}/finance/invoices?limit=50`).catch(() => null);
+      const invRes = await fetch(`${API_BASE}/finance/invoices?limit=50`, { headers }).catch(() => null);
       if (invRes?.ok) {
         const d = await invRes.json();
         setInvoices(d.data || []);
@@ -302,10 +302,10 @@ export default function PortalDashboard({ isOpen, onClose }) {
 
       // 7. Front Desk Visitors & Sub-modules
       const [fdRes, enqRes, callRes, compRes] = await Promise.all([
-        fetch(`${API_BASE}/frontdesk/visitors`).catch(() => null),
-        fetch(`${API_BASE}/frontdesk/enquiries`).catch(() => null),
-        fetch(`${API_BASE}/frontdesk/calls`).catch(() => null),
-        fetch(`${API_BASE}/frontdesk/complaints`).catch(() => null)
+        fetch(`${API_BASE}/frontdesk/visitors`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/frontdesk/enquiries`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/frontdesk/calls`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/frontdesk/complaints`, { headers }).catch(() => null)
       ]);
       if (fdRes?.ok) {
         const d = await fdRes.json();
@@ -516,7 +516,8 @@ export default function PortalDashboard({ isOpen, onClose }) {
   // Load teacher class score sheet whenever class or subject changes
   const fetchClassSheet = useCallback(async (cId, sId) => {
     try {
-      const res = await fetch(`${API_BASE}/exams/class-sheet?class_id=${cId}&subject_id=${sId}`);
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/exams/class-sheet?class_id=${cId}&subject_id=${sId}`, { headers });
       if (res.ok) {
         const d = await res.json();
         setClassSheetRows(d.data || []);
@@ -524,7 +525,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
     } catch (err) {
       console.warn('Error fetching class sheet:', err.message);
     }
-  }, [API_BASE]);
+  }, [API_BASE, authToken]);
 
   useEffect(() => {
     if (isOpen && activeRole === 'teacher') {
@@ -539,7 +540,8 @@ export default function PortalDashboard({ isOpen, onClose }) {
 
     setReportCardLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/exams/report-card/${cleanId}`);
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/exams/report-card/${cleanId}`, { headers });
       if (res.ok) {
         const d = await res.json();
         if (d.report_card) {
@@ -561,7 +563,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
     } finally {
       setReportCardLoading(false);
     }
-  }, [API_BASE]);
+  }, [API_BASE, authToken]);
 
   useEffect(() => {
     if (isOpen && (activeRole === 'student' || activeTab === 'reportcard') && selectedStudentAdmNo) {
@@ -614,13 +616,6 @@ export default function PortalDashboard({ isOpen, onClose }) {
     setCurrentUser(null);
     localStorage.removeItem('eagle_token');
     localStorage.removeItem('eagle_user');
-  };
-
-  // Quick Preset Selector on Login Screen
-  const handleQuickPresetLogin = (presetRole, user, pass) => {
-    setLoginUsername(user);
-    setLoginPassword(pass);
-    handlePerformLogin(null, user, pass);
   };
 
   // Parent Registration Handler
@@ -996,7 +991,9 @@ export default function PortalDashboard({ isOpen, onClose }) {
           follow_up_date: '',
           notes: ''
         });
-        const refRes = await fetch(`${API_BASE}/frontdesk/enquiries`);
+        const refRes = await fetch(`${API_BASE}/frontdesk/enquiries`, {
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+        });
         if (refRes.ok) {
           const rData = await refRes.json();
           setEnquiries(rData.data || []);
@@ -1172,9 +1169,10 @@ export default function PortalDashboard({ isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Quick Role Switcher Pill (Active when logged in or testing) */}
-          {currentUser && (
+          {/* Institutional Preview: Strictly restricted to SuperAdmin */}
+          {currentUser && currentUser.role === 'superadmin' && (
             <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
+              <span className="text-[10px] text-amber-400/80 font-bold uppercase px-2 hidden sm:inline">Admin Preview:</span>
               <button
                 onClick={() => { setActiveRole('superadmin'); setActiveTab('executive_cockpit'); }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
@@ -1415,65 +1413,25 @@ export default function PortalDashboard({ isOpen, onClose }) {
               </form>
             )}
 
-            {/* Quick Access to Verified Role Accounts */}
-            <div className="w-full space-y-2 text-xs">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block text-center">
-                Institutional Accounts Access
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickPresetLogin('admin', 'admin', 'EagleAdmin2025!')}
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left transition-colors"
-                >
-                  <strong className="text-white block">🏛️ Principal</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">admin</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickPresetLogin('teacher', 'teacher', 'Teacher2025!')}
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left transition-colors"
-                >
-                  <strong className="text-white block">👨‍🏫 Teacher</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">teacher</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickPresetLogin('bursar', 'bursar', 'Bursar2025!')}
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left transition-colors"
-                >
-                  <strong className="text-white block">💼 Bursar</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">bursar</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickPresetLogin('superadmin', 'superadmin', 'EagleSuperAdmin2025!')}
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left transition-colors"
-                >
-                  <strong className="text-white block">👑 SuperAdmin</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">superadmin</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickPresetLogin('student', 'ESE2009012', 'Eagle2025!')}
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left transition-colors"
-                >
-                  <strong className="text-white block">🎒 Student</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">ESE2009012</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickPresetLogin('parent', '08037098816', 'SecureParent2025!')}
-                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-amber-400/60 text-left transition-colors"
-                >
-                  <strong className="text-white block">👪 Parent</strong>
-                  <span className="text-[10px] text-slate-400 font-mono">08037098816</span>
-                </button>
+            {/* Institutional Portal Guidance & Protection Notice */}
+            <div className="w-full p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-400 space-y-2.5">
+              <div className="flex items-center gap-2 text-amber-400 font-black text-xs uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>Verified Portal Authentication</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px] leading-relaxed">
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                  <strong className="text-white block mb-0.5">🏛️ Administrative & Faculty:</strong>
+                  <span>Sign in with your assigned staff username or staff ID number and your secure access password.</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                  <strong className="text-white block mb-0.5">🎒 Enrolled Students:</strong>
+                  <span>Sign in using your school Admission Number (e.g. <span className="font-mono text-amber-300">ESE2009012</span>) and access PIN.</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 sm:col-span-2">
+                  <strong className="text-white block mb-0.5">👪 Parents & Guardians:</strong>
+                  <span>Log in with your registered phone number, or select <strong>Register Parent</strong> above to link your portal profile with your child's records via verified guardian match.</span>
+                </div>
               </div>
             </div>
           </div>

@@ -1,0 +1,1807 @@
+{
+  "system": {
+    "name": "Eagle Power Schools",
+    "motto": "Love, Truth & Service",
+    "legacy_portal": "https://portal.eaglepowerschools.com.ng/",
+    "admin_contact": "+234 803 359 1058",
+    "admin_email": "adaeze3011@gmail.com",
+    "address": "2 & 9 Amikwo Road, Awka, Anambra State"
+  },
+  "classes": [
+    {
+      "id": 1,
+      "name": "JSS1"
+    },
+    {
+      "id": 2,
+      "name": "JSS2"
+    },
+    {
+      "id": 3,
+      "name": "JSS3"
+    },
+    {
+      "id": 4,
+      "name": "SS1"
+    },
+    {
+      "id": 5,
+      "name": "SS2"
+    },
+    {
+      "id": 6,
+      "name": "SS3"
+    },
+    {
+      "id": 7,
+      "name": "Nursery 1"
+    },
+    {
+      "id": 8,
+      "name": "Nursery 2"
+    },
+    {
+      "id": 9,
+      "name": "Nursery 3"
+    },
+    {
+      "id": 10,
+      "name": "Primary 1"
+    },
+    {
+      "id": 11,
+      "name": "Primary 2"
+    },
+    {
+      "id": 12,
+      "name": "Primary 3"
+    },
+    {
+      "id": 13,
+      "name": "Primary 4"
+    },
+    {
+      "id": 14,
+      "name": "Primary 5"
+    },
+    {
+      "id": 15,
+      "name": "Primary 6"
+    },
+    {
+      "id": 16,
+      "name": "SS 2"
+    }
+  ],
+  "sections": [
+    {
+      "id": 1,
+      "name": "A"
+    },
+    {
+      "id": 2,
+      "name": "B"
+    },
+    {
+      "id": 3,
+      "name": "C"
+    },
+    {
+      "id": 4,
+      "name": "Science"
+    },
+    {
+      "id": 5,
+      "name": "Art"
+    },
+    {
+      "id": 6,
+      "name": "Commercial"
+    },
+    {
+      "id": 7,
+      "name": "2025/2026"
+    }
+  ],
+  "subjects": [
+    {
+      "name": "Present",
+      "type": "present"
+    },
+    {
+      "name": "Late With Excuse",
+      "type": "late_with_excuse"
+    },
+    {
+      "name": "Late",
+      "type": "late"
+    },
+    {
+      "name": "Absent",
+      "type": "absent"
+    },
+    {
+      "name": "Holiday",
+      "type": "holiday"
+    },
+    {
+      "name": "Half Day",
+      "type": "half_day"
+    },
+    {
+      "name": "Scholarship Students",
+      "type": "2025-07-09 20:38:25"
+    },
+    {
+      "name": "Non scholarship students",
+      "type": "2025-07-17 08:19:51"
+    },
+    {
+      "name": "Sample Transfer Certificate",
+      "type": "Reff. No.....1111111........."
+    },
+    {
+      "name": "JSS1",
+      "type": "2025-06-27 18:36:44"
+    },
+    {
+      "name": "JSS2",
+      "type": "2025-06-27 18:37:02"
+    },
+    {
+      "name": "JSS3",
+      "type": "2025-06-27 18:37:22"
+    },
+    {
+      "name": "SS1",
+      "type": "2025-06-27 18:38:51"
+    },
+    {
+      "name": "SS2",
+      "type": "2025-06-27 18:39:05"
+    },
+    {
+      "name": "SS3",
+      "type": "2025-06-27 18:39:17"
+    },
+    {
+      "name": "Nursery 1",
+      "type": "2025-07-14 12:54:20"
+    },
+    {
+      "name": "Nursery 2",
+      "type": "2025-07-14 12:54:31"
+    },
+    {
+      "name": "Nursery 3",
+      "type": "2025-07-14 12:54:41"
+    },
+    {
+      "name": "Primary 1",
+      "type": "2025-07-14 12:54:53"
+    },
+    {
+      "name": "Primary 2",
+      "type": "2025-07-14 12:55:15"
+    },
+    {
+      "name": "Primary 3",
+      "type": "2025-07-14 12:55:25"
+    },
+    {
+      "name": "Primary 4",
+      "type": "2025-07-14 12:55:38"
+    },
+    {
+      "name": "Primary 5",
+      "type": "2025-07-14 12:55:48"
+    },
+    {
+      "name": "Primary 6",
+      "type": "2025-07-14 12:55:57"
+    },
+    {
+      "name": "SS 2",
+      "type": "2025-12-18 08:49:31"
+    },
+    {
+      "name": "Staff Related",
+      "type": "Mrs. Ogidi"
+    },
+    {
+      "name": "Staff Related",
+      "type": "2025-06-27 18:06:54"
+    },
+    {
+      "name": "Student Related ",
+      "type": "2025-07-09 20:08:12"
+    },
+    {
+      "name": "child related",
+      "type": "2025-07-15 09:33:17"
+    },
+    {
+      "name": "AED",
+      "type": "AEDf"
+    },
+    {
+      "name": "AFN",
+      "type": "\u060b"
+    },
+    {
+      "name": "ALL",
+      "type": "ALL"
+    },
+    {
+      "name": "AMD",
+      "type": "AMD"
+    },
+    {
+      "name": "ANG",
+      "type": "ANG"
+    },
+    {
+      "name": "AOA",
+      "type": "AOA"
+    },
+    {
+      "name": "ARS",
+      "type": "ARS"
+    },
+    {
+      "name": "AUD",
+      "type": "AUD"
+    },
+    {
+      "name": "AWG",
+      "type": "AWG"
+    },
+    {
+      "name": "AZN",
+      "type": "AZN"
+    },
+    {
+      "name": "BAM",
+      "type": "BAM"
+    },
+    {
+      "name": "BAM",
+      "type": "BAM"
+    },
+    {
+      "name": "BDT",
+      "type": "BDT"
+    },
+    {
+      "name": "BGN",
+      "type": "BGN"
+    },
+    {
+      "name": "BHD",
+      "type": "BHD"
+    },
+    {
+      "name": "BIF",
+      "type": "BIF"
+    },
+    {
+      "name": "BMD",
+      "type": "BMD"
+    },
+    {
+      "name": "BND",
+      "type": "BND"
+    },
+    {
+      "name": "BOB",
+      "type": "BOB"
+    },
+    {
+      "name": "BOV",
+      "type": "BOV"
+    },
+    {
+      "name": "BRL",
+      "type": "BRL"
+    },
+    {
+      "name": "BSD",
+      "type": "BSD"
+    },
+    {
+      "name": "BTN",
+      "type": "BTN"
+    },
+    {
+      "name": "BWP",
+      "type": "BWP"
+    },
+    {
+      "name": "BYN",
+      "type": "BYN"
+    },
+    {
+      "name": "BYR",
+      "type": "BYR"
+    },
+    {
+      "name": "BZD",
+      "type": "BZD"
+    },
+    {
+      "name": "CAD",
+      "type": "CAD"
+    },
+    {
+      "name": "CDF",
+      "type": "CDF"
+    },
+    {
+      "name": "CHE",
+      "type": "CHE"
+    },
+    {
+      "name": "CHF",
+      "type": "CHF"
+    },
+    {
+      "name": "CHW",
+      "type": "CHW"
+    },
+    {
+      "name": "CLF",
+      "type": "CLF"
+    },
+    {
+      "name": "CLP",
+      "type": "CLP"
+    },
+    {
+      "name": "CNY",
+      "type": "CNY"
+    },
+    {
+      "name": "COP",
+      "type": "COP"
+    },
+    {
+      "name": "COU",
+      "type": "COU"
+    },
+    {
+      "name": "CRC",
+      "type": "CRC"
+    },
+    {
+      "name": "CUC",
+      "type": "CUC"
+    },
+    {
+      "name": "CUP",
+      "type": "CUP"
+    },
+    {
+      "name": "CVE",
+      "type": "CVE"
+    },
+    {
+      "name": "CZK",
+      "type": "CZK"
+    },
+    {
+      "name": "DJF",
+      "type": "DJF"
+    },
+    {
+      "name": "DKK",
+      "type": "DKK"
+    },
+    {
+      "name": "DOP",
+      "type": "DOP"
+    },
+    {
+      "name": "DZD",
+      "type": "DZD"
+    },
+    {
+      "name": "EGP",
+      "type": "EGP"
+    },
+    {
+      "name": "ERN",
+      "type": "ERN"
+    },
+    {
+      "name": "ETB",
+      "type": "ETB"
+    },
+    {
+      "name": "EUR",
+      "type": "\u20ac"
+    },
+    {
+      "name": "FJD",
+      "type": "FJD"
+    },
+    {
+      "name": "FKP",
+      "type": "FKP"
+    },
+    {
+      "name": "GBP",
+      "type": "\u00a3"
+    },
+    {
+      "name": "GEL",
+      "type": "GEL"
+    },
+    {
+      "name": "GHS",
+      "type": "GHS"
+    },
+    {
+      "name": "GIP",
+      "type": "GIP"
+    },
+    {
+      "name": "GMD",
+      "type": "GMD"
+    },
+    {
+      "name": "GNF",
+      "type": "GNF"
+    },
+    {
+      "name": "GTQ",
+      "type": "GTQ"
+    },
+    {
+      "name": "GYD",
+      "type": "GYD"
+    },
+    {
+      "name": "HKD",
+      "type": "HKD"
+    },
+    {
+      "name": "HNL",
+      "type": "HNL"
+    },
+    {
+      "name": "HRK",
+      "type": "HRK"
+    },
+    {
+      "name": "HTG",
+      "type": "HTG"
+    },
+    {
+      "name": "HUF",
+      "type": "HUF"
+    },
+    {
+      "name": "IDR",
+      "type": "IDR"
+    },
+    {
+      "name": "ILS",
+      "type": "ILS"
+    },
+    {
+      "name": "INR",
+      "type": "\u20b9"
+    },
+    {
+      "name": "IQD",
+      "type": "IQD"
+    },
+    {
+      "name": "IRR",
+      "type": "IRR"
+    },
+    {
+      "name": "ISK",
+      "type": "ISK"
+    },
+    {
+      "name": "JMD",
+      "type": "JMD"
+    },
+    {
+      "name": "JOD",
+      "type": "JOD"
+    },
+    {
+      "name": "JPY",
+      "type": "JPY"
+    },
+    {
+      "name": "KES",
+      "type": "KES"
+    },
+    {
+      "name": "KGS",
+      "type": "KGS"
+    },
+    {
+      "name": "KHR",
+      "type": "KHR"
+    },
+    {
+      "name": "KMF",
+      "type": "KMF"
+    },
+    {
+      "name": "KPW",
+      "type": "KPW"
+    },
+    {
+      "name": "KRW",
+      "type": "KRW"
+    },
+    {
+      "name": "KWD",
+      "type": "KWD"
+    },
+    {
+      "name": "KYD",
+      "type": "KYD"
+    },
+    {
+      "name": "KZT",
+      "type": "KZT"
+    },
+    {
+      "name": "LAK",
+      "type": "LAK"
+    },
+    {
+      "name": "LBP",
+      "type": "LBP"
+    },
+    {
+      "name": "LKR",
+      "type": "LKR"
+    },
+    {
+      "name": "LRD",
+      "type": "LRD"
+    },
+    {
+      "name": "LSL",
+      "type": "LSL"
+    },
+    {
+      "name": "LYD",
+      "type": "LYD"
+    },
+    {
+      "name": "MAD",
+      "type": "MAD"
+    },
+    {
+      "name": "MDL",
+      "type": "MDL"
+    },
+    {
+      "name": "MGA",
+      "type": "MGA"
+    },
+    {
+      "name": "MKD",
+      "type": "MKD"
+    },
+    {
+      "name": "MMK",
+      "type": "MMK"
+    },
+    {
+      "name": "MNT",
+      "type": "MNT"
+    },
+    {
+      "name": "MOP",
+      "type": "MOP"
+    },
+    {
+      "name": "MRO",
+      "type": "MRO"
+    },
+    {
+      "name": "MUR",
+      "type": "MUR"
+    },
+    {
+      "name": "MVR",
+      "type": "MVR"
+    },
+    {
+      "name": "MWK",
+      "type": "MWK"
+    },
+    {
+      "name": "MXN",
+      "type": "MXN"
+    },
+    {
+      "name": "MXV",
+      "type": "MXV"
+    },
+    {
+      "name": "MYR",
+      "type": "MYR"
+    },
+    {
+      "name": "MZN",
+      "type": "MZN"
+    },
+    {
+      "name": "NAD",
+      "type": "NAD"
+    },
+    {
+      "name": "NGN",
+      "type": "NGN"
+    },
+    {
+      "name": "NIO",
+      "type": "NIO"
+    },
+    {
+      "name": "NOK",
+      "type": "NOK"
+    },
+    {
+      "name": "NPR",
+      "type": "NPR"
+    },
+    {
+      "name": "NZD",
+      "type": "NZD"
+    },
+    {
+      "name": "OMR",
+      "type": "OMR"
+    },
+    {
+      "name": "PAB",
+      "type": "PAB"
+    },
+    {
+      "name": "PEN",
+      "type": "PEN"
+    },
+    {
+      "name": "PGK",
+      "type": "PGK"
+    },
+    {
+      "name": "PHP",
+      "type": "PHP"
+    },
+    {
+      "name": "PKR",
+      "type": "PKR"
+    },
+    {
+      "name": "PLN",
+      "type": "PLN"
+    },
+    {
+      "name": "PYG",
+      "type": "PYG"
+    },
+    {
+      "name": "QAR",
+      "type": "QAR"
+    },
+    {
+      "name": "RON",
+      "type": "RON"
+    },
+    {
+      "name": "RSD",
+      "type": "RSD"
+    },
+    {
+      "name": "RUB",
+      "type": "RUB"
+    },
+    {
+      "name": "RWF",
+      "type": "RWF"
+    },
+    {
+      "name": "SAR",
+      "type": "SAR"
+    },
+    {
+      "name": "SBD",
+      "type": "SBD"
+    },
+    {
+      "name": "SCR",
+      "type": "SCR"
+    },
+    {
+      "name": "SDG",
+      "type": "SDG"
+    },
+    {
+      "name": "SEK",
+      "type": "SEK"
+    },
+    {
+      "name": "SGD",
+      "type": "SGD"
+    },
+    {
+      "name": "SHP",
+      "type": "SHP"
+    },
+    {
+      "name": "SLL",
+      "type": "SLL"
+    },
+    {
+      "name": "SOS",
+      "type": "SOS"
+    },
+    {
+      "name": "SRD",
+      "type": "SRD"
+    },
+    {
+      "name": "SSP",
+      "type": "SSP"
+    },
+    {
+      "name": "STD",
+      "type": "STD"
+    },
+    {
+      "name": "SVC",
+      "type": "SVC"
+    },
+    {
+      "name": "SYP",
+      "type": "SYP"
+    },
+    {
+      "name": "SZL",
+      "type": "SZL"
+    },
+    {
+      "name": "THB",
+      "type": "THB"
+    },
+    {
+      "name": "TJS",
+      "type": "TJS"
+    },
+    {
+      "name": "TMT",
+      "type": "TMT"
+    },
+    {
+      "name": "TND",
+      "type": "TND"
+    },
+    {
+      "name": "TOP",
+      "type": "TOP"
+    },
+    {
+      "name": "TRY",
+      "type": "TRY"
+    },
+    {
+      "name": "TTD",
+      "type": "TTD"
+    },
+    {
+      "name": "TWD",
+      "type": "TWD"
+    },
+    {
+      "name": "TZS",
+      "type": "TZS"
+    },
+    {
+      "name": "UAH",
+      "type": "UAH"
+    },
+    {
+      "name": "UGX",
+      "type": "UGX"
+    },
+    {
+      "name": "USD",
+      "type": "$"
+    },
+    {
+      "name": "USN",
+      "type": "USN"
+    },
+    {
+      "name": "UYI",
+      "type": "UYI"
+    },
+    {
+      "name": "UYU",
+      "type": "UYU"
+    },
+    {
+      "name": "UZS",
+      "type": "UZS"
+    },
+    {
+      "name": "VEF",
+      "type": "VEF"
+    },
+    {
+      "name": "VND",
+      "type": "VND"
+    },
+    {
+      "name": "VUV",
+      "type": "VUV"
+    },
+    {
+      "name": "WST",
+      "type": "WST"
+    },
+    {
+      "name": "XAF",
+      "type": "XAF"
+    },
+    {
+      "name": "XAG",
+      "type": "XAG"
+    },
+    {
+      "name": "XAU",
+      "type": "XAU"
+    },
+    {
+      "name": "XBA",
+      "type": "XBA"
+    },
+    {
+      "name": "XBB",
+      "type": "XBB"
+    },
+    {
+      "name": "XBC",
+      "type": "XBC"
+    },
+    {
+      "name": "XBD",
+      "type": "XBD"
+    },
+    {
+      "name": "XCD",
+      "type": "XCD"
+    },
+    {
+      "name": "XDR",
+      "type": "XDR"
+    },
+    {
+      "name": "XOF",
+      "type": "XOF"
+    },
+    {
+      "name": "XPD",
+      "type": "XPD"
+    },
+    {
+      "name": "XPF",
+      "type": "XPF"
+    },
+    {
+      "name": "XPT",
+      "type": "XPT"
+    },
+    {
+      "name": "XSU",
+      "type": "XSU"
+    },
+    {
+      "name": "XTS",
+      "type": "XTS"
+    },
+    {
+      "name": "XUA",
+      "type": "XUA"
+    },
+    {
+      "name": "XXX",
+      "type": "XXX"
+    },
+    {
+      "name": "YER",
+      "type": "YER"
+    },
+    {
+      "name": "ZAR",
+      "type": "ZAR"
+    },
+    {
+      "name": "ZMW",
+      "type": "ZMW"
+    },
+    {
+      "name": "ZWL",
+      "type": "ZWL"
+    },
+    {
+      "name": "Teaching Staff",
+      "type": "2025-08-05 20:33:08"
+    },
+    {
+      "name": "Non Teaching Staff",
+      "type": "2025-08-05 20:33:26"
+    },
+    {
+      "name": "Echezona",
+      "type": "Works road"
+    },
+    {
+      "name": "Fuel",
+      "type": "yes"
+    },
+    {
+      "name": "Fuel",
+      "type": "yes"
+    },
+    {
+      "name": "Main Menu",
+      "type": "Main menu"
+    },
+    {
+      "name": "Bottom Menu",
+      "type": "Bottom Menu"
+    },
+    {
+      "name": "Chimmanarisiri",
+      "type": "2025-07-15"
+    },
+    {
+      "name": "Sample Student Identity Card Horizontal",
+      "type": "110 Kings Street, CA  Phone: 456542 Email: mount@gmail.com"
+    },
+    {
+      "name": "Sample Student Identity Card Vertical",
+      "type": "110 Kings Street, CA  Phone: 456542 Email: mount@gmail.com"
+    },
+    {
+      "name": "Uniforms",
+      "type": "yes"
+    },
+    {
+      "name": "Stationery",
+      "type": "yes"
+    },
+    {
+      "name": "Tuition",
+      "type": "yes"
+    },
+    {
+      "name": "Clubs",
+      "type": "yes"
+    },
+    {
+      "name": "External exams",
+      "type": "yes"
+    },
+    {
+      "name": "Lessons",
+      "type": "yes"
+    },
+    {
+      "name": "Azerbaijan",
+      "type": "az"
+    },
+    {
+      "name": "Albanian",
+      "type": "al"
+    },
+    {
+      "name": "Amharic",
+      "type": "am"
+    },
+    {
+      "name": "English",
+      "type": "us"
+    },
+    {
+      "name": "Arabic",
+      "type": "sa"
+    },
+    {
+      "name": "Afrikaans",
+      "type": "af"
+    },
+    {
+      "name": "Basque",
+      "type": "es"
+    },
+    {
+      "name": "Bengali",
+      "type": "in"
+    },
+    {
+      "name": "Bosnian",
+      "type": "bs"
+    },
+    {
+      "name": "Welsh",
+      "type": "cy"
+    },
+    {
+      "name": "Hungarian",
+      "type": "hu"
+    },
+    {
+      "name": "Vietnamese",
+      "type": "vi"
+    },
+    {
+      "name": "Haitian",
+      "type": "ht"
+    },
+    {
+      "name": "Galician",
+      "type": "gl"
+    },
+    {
+      "name": "Dutch",
+      "type": "nl"
+    },
+    {
+      "name": "Greek",
+      "type": "gr"
+    },
+    {
+      "name": "Georgian",
+      "type": "ge"
+    },
+    {
+      "name": "Gujarati",
+      "type": "in"
+    },
+    {
+      "name": "Danish",
+      "type": "dk"
+    },
+    {
+      "name": "Hebrew",
+      "type": "il"
+    },
+    {
+      "name": "Yiddish",
+      "type": "il"
+    },
+    {
+      "name": "Indonesian",
+      "type": "id"
+    },
+    {
+      "name": "Irish",
+      "type": "ga"
+    },
+    {
+      "name": "Italian",
+      "type": "it"
+    },
+    {
+      "name": "Icelandic",
+      "type": "is"
+    },
+    {
+      "name": "Spanish",
+      "type": "es"
+    },
+    {
+      "name": "Kannada",
+      "type": "kn"
+    },
+    {
+      "name": "Catalan",
+      "type": "ca"
+    },
+    {
+      "name": "Chinese",
+      "type": "cn"
+    },
+    {
+      "name": "Korean",
+      "type": "kr"
+    },
+    {
+      "name": "Xhosa",
+      "type": "ls"
+    },
+    {
+      "name": "Latin",
+      "type": "it"
+    },
+    {
+      "name": "Latvian",
+      "type": "lv"
+    },
+    {
+      "name": "Lithuanian",
+      "type": "lt"
+    },
+    {
+      "name": "Malagasy",
+      "type": "mg"
+    },
+    {
+      "name": "Malay",
+      "type": "ms"
+    },
+    {
+      "name": "Malayalam",
+      "type": "ml"
+    },
+    {
+      "name": "Maltese",
+      "type": "mt"
+    },
+    {
+      "name": "Macedonian",
+      "type": "mk"
+    },
+    {
+      "name": "Maori",
+      "type": "nz"
+    },
+    {
+      "name": "Marathi",
+      "type": "in"
+    },
+    {
+      "name": "Mongolian",
+      "type": "mn"
+    },
+    {
+      "name": "German",
+      "type": "de"
+    },
+    {
+      "name": "Nepali",
+      "type": "ne"
+    },
+    {
+      "name": "Norwegian",
+      "type": "no"
+    },
+    {
+      "name": "Punjabi",
+      "type": "in"
+    },
+    {
+      "name": "Persian",
+      "type": "ir"
+    },
+    {
+      "name": "Portuguese",
+      "type": "pt"
+    },
+    {
+      "name": "Romanian",
+      "type": "ro"
+    },
+    {
+      "name": "Russian",
+      "type": "ru"
+    },
+    {
+      "name": "Cebuano",
+      "type": "ph"
+    },
+    {
+      "name": "Sinhala",
+      "type": "lk "
+    },
+    {
+      "name": "Slovakian",
+      "type": "sk"
+    },
+    {
+      "name": "Slovenian",
+      "type": "sl"
+    },
+    {
+      "name": "Swahili",
+      "type": "ke"
+    },
+    {
+      "name": "Sundanese",
+      "type": "sd"
+    },
+    {
+      "name": "Thai",
+      "type": "th"
+    },
+    {
+      "name": "Tagalog",
+      "type": "tl"
+    },
+    {
+      "name": "Tamil",
+      "type": "in"
+    },
+    {
+      "name": "Telugu",
+      "type": "in"
+    },
+    {
+      "name": "Turkish",
+      "type": "tr"
+    },
+    {
+      "name": "Uzbek",
+      "type": "uz"
+    },
+    {
+      "name": "Urdu",
+      "type": "pk"
+    },
+    {
+      "name": "Finnish",
+      "type": "fi"
+    },
+    {
+      "name": "French",
+      "type": "fr"
+    },
+    {
+      "name": "Hindi",
+      "type": "in"
+    },
+    {
+      "name": "Czech",
+      "type": "cz"
+    },
+    {
+      "name": "Swedish",
+      "type": "sv"
+    },
+    {
+      "name": "Scottish",
+      "type": "gd"
+    },
+    {
+      "name": "Estonian",
+      "type": "et"
+    },
+    {
+      "name": "Esperanto",
+      "type": "br"
+    },
+    {
+      "name": "Javanese",
+      "type": "id"
+    },
+    {
+      "name": "Japanese",
+      "type": "jp"
+    },
+    {
+      "name": "Polish",
+      "type": "pl"
+    },
+    {
+      "name": "Kurdish",
+      "type": "iq"
+    },
+    {
+      "name": "Lao",
+      "type": "la"
+    },
+    {
+      "name": "Croatia",
+      "type": "hr"
+    },
+    {
+      "name": "student_admission",
+      "type": "0"
+    },
+    {
+      "name": "exam_result",
+      "type": "0"
+    },
+    {
+      "name": "fee_submission",
+      "type": "0"
+    },
+    {
+      "name": "student_absent_attendence",
+      "type": "0"
+    },
+    {
+      "name": "homework",
+      "type": "0"
+    },
+    {
+      "name": "fees_reminder",
+      "type": "0"
+    },
+    {
+      "name": "forgot_password",
+      "type": "0"
+    },
+    {
+      "name": "online_examination_publish_exam",
+      "type": "0"
+    },
+    {
+      "name": "online_examination_publish_result",
+      "type": "0"
+    },
+    {
+      "name": "online_admission_form_submission",
+      "type": "0"
+    },
+    {
+      "name": "online_admission_fees_submission",
+      "type": "0"
+    },
+    {
+      "name": "student_login_credential",
+      "type": "0"
+    },
+    {
+      "name": "staff_login_credential",
+      "type": "0"
+    },
+    {
+      "name": "fee_processing",
+      "type": "0"
+    },
+    {
+      "name": "online_admission_fees_processing",
+      "type": "0"
+    },
+    {
+      "name": "student_apply_leave",
+      "type": "0"
+    },
+    {
+      "name": "email_pdf_exam_marksheet",
+      "type": "0"
+    },
+    {
+      "name": "homework_evaluation",
+      "type": "0"
+    },
+    {
+      "name": "student_present_attendence",
+      "type": "0"
+    },
+    {
+      "name": "staff_present_attendence",
+      "type": "0"
+    },
+    {
+      "name": "staff_absent_attendence",
+      "type": "0"
+    },
+    {
+      "name": "staff_payslip",
+      "type": "This payslip is computer generated hence no signature is required."
+    },
+    {
+      "name": "student_receipt",
+      "type": "This receipt is computer generated hence no signature is required."
+    },
+    {
+      "name": "online_admission_receipt",
+      "type": "This receipt is for online admission  computer ffffffff generated hence no signature is required."
+    },
+    {
+      "name": "online_exam",
+      "type": "This receipt is for online exam computer  generated hence no signature is required."
+    },
+    {
+      "name": "general_purpose",
+      "type": "<h1>\\r\\n\\r\\n</h1><p>footer text here ....</p>"
+    },
+    {
+      "name": "Grace",
+      "type": "yes"
+    },
+    {
+      "name": "Hope",
+      "type": "yes"
+    },
+    {
+      "name": "Love",
+      "type": "yes"
+    },
+    {
+      "name": "Faith",
+      "type": "yes"
+    },
+    {
+      "name": "https://portal.eaglepowerschools.com.ng/",
+      "type": "Eagle Powers Schools"
+    },
+    {
+      "name": "A",
+      "type": "2025-06-27 18:35:26"
+    },
+    {
+      "name": "B",
+      "type": "2025-06-27 18:36:02"
+    },
+    {
+      "name": "C",
+      "type": "2025-06-27 18:36:10"
+    },
+    {
+      "name": "Science",
+      "type": "2025-06-27 18:37:41"
+    },
+    {
+      "name": "Art",
+      "type": "2025-06-27 18:37:50"
+    },
+    {
+      "name": "Commercial",
+      "type": "2025-06-27 18:37:58"
+    },
+    {
+      "name": "2025/2026",
+      "type": "2025-10-16 12:14:49"
+    },
+    {
+      "name": "2016-17",
+      "type": "2017-04-20 06:42:19"
+    },
+    {
+      "name": "2017-18",
+      "type": "2017-04-20 06:41:37"
+    },
+    {
+      "name": "2018-19",
+      "type": "2016-08-24 19:26:44"
+    },
+    {
+      "name": "2019-20",
+      "type": "2016-08-24 19:26:55"
+    },
+    {
+      "name": "2020-21",
+      "type": "2016-10-01 05:28:08"
+    },
+    {
+      "name": "2021-22",
+      "type": "2016-10-01 05:28:20"
+    },
+    {
+      "name": "2022-23",
+      "type": "2016-10-01 05:29:02"
+    },
+    {
+      "name": "2023-24",
+      "type": "2016-10-01 05:29:10"
+    },
+    {
+      "name": "2024-25",
+      "type": "2016-10-01 05:29:18"
+    },
+    {
+      "name": "2025-26",
+      "type": "2016-10-01 05:30:10"
+    },
+    {
+      "name": "2026-27",
+      "type": "2016-10-01 05:30:18"
+    },
+    {
+      "name": "2027-28",
+      "type": "2016-10-01 05:30:24"
+    },
+    {
+      "name": "2028-29",
+      "type": "2016-10-01 05:30:30"
+    },
+    {
+      "name": "2029-30",
+      "type": "2016-10-01 05:30:37"
+    },
+    {
+      "name": "clickatell",
+      "type": "RhscwJ_FQkGvovaAIzkkrw=="
+    },
+    {
+      "name": "Present",
+      "type": "yes"
+    },
+    {
+      "name": "Late",
+      "type": "yes"
+    },
+    {
+      "name": "Absent",
+      "type": "yes"
+    },
+    {
+      "name": "Half Day",
+      "type": "yes"
+    },
+    {
+      "name": "Holiday",
+      "type": "yes"
+    },
+    {
+      "name": "Half Day Second Shift",
+      "type": "yes"
+    },
+    {
+      "name": "Subject Teachers",
+      "type": "2025-08-05 20:33:54"
+    },
+    {
+      "name": "Gatekeeper ",
+      "type": "2025-08-05 20:34:15"
+    },
+    {
+      "name": "Driver",
+      "type": "2025-08-05 20:34:27"
+    },
+    {
+      "name": "Sample Staff ID Card Horizontal",
+      "type": "110 Kings Street, CA"
+    },
+    {
+      "name": "Sample Staff ID Card Vertical",
+      "type": "110 Kings Street, CA"
+    },
+    {
+      "name": "Mathematics",
+      "type": "theory"
+    },
+    {
+      "name": "English",
+      "type": "theory"
+    },
+    {
+      "name": "Basic Science and Technology",
+      "type": "theory"
+    },
+    {
+      "name": "History",
+      "type": "theory"
+    },
+    {
+      "name": "Visual Art",
+      "type": "theory"
+    },
+    {
+      "name": "Visual Art 2",
+      "type": "practical"
+    },
+    {
+      "name": "N.V.E.",
+      "type": "theory"
+    },
+    {
+      "name": "Igbo Language",
+      "type": "theory"
+    },
+    {
+      "name": "C.C.A.",
+      "type": "theory"
+    },
+    {
+      "name": "C.C.A. 2",
+      "type": "practical"
+    },
+    {
+      "name": "French",
+      "type": "theory"
+    },
+    {
+      "name": "Diction",
+      "type": "theory"
+    },
+    {
+      "name": "C.R.S.",
+      "type": "theory"
+    },
+    {
+      "name": "P.V.S.",
+      "type": "theory"
+    },
+    {
+      "name": "Business Studies",
+      "type": "theory"
+    },
+    {
+      "name": "Physics",
+      "type": "theory"
+    },
+    {
+      "name": "Physics 2",
+      "type": "practical"
+    },
+    {
+      "name": "Chemistry",
+      "type": "theory"
+    },
+    {
+      "name": "Chemistry 2",
+      "type": "practical"
+    },
+    {
+      "name": "Biology",
+      "type": "theory"
+    },
+    {
+      "name": "Biology 2",
+      "type": "practical"
+    },
+    {
+      "name": "Lit-In--English",
+      "type": "theory"
+    },
+    {
+      "name": "Geography",
+      "type": "theory"
+    },
+    {
+      "name": "Agricultural Science",
+      "type": "theory"
+    },
+    {
+      "name": "Commerce",
+      "type": "theory"
+    },
+    {
+      "name": "Government",
+      "type": "theory"
+    },
+    {
+      "name": "Economics",
+      "type": "theory"
+    },
+    {
+      "name": "Civic Education",
+      "type": "theory"
+    },
+    {
+      "name": "Marketing",
+      "type": "theory"
+    },
+    {
+      "name": "Computer Studies",
+      "type": "theory"
+    },
+    {
+      "name": "Financial Accounting",
+      "type": "theory"
+    },
+    {
+      "name": "Data Processing",
+      "type": "theory"
+    },
+    {
+      "name": "Official",
+      "type": "2025-06-27 18:05:53"
+    },
+    {
+      "name": "Personal",
+      "type": "2025-06-27 18:06:05"
+    }
+  ],
+  "staff": [
+    {
+      "id": "EPS10",
+      "name": "Adaeze Uzoefuna",
+      "role": "School Administrator",
+      "phone": "+234 803 359 1058",
+      "email": "adaeze3011@gmail.com"
+    },
+    {
+      "id": "EPS11",
+      "name": "Echezona Nzekwe",
+      "role": "Academic Coordinator",
+      "email": "skulboi49@gmail.com"
+    },
+    {
+      "id": "BASIC 1",
+      "name": "Adaobi Peter",
+      "role": "Primary Educator",
+      "email": "basicone123@gmail.com"
+    }
+  ],
+  "students": [
+    {
+      "admission_no": "ESE2009012",
+      "name": "Ugochi Nathaniel",
+      "gender": "Female",
+      "class": "Primary 4",
+      "parent_name": "Nathaniel Nnamdi",
+      "parent_phone": "07066397577",
+      "parent_email": "adaeze3011@gmail.com",
+      "dob": "2018-11-27"
+    },
+    {
+      "admission_no": "2010134483",
+      "name": "Chukwuemeka Nwuzor",
+      "gender": "Male",
+      "class": "Primary 3",
+      "parent_name": "Nwuzor Chukwunenye Raphael",
+      "parent_phone": "09048473543",
+      "parent_email": "raphaelnenye2016@gmail.com",
+      "dob": "2016-06-20"
+    },
+    {
+      "admission_no": "ESE17009030",
+      "name": "Esechukwu Noah Obi Asika",
+      "gender": "Male",
+      "class": "JSS 2",
+      "parent_name": "Obi Asika Ikenna Innocent",
+      "parent_phone": "09123309648",
+      "parent_email": "",
+      "dob": "2014-06-16"
+    },
+    {
+      "admission_no": "ESE2109003",
+      "name": "Chidiebube Wealth Afamefuna",
+      "gender": "Male",
+      "class": "Primary 2",
+      "parent_name": "Afamefuna Ikunne",
+      "parent_phone": "08089398695",
+      "parent_email": "",
+      "dob": "2019-10-08"
+    },
+    {
+      "admission_no": "ESE2309010",
+      "name": "Chiamaka Mercy Ezekwesili",
+      "gender": "Female",
+      "class": "Primary 1",
+      "parent_name": "Ezekwesili",
+      "parent_phone": "07067530584",
+      "parent_email": "",
+      "dob": "2020-04-12"
+    },
+    {
+      "admission_no": "ESE1709002",
+      "name": "Chiduem David Chigbo",
+      "gender": "Male",
+      "class": "JSS 1",
+      "parent_name": "Chigbo",
+      "parent_phone": "08159671554",
+      "parent_email": "",
+      "dob": "2013-08-20"
+    },
+    {
+      "admission_no": "ESE1709009",
+      "name": "Timothy Chidiebere Ezema",
+      "gender": "Male",
+      "class": "SS 1 Science",
+      "parent_name": "Ezema",
+      "parent_phone": "08133412233",
+      "parent_email": "",
+      "dob": "2010-05-14"
+    },
+    {
+      "admission_no": "ESE1509021",
+      "name": "Joy Oluchukwu Okpara",
+      "gender": "Female",
+      "class": "SS 2 Commercial",
+      "parent_name": "Okpara",
+      "parent_phone": "08106435477",
+      "parent_email": "",
+      "dob": "2009-11-03"
+    }
+  ]
+}

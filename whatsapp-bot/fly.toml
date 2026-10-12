@@ -1,0 +1,17 @@
+app = "eaglepower-whatsapp-bot"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  AUTH_DIR = "/data/auth_info"
+  LOG_LEVEL = "warn"
+
+[mounts]
+  source = "bot_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

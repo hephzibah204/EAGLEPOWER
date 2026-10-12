@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  educore-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: eaglepower-educore
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    environment:
+      - NODE_ENV=production
+      - PORT=5050
+      - JWT_SECRET=eaglepower_secure_jwt_token_secret_key_2025_amikwo
+    volumes:
+      - educore-data:/app/server/data
+      - educore-backups:/app/server/backups
+
+volumes:
+  educore-data:
+  educore-backups:

@@ -1059,7 +1059,9 @@ export default function PortalDashboard({ isOpen, onClose }) {
           follow_up_needed: false,
           message: ''
         });
-        const refRes = await fetch(`${API_BASE}/frontdesk/calls`);
+        const refRes = await fetch(`${API_BASE}/frontdesk/calls`, {
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+        });
         if (refRes.ok) {
           const rData = await refRes.json();
           setCalls(rData.data || []);
@@ -1101,7 +1103,9 @@ export default function PortalDashboard({ isOpen, onClose }) {
           description: '',
           assigned_to: 'Administrative Officer'
         });
-        const refRes = await fetch(`${API_BASE}/frontdesk/complaints`);
+        const refRes = await fetch(`${API_BASE}/frontdesk/complaints`, {
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+        });
         if (refRes.ok) {
           const rData = await refRes.json();
           setComplaints(rData.data || []);

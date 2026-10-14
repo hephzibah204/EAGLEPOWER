@@ -23,7 +23,24 @@ import {
   Plus,
   PhoneCall,
   MessageSquare,
-  Save
+  Save,
+  DollarSign,
+  Landmark,
+  Calendar,
+  Search,
+  Filter,
+  Clock,
+  ChevronRight,
+  Database,
+  Radio,
+  Settings,
+  Key,
+  UserCheck,
+  UserX,
+  Unlock,
+  Activity,
+  Server,
+  Layers
 } from 'lucide-react';
 import { getApiBase } from '../config/api';
 import BroadsheetView from './reports/BroadsheetView';
@@ -35,8 +52,11 @@ import { PrimarySchoolTemplate } from './reports/PrimarySchoolTemplate';
 import { NurseryColorfulTemplate } from './reports/NurseryColorfulTemplate';
 import { ClassicProfessionalTemplate } from './reports/ClassicProfessionalTemplate';
 import ExecutiveReportingCockpit from './ExecutiveReportingCockpit';
+import StudentMasterConsole from './superadmin/modules/StudentMasterConsole';
+import CurriculumArchitect from './superadmin/modules/CurriculumArchitect';
+import SystemGovernanceConsole from './superadmin/modules/SystemGovernanceConsole';
 
-export default function PortalDashboard({ isOpen, onClose }) {
+export default function PortalDashboard({ isOpen = true, onClose, isModal = false, initialTab }) {
   const API_BASE = getApiBase();
   // Authentication & Session
   const [authToken, setAuthToken] = useState(() => {
@@ -64,7 +84,39 @@ export default function PortalDashboard({ isOpen, onClose }) {
 
   // Active Role and Tab
   const [activeRole, setActiveRole] = useState(() => currentUser?.role || 'admin');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTabInternal, setActiveTabInternal] = useState(() => initialTab || 'overview');
+
+  const setActiveTab = useCallback((tabId) => {
+    setActiveTabInternal(tabId);
+    if (!isModal && typeof window !== 'undefined') {
+      const cleanTab = tabId.replace(/_/g, '-');
+      window.history.pushState(null, '', `/portal/${cleanTab}`);
+    }
+  }, [isModal]);
+
+  const activeTab = activeTabInternal;
+
+  // Synchronize when initialTab prop changes
+  useEffect(() => {
+    if (initialTab && initialTab !== activeTabInternal) {
+      setActiveTabInternal(initialTab);
+    }
+  }, [initialTab, activeTabInternal]);
+
+  // Support browser Back/Forward navigation
+  useEffect(() => {
+    if (!isModal && typeof window !== 'undefined') {
+      const handlePopState = () => {
+        const pathParts = window.location.pathname.split('/').filter(Boolean);
+        if (pathParts[0] === 'portal' && pathParts[1]) {
+          const tab = pathParts[1].replace(/-/g, '_');
+          setActiveTabInternal(tab);
+        }
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+    }
+  }, [isModal]);
 
   // Real Database Data States
   const [classes, setClasses] = useState([]);
@@ -154,8 +206,25 @@ export default function PortalDashboard({ isOpen, onClose }) {
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const [attendanceSaveSuccess, setAttendanceSaveSuccess] = useState(false);
+  const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('');
 
-  // Parent Registration States
+  // Teacher Workspace states
+  const [gradebookSearchQuery, setGradebookSearchQuery] = useState('');
+  const [gradebookFilterGrade, setGradebookFilterGrade] = useState('ALL');
+  const [lessonNoteModalOpen, setLessonNoteModalOpen] = useState(false);
+  const [lessonNotes, setLessonNotes] = useState(() => [
+    { id: 1, week: 'Week 5', subject: 'Mathematics', topic: 'Quadratic Equations & Graphs', class_name: 'Junior College (JSS 1)', status: 'Approved', date: '2026-10-14' },
+    { id: 2, week: 'Week 6', subject: 'English Language', topic: 'Narrative Essays & Punctuation', class_name: 'Senior College (SS 2)', status: 'Approved', date: '2026-10-12' },
+    { id: 3, week: 'Week 6', subject: 'Basic Science', topic: 'Energy Transformation & Ecosystems', class_name: 'Junior College (JSS 1)', status: 'Under Review', date: '2026-10-15' }
+  ]);
+  const [newLessonNote, setNewLessonNote] = useState({
+    week: 'Week 6',
+    subject: 'Mathematics',
+    topic: '',
+    class_name: 'Junior College (JSS 1)',
+    objectives: '',
+    materials: 'Textbook, Graph board, Geometry set'
+  });
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [regFullName, setRegFullName] = useState('');
   const [regPhone, setRegPhone] = useState('');
@@ -209,7 +278,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
   const [selectedHwClassId, setSelectedHwClassId] = useState('');
   const [createHwModalOpen, setCreateHwModalOpen] = useState(false);
   const [isCreatingHw, setIsCreatingHw] = useState(false);
-  const [newHwForm, setNewHwForm] = useState({
+  const [newHwForm, setNewHwForm] = useState(() => ({
     class_id: 1,
     subject_id: 1,
     title: '',
@@ -217,7 +286,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
     key_concepts: '',
     max_points: 10,
     due_date: new Date(Date.now() + 4 * 86400000).toISOString().split('T')[0]
-  });
+  }));
   const [parentAiProfile, setParentAiProfile] = useState(null);
   const [parentAiRecs, setParentAiRecs] = useState([]);
   const [isLoadingAiProgress, setIsLoadingAiProgress] = useState(false);
@@ -227,13 +296,284 @@ export default function PortalDashboard({ isOpen, onClose }) {
   const [isSubmittingHw, setIsSubmittingHw] = useState(false);
   const [hwSubmissionResult, setHwSubmissionResult] = useState(null);
   const [selectedHwForSubmissionsView, setSelectedHwForSubmissionsView] = useState(null);
-  const [hwSubmissionsList, setHwSubmissionsList] = useState([]);
+  // Payroll Management States
+  const [payrollOverview, setPayrollOverview] = useState(null);
+  const [payrollStaffRoster, setPayrollStaffRoster] = useState([]);
+  const [nigerianBanks, setNigerianBanks] = useState([]);
+  const [_selectedPayrollBatch, setSelectedPayrollBatch] = useState(null);
+  const [isGeneratingPayroll, setIsGeneratingPayroll] = useState(false);
+  const [isDisbursingPayroll, setIsDisbursingPayroll] = useState(false);
+  const [payrollDisburseSuccess, setPayrollDisburseSuccess] = useState(null);
+  const [activePayslipStaff, setActivePayslipStaff] = useState(null);
+  const [payslipData, setPayslipData] = useState(null);
+  const [_isLoadingPayslip, setIsLoadingPayslip] = useState(false);
+  const [linkBankModalOpen, setLinkBankModalOpen] = useState(false);
+  const [selectedStaffForBank, setSelectedStaffForBank] = useState(null);
+  const [bankLinkAccountNo, setBankLinkAccountNo] = useState('');
+  const [bankLinkBankCode, setBankLinkBankCode] = useState('058');
+  const [isLinkingBank, setIsLinkingBank] = useState(false);
+  const [bankLinkResult, setBankLinkResult] = useState(null);
+
+  // ==========================================
+  // SuperAdmin Omni-Control States & Handlers
+  // ==========================================
+  // 1. IAM User Directory
+  const [userList, setUserList] = useState([]);
+  const [userTotal, setUserTotal] = useState(0);
+  const [userPage, setUserPage] = useState(1);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('All');
+  const [userStatusFilter, setUserStatusFilter] = useState('all');
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [userActionMessage, setUserActionMessage] = useState(null);
+
+  const fetchUsers = useCallback(async (page = 1, role = userRoleFilter, status = userStatusFilter, q = userSearchQuery) => {
+    setIsLoadingUsers(true);
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const params = new URLSearchParams({ page: String(page), limit: '30' });
+      if (role && role !== 'All') params.append('role', role);
+      if (status && status !== 'all') params.append('status', status);
+      if (q) params.append('q', q);
+      const res = await fetch(`${API_BASE}/users?${params.toString()}`, { headers });
+      if (res.ok) {
+        const d = await res.json();
+        setUserList(d.data || []);
+        setUserTotal(d.total || 0);
+        setUserPage(d.page || 1);
+      }
+    } catch (err) {
+      console.error('Error fetching users:', err);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [authToken, API_BASE, userRoleFilter, userStatusFilter, userSearchQuery]);
+
+  const handleToggleUserStatus = async (user) => {
+    const newStatus = user.is_active ? 0 : 1;
+    const actionText = newStatus === 1 ? 'activate' : 'suspend';
+    if (!confirm(`Are you sure you want to ${actionText} user account '${user.username}'?`)) return;
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/users/${user.id}/status`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ is_active: newStatus })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update status');
+      setUserActionMessage(`Account ${user.username} is now ${newStatus === 1 ? 'Active' : 'Suspended'}`);
+      fetchUsers(userPage);
+      setTimeout(() => setUserActionMessage(null), 3500);
+    } catch (err) {
+      alert(`Status update failed: ${err.message}`);
+    }
+  };
+
+  const handleReleaseLockout = async (user) => {
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/users/${user.id}/release-lockout`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to release lockout');
+      setUserActionMessage(`Lockout lifted for ${user.username}!`);
+      fetchUsers(userPage);
+      setTimeout(() => setUserActionMessage(null), 3500);
+    } catch (err) {
+      alert(`Lockout release failed: ${err.message}`);
+    }
+  };
+
+  const handleResetUserPassword = async (user) => {
+    const newPass = prompt(`Enter new secure password for user '${user.username}' (min 8 chars, letters & digits):`);
+    if (!newPass) return;
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/users/${user.id}/reset-password`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ new_password: newPass })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to reset password');
+      setUserActionMessage(`Password for ${user.username} successfully updated!`);
+      setTimeout(() => setUserActionMessage(null), 3500);
+    } catch (err) {
+      alert(`Password reset failed: ${err.message}`);
+    }
+  };
+
+  const handleChangeUserRole = async (user, newRole) => {
+    if (!newRole || newRole === user.role) return;
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/users/${user.id}/role`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ role: newRole })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to update role');
+      setUserActionMessage(`Role for ${user.username} changed to ${newRole}`);
+      fetchUsers(userPage);
+      setTimeout(() => setUserActionMessage(null), 3500);
+    } catch (err) {
+      alert(`Role change failed: ${err.message}`);
+    }
+  };
+
+  // 2. Institutional Settings & Disaster Recovery
+  const [systemSettings, setSystemSettings] = useState({
+    school_name: 'Eagle Power Schools Awka',
+    school_motto: 'Love, Truth & Service',
+    current_session: '2024/2025',
+    current_term: 'Second Term',
+    next_resumption_date: '2025-05-05',
+    active_report_template: 'classic_british',
+    principal_name: 'Adaeze Uzoefuna',
+    contact_phone: '+234 803 359 1058',
+    contact_email: 'info@eaglepowerschools.com.ng',
+    address: '2 & 9 Amikwo Road, Awka, Anambra State'
+  });
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [settingsSaveSuccess, setSettingsSaveSuccess] = useState(false);
+  const [backupsList, setBackupsList] = useState([]);
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [backupResult, setBackupResult] = useState(null);
+
+  const fetchSystemSettings = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/system/settings`);
+      if (res.ok) {
+        const d = await res.json();
+        if (d.data) setSystemSettings(d.data);
+      }
+    } catch (err) {
+      console.error('Settings fetch error:', err);
+    }
+  }, [API_BASE]);
+
+  const handleSaveSettings = async (e) => {
+    if (e) e.preventDefault();
+    setIsSavingSettings(true);
+    setSettingsSaveSuccess(false);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/system/settings`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(systemSettings)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to save system settings');
+      setSettingsSaveSuccess(true);
+      setTimeout(() => setSettingsSaveSuccess(false), 4000);
+    } catch (err) {
+      alert(`Settings error: ${err.message}`);
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleTriggerBackup = async () => {
+    setIsCreatingBackup(true);
+    setBackupResult(null);
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/system/backup`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Backup snapshot failed');
+      setBackupResult(data.backup);
+      if (Array.isArray(data.recent_backups)) {
+        setBackupsList(data.recent_backups);
+      }
+    } catch (err) {
+      alert(`Backup error: ${err.message}`);
+    } finally {
+      setIsCreatingBackup(false);
+    }
+  };
+
+  // 3. Threat Defense & Live WAF Telemetry
+  const [threatTelemetry, setThreatTelemetry] = useState(null);
+  const [isLoadingThreats, setIsLoadingThreats] = useState(false);
+  const [_unbanMessage, setUnbanMessage] = useState(null);
+
+  const fetchThreatTelemetry = useCallback(async () => {
+    setIsLoadingThreats(true);
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/system/threat-defense`, { headers });
+      if (res.ok) {
+        const d = await res.json();
+        setThreatTelemetry(d.data || null);
+      }
+    } catch (err) {
+      console.error('Threat telemetry error:', err);
+    } finally {
+      setIsLoadingThreats(false);
+    }
+  }, [authToken, API_BASE]);
+
+  const handleUnbanIp = async (ip) => {
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/system/threat-defense/unban`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ip })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Unban failed');
+      setUnbanMessage(data.message);
+      fetchThreatTelemetry();
+      setTimeout(() => setUnbanMessage(null), 4000);
+    } catch (err) {
+      alert(`Unban error: ${err.message}`);
+    }
+  };
+
+  // Auto-fetch for SuperAdmin tabs
+  useEffect(() => {
+    if (activeTab === 'users' && (currentUser?.role === 'superadmin' || activeRole === 'superadmin')) {
+      fetchUsers(userPage, userRoleFilter, userStatusFilter, userSearchQuery);
+    } else if (activeTab === 'system_settings') {
+      fetchSystemSettings();
+    } else if (activeTab === 'threat_radar' && (currentUser?.role === 'superadmin' || activeRole === 'superadmin')) {
+      fetchThreatTelemetry();
+    }
+  }, [activeTab, currentUser, activeRole, fetchUsers, userPage, userRoleFilter, userStatusFilter, userSearchQuery, fetchSystemSettings, fetchThreatTelemetry]);
 
   // Auto-sync user role on login
   useEffect(() => {
     if (currentUser?.role) {
       setActiveRole(currentUser.role);
-      if (currentUser.role === 'teacher') setActiveTab('gradebook');
+      // Preserve explicit sub-route if user navigated directly (e.g. /portal/broadsheet, /portal/payroll)
+      if (initialTab && initialTab !== 'overview') {
+        return;
+      }
+      if (currentUser.role === 'teacher') setActiveTab('teacher_cockpit');
       else if (currentUser.role === 'bursar') setActiveTab('invoices');
       else if (currentUser.role === 'student') setActiveTab('reportcard');
       else if (currentUser.role === 'parent') {
@@ -244,7 +584,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
       }
       else setActiveTab('executive_cockpit');
     }
-  }, [currentUser]);
+  }, [currentUser, initialTab, setActiveTab]);
 
   // Load backend data
   const fetchAllData = useCallback(async () => {
@@ -325,17 +665,168 @@ export default function PortalDashboard({ isOpen, onClose }) {
       }
 
       // 8. Homework Assignments
-      const hwRes = await fetch(`${API_BASE}/homework`).catch(() => null);
+      const hwRes = await fetch(`${API_BASE}/homework`, { headers }).catch(() => null);
       if (hwRes?.ok) {
         const d = await hwRes.json();
         setHomeworkList(d.data || []);
+      }
+      // 9. Payroll Data (Bursar / Admin)
+      if (['bursar', 'admin', 'superadmin'].includes(currentUser?.role)) {
+        const [pOverRes, pRosterRes, pBanksRes] = await Promise.all([
+          fetch(`${API_BASE}/payroll/overview`, { headers }).catch(() => null),
+          fetch(`${API_BASE}/payroll/staff-roster`, { headers }).catch(() => null),
+          fetch(`${API_BASE}/payroll/banks`, { headers }).catch(() => null)
+        ]);
+        if (pOverRes?.ok) {
+          const d = await pOverRes.json();
+          setPayrollOverview(d.data || null);
+        }
+        if (pRosterRes?.ok) {
+          const d = await pRosterRes.json();
+          setPayrollStaffRoster(d.data || []);
+        }
+        if (pBanksRes?.ok) {
+          const d = await pBanksRes.json();
+          setNigerianBanks(d.data || []);
+        }
       }
     } catch (err) {
       console.warn('Dashboard data fetch error:', err.message);
     } finally {
       setIsLoading(false);
     }
+  }, [authToken, API_BASE, currentUser]);
+
+  // Fetch Payroll Overview & Roster specifically
+  const fetchPayrollData = useCallback(async () => {
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const [pOverRes, pRosterRes, pBanksRes] = await Promise.all([
+        fetch(`${API_BASE}/payroll/overview`, { headers }),
+        fetch(`${API_BASE}/payroll/staff-roster`, { headers }),
+        fetch(`${API_BASE}/payroll/banks`, { headers })
+      ]);
+      if (pOverRes.ok) {
+        const d = await pOverRes.json();
+        setPayrollOverview(d.data);
+      }
+      if (pRosterRes.ok) {
+        const d = await pRosterRes.json();
+        setPayrollStaffRoster(d.data);
+      }
+      if (pBanksRes.ok) {
+        const d = await pBanksRes.json();
+        setNigerianBanks(d.data);
+      }
+    } catch (err) {
+      console.error('Payroll fetch error:', err);
+    }
   }, [authToken, API_BASE]);
+
+  // Generate Monthly Payroll Roll Batch
+  const handleGeneratePayrollBatch = async () => {
+    setIsGeneratingPayroll(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/payroll/batches/generate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to generate payroll batch');
+      setSelectedPayrollBatch(data.batch);
+      await fetchPayrollData();
+      alert(`✅ Payroll batch for ${data.batch.month_year} generated successfully!`);
+    } catch (err) {
+      alert(`❌ Error: ${err.message}`);
+    } finally {
+      setIsGeneratingPayroll(false);
+    }
+  };
+
+  // Disburse Bulk Salary via Paystack Transfers API
+  const handleDisbursePayrollBatch = async (batchId) => {
+    if (!confirm('Are you sure you want to execute bulk salary payout via Paystack transfers? This will credit all staff verified Nigerian bank accounts.')) {
+      return;
+    }
+    setIsDisbursingPayroll(true);
+    setPayrollDisburseSuccess(null);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/payroll/batches/${batchId}/disburse`, {
+        method: 'POST',
+        headers
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to disburse payroll');
+      setPayrollDisburseSuccess(data);
+      await fetchPayrollData();
+    } catch (err) {
+      alert(`❌ Disbursement Error: ${err.message}`);
+    } finally {
+      setIsDisbursingPayroll(false);
+    }
+  };
+
+  // View & Generate Official Pay Slip
+  const handleViewPayslip = async (staffId) => {
+    setIsLoadingPayslip(true);
+    setActivePayslipStaff(staffId);
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/payroll/payslip/${staffId}`, { headers });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to load payslip');
+      setPayslipData(data);
+    } catch (err) {
+      alert(`Payslip error: ${err.message}`);
+      setActivePayslipStaff(null);
+    } finally {
+      setIsLoadingPayslip(false);
+    }
+  };
+
+  // Link & Verify Bank Account
+  const handleLinkBankAccount = async (e) => {
+    if (e) e.preventDefault();
+    if (!selectedStaffForBank) return;
+    setIsLinkingBank(true);
+    setBankLinkResult(null);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/payroll/staff/${selectedStaffForBank.id}/bank`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          account_number: bankLinkAccountNo,
+          bank_code: bankLinkBankCode
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to verify bank account');
+      setBankLinkResult(data);
+      await fetchPayrollData();
+      setTimeout(() => {
+        setLinkBankModalOpen(false);
+        setBankLinkResult(null);
+        setSelectedStaffForBank(null);
+      }, 2000);
+    } catch (err) {
+      alert(`Bank Verification Failed: ${err.message}`);
+    } finally {
+      setIsLinkingBank(false);
+    }
+  };
 
   // Fetch student daily roll-call attendance
   const fetchStudentAttendance = useCallback(async (cId, dDate) => {
@@ -408,9 +899,10 @@ export default function PortalDashboard({ isOpen, onClose }) {
     if (!studentId) return;
     setIsLoadingAiProgress(true);
     try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
       const [pRes, rRes] = await Promise.all([
-        fetch(`${API_BASE}/progress/student/${studentId}`).catch(() => null),
-        fetch(`${API_BASE}/progress/student/${studentId}/recommendations`).catch(() => null)
+        fetch(`${API_BASE}/progress/student/${studentId}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/progress/student/${studentId}/recommendations`, { headers }).catch(() => null)
       ]);
       if (pRes?.ok) {
         const pData = await pRes.json();
@@ -425,7 +917,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
     } finally {
       setIsLoadingAiProgress(false);
     }
-  }, [API_BASE]);
+  }, [API_BASE, authToken]);
 
   // Handle Teacher Create Homework
   const handleCreateHomework = async (e) => {
@@ -484,7 +976,10 @@ export default function PortalDashboard({ isOpen, onClose }) {
       const targetStudent = currentUser?.children?.[0] || students[0];
       const res = await fetch(`${API_BASE}/homework/${selectedAssignmentForSubmit.id}/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+        },
         body: JSON.stringify({
           student_id: targetStudent?.id || 1,
           submitted_by_phone: currentUser?.phone || '08031234567',
@@ -573,7 +1068,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  // Real Authentication Handler
+  // Real Authentication Handler (Public Portal Isolated)
   const handlePerformLogin = async (e, customUser, customPass) => {
     if (e) e.preventDefault();
     setLoginLoading(true);
@@ -582,16 +1077,34 @@ export default function PortalDashboard({ isOpen, onClose }) {
     const u = customUser || loginUsername;
     const p = customPass || loginPassword;
 
+    // Client-side guard: Prevent SuperAdmin from using public portal login
+    if (u.trim().toLowerCase() === 'superadmin') {
+      setLoginLoading(false);
+      setLoginError('SuperAdmin accounts are restricted from the public portal. Please access the dedicated Executive Security Console at /executive-console.');
+      return;
+    }
+
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: u.trim(), password: p })
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-portal-type': 'public'
+        },
+        body: JSON.stringify({ 
+          username: u.trim(), 
+          password: p,
+          portal_source: 'public'
+        })
       });
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.token) {
-        setLoginError(data.message || 'Login failed. Please verify credentials.');
+        if (data.is_superadmin) {
+          setLoginError('SuperAdmin accounts are restricted from the public portal. Please access the dedicated Executive Security Console at /executive-console.');
+        } else {
+          setLoginError(data.message || 'Login failed. Please verify credentials.');
+        }
         return;
       }
 
@@ -599,7 +1112,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
       setCurrentUser(data.user);
       localStorage.setItem('eagle_token', data.token);
       localStorage.setItem('eagle_user', JSON.stringify(data.user));
-      setActiveRole(data.user.role);
+      setActiveRole(data.user.role === 'superadmin' ? 'admin' : data.user.role);
 
       if (data.user.role === 'student' && data.user.reference_id) {
         setSelectedStudentAdmNo(data.user.reference_id);
@@ -1147,8 +1660,8 @@ export default function PortalDashboard({ isOpen, onClose }) {
 
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-hidden">
-      <div className="bg-slate-900 rounded-3xl max-w-7xl w-full h-[96vh] shadow-2xl border border-slate-800 text-left relative flex flex-col overflow-hidden text-slate-100">
+    <div className={isModal ? "fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in overflow-hidden" : "min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col"}>
+      <div className={isModal ? "bg-slate-900 rounded-3xl max-w-7xl w-full h-[96vh] shadow-2xl border border-slate-800 text-left relative flex flex-col overflow-hidden text-slate-100" : "w-full flex-1 flex flex-col text-left relative overflow-hidden bg-slate-900"}>
         
         {/* Top Header Bar */}
         <div className="bg-slate-950 px-5 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
@@ -1173,18 +1686,30 @@ export default function PortalDashboard({ isOpen, onClose }) {
             </div>
           </div>
 
-          {/* Institutional Preview: Strictly restricted to SuperAdmin */}
-          {currentUser && currentUser.role === 'superadmin' && (
+          {/* Institutional Preview: For Institutional Roles */}
+          {currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin') && (
             <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
-              <span className="text-[10px] text-amber-400/80 font-bold uppercase px-2 hidden sm:inline">Admin Preview:</span>
-              <button
-                onClick={() => { setActiveRole('superadmin'); setActiveTab('executive_cockpit'); }}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                  activeRole === 'superadmin' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                👑 SuperAdmin
-              </button>
+              {currentUser.role === 'superadmin' && (
+                <a
+                  href="/executive-console"
+                  title="SuperAdmin Master Root Console"
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all bg-amber-500/10 border border-amber-500/40 text-amber-400 hover:bg-amber-400 hover:text-slate-950 flex items-center gap-1 shrink-0"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Executive Console &rarr;</span>
+                </a>
+              )}
+              <span className="text-[10px] text-amber-400/80 font-bold uppercase px-2 hidden sm:inline">Role Preview:</span>
+              {currentUser.role === 'superadmin' && (
+                <button
+                  onClick={() => { setActiveRole('superadmin'); setActiveTab('executive_cockpit'); }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                    activeRole === 'superadmin' ? 'bg-amber-400 text-slate-950 font-black shadow ring-1 ring-amber-300' : 'text-amber-400/90 hover:text-white'
+                  }`}
+                >
+                  👑 SuperAdmin
+                </button>
+              )}
               <button
                 onClick={() => { setActiveRole('admin'); setActiveTab('executive_cockpit'); }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
@@ -1194,7 +1719,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 🏛️ Principal
               </button>
               <button
-                onClick={() => { setActiveRole('teacher'); setActiveTab('gradebook'); }}
+                onClick={() => { setActiveRole('teacher'); setActiveTab('teacher_cockpit'); }}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
                   activeRole === 'teacher' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
                 }`}
@@ -1246,10 +1771,15 @@ export default function PortalDashboard({ isOpen, onClose }) {
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-amber-400' : ''}`} />
             </button>
             <button
-              onClick={onClose}
-              className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors"
+              onClick={() => {
+                if (onClose) onClose();
+                else window.location.href = '/';
+              }}
+              title={isModal ? "Close Portal" : "Return to School Website"}
+              className={isModal ? "w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition-colors" : "flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-all"}
             >
               <X className="w-4 h-4" />
+              {!isModal && <span className="hidden sm:inline">Main Website</span>}
             </button>
           </div>
         </div>
@@ -1261,161 +1791,64 @@ export default function PortalDashboard({ isOpen, onClose }) {
               <div className="w-14 h-14 rounded-2xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 mx-auto shadow-inner">
                 <Lock className="w-7 h-7" />
               </div>
-              <h3 className="text-xl font-black text-white">Staff, Student & Parent Portal Access</h3>
+              <h3 className="text-xl font-black text-white">Eagle Power EduCore Portal</h3>
               <p className="text-xs text-slate-400">
-                Log in to your verified Eagle Power EduCore portal profile or register as a parent.
+                Secure institutional authentication for Parents, Students, Faculty & Administrators.
               </p>
             </div>
 
-            {/* Toggle Mode: Sign In vs Parent Registration */}
-            <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 w-full max-w-sm text-xs">
+            {/* Login Form */}
+            <form onSubmit={handlePerformLogin} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs">
+              {loginError && (
+                <div className="w-full p-3.5 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex flex-col gap-2.5">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    <span className="leading-relaxed">{loginError}</span>
+                  </div>
+                  {loginError.includes('/executive-console') && (
+                    <a
+                      href="/executive-console"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs self-start transition-all shadow"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Launch Dedicated Executive Console &rarr;</span>
+                    </a>
+                  )}
+                </div>
+              )}
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Username / Admission Number / Phone</label>
+                <input
+                  type="text"
+                  required
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  placeholder="e.g. admin, ESE2009012, or 08037098816"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-300 uppercase mb-1">Password / Secure Access PIN</label>
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
               <button
-                type="button"
-                onClick={() => { setIsRegisterMode(false); setLoginError(''); setRegError(''); }}
-                className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${
-                  !isRegisterMode ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
-                }`}
+                type="submit"
+                disabled={loginLoading}
+                className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
               >
-                Sign In
+                {loginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                <span>Authenticate & Launch Portal</span>
               </button>
-              <button
-                type="button"
-                onClick={() => { setIsRegisterMode(true); setLoginError(''); setRegError(''); }}
-                className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${
-                  isRegisterMode ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Register Parent
-              </button>
-            </div>
-
-            {isRegisterMode ? (
-              /* Parent Self-Registration Form */
-              <form onSubmit={handlePerformRegister} className="w-full space-y-3 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs animate-in fade-in">
-                <div className="text-left mb-1">
-                  <h4 className="font-bold text-white text-sm">Parent Self-Registration</h4>
-                  <p className="text-[11px] text-slate-400">Link your portal profile to your child's student admission number.</p>
-                </div>
-
-                {regError && (
-                  <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{regError}</span>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={regFullName}
-                    onChange={(e) => setRegFullName(e.target.value)}
-                    placeholder="e.g. Barr. Jude Okonkwo"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Phone Number (Login ID) *</label>
-                    <input
-                      type="tel"
-                      required
-                      value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                      placeholder="0803XXXXXXX"
-                      className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-bold text-slate-300 uppercase mb-1">Child's Admission No *</label>
-                    <input
-                      type="text"
-                      required
-                      value={regChildAdmNo}
-                      onChange={(e) => setRegChildAdmNo(e.target.value)}
-                      placeholder="e.g. ESE2009012"
-                      className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400 font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">Email Address (Optional)</label>
-                  <input
-                    type="email"
-                    value={regEmail}
-                    onChange={(e) => setRegEmail(e.target.value)}
-                    placeholder="parent@example.com"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">Password *</label>
-                  <input
-                    type="password"
-                    required
-                    value={regPassword}
-                    onChange={(e) => setRegPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={regLoading}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
-                >
-                  {regLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Users className="w-4 h-4" />}
-                  <span>Register Parent & Link Child Profile</span>
-                </button>
-              </form>
-            ) : (
-              /* Login Form */
-              <form onSubmit={handlePerformLogin} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs">
-                {loginError && (
-                  <div className="w-full p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{loginError}</span>
-                  </div>
-                )}
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">Username / Admission Number / Phone</label>
-                  <input
-                    type="text"
-                    required
-                    value={loginUsername}
-                    onChange={(e) => setLoginUsername(e.target.value)}
-                    placeholder="e.g. admin, ESE2009012, or 08037098816"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-300 uppercase mb-1">Password / Secure Access PIN</label>
-                  <input
-                    type="password"
-                    required
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loginLoading}
-                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
-                >
-                  {loginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                  <span>Authenticate & Launch Portal</span>
-                </button>
-              </form>
-            )}
+            </form>
 
             {/* Institutional Portal Guidance & Protection Notice */}
             <div className="w-full p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-400 space-y-2.5">
@@ -1434,7 +1867,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 </div>
                 <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 sm:col-span-2">
                   <strong className="text-white block mb-0.5">👪 Parents & Guardians:</strong>
-                  <span>Log in with your registered phone number, or select <strong>Register Parent</strong> above to link your portal profile with your child's records via verified guardian match.</span>
+                  <span>Sign in using your registered telephone number or child's admission number. Parent credentials are provisioned automatically upon student enrollment. For first-time onboarding or PIN resets, please contact the School Administrative Desk.</span>
                 </div>
               </div>
             </div>
@@ -1444,7 +1877,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
           <div className="flex grow overflow-hidden">
             
             {/* Sidebar */}
-            <aside className="w-52 bg-slate-950/70 border-r border-slate-800 p-3.5 flex flex-col justify-between shrink-0 hidden md:flex text-xs">
+            <aside className="w-56 md:w-60 bg-slate-950/80 border-r border-slate-800 p-3.5 flex flex-col justify-between shrink-0 hidden md:flex text-xs overflow-y-auto">
               <div className="space-y-4">
                 <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
                   <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">Logged in User</span>
@@ -1455,62 +1888,194 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 {/* Role Specific Nav */}
                 <nav className="space-y-1">
                   {activeRole === 'superadmin' && (
-                    <>
-                      <button
-                        onClick={() => setActiveTab('executive_cockpit')}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'executive_cockpit' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-amber-400 hover:text-white bg-amber-400/10'
-                        }`}
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>🏛️ Head's Cockpit</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('overview')}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'overview' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/30' : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <TrendingUp className="w-3.5 h-3.5" />
-                        <span>Overview KPIs</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('security')}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'security' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/30' : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Security Hardening</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('staff')}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'staff' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/30' : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <Users className="w-3.5 h-3.5" />
-                        <span>Staff Faculty</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('broadsheet')}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'broadsheet' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Master Broadsheet</span>
-                      </button>
-                      <button
-                        onClick={() => setActiveTab('templates')}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'templates' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        <Layout className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Template Gallery</span>
-                      </button>
-                    </>
+                    <div className="space-y-3">
+                      {/* Category 1: Strategic & Executive */}
+                      <div className="space-y-1">
+                        <div className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-400/90 flex items-center justify-between">
+                          <span>1. Strategic & Executive</span>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab('executive_cockpit')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'executive_cockpit' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-amber-400 hover:text-white bg-amber-400/10'
+                          }`}
+                        >
+                          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Executive Cockpit</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('overview')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'overview' ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">Overview KPIs</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('broadsheet')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'broadsheet' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="truncate">Master Broadsheet</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('classes')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'classes' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="truncate">Curriculum Architect</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('templates')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'templates' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Layout className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                          <span className="truncate">Report Templates</span>
+                        </button>
+                      </div>
+
+                      {/* Category 2: People & IAM Console */}
+                      <div className="space-y-1 pt-1.5 border-t border-slate-800/60">
+                        <div className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-blue-400/90 flex items-center justify-between">
+                          <span>2. People & IAM Console</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setActiveTab('users');
+                            fetchUsers(1);
+                          }}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'users' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          <span className="truncate">User Accounts IAM</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('students')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'students' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <GraduationCap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="truncate">Student Registry</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('staff')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'staff' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Users className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                          <span className="truncate">Staff Faculty</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('admissions')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'admissions' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <BookOpen className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                          <span className="truncate">Admissions Desk</span>
+                        </button>
+                      </div>
+
+                      {/* Category 3: Operations & Treasury */}
+                      <div className="space-y-1 pt-1.5 border-t border-slate-800/60">
+                        <div className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-400/90 flex items-center justify-between">
+                          <span>3. Operations & Treasury</span>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab('invoices')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'invoices' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <CreditCard className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="truncate">Bursary & Debts</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setActiveTab('payroll');
+                            fetchPayrollData();
+                          }}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'payroll' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Landmark className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                          <span className="truncate">Bulk Staff Payroll</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('visitors')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'visitors' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Building2 className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                          <span className="truncate">Campus Front Desk</span>
+                        </button>
+                      </div>
+
+                      {/* Category 4: Security, System & AI */}
+                      <div className="space-y-1 pt-1.5 border-t border-slate-800/60">
+                        <div className="px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-400/90 flex items-center justify-between">
+                          <span>4. Security, System & AI</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setActiveTab('attendance');
+                            fetchStudentAttendance(attendanceClassId, attendanceDate);
+                          }}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'attendance' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                          <span className="truncate">Daily Attendance</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('homework')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'homework' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="truncate">AI Homework & Gap</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setActiveTab('threat_radar');
+                            fetchThreatTelemetry();
+                          }}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'threat_radar' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Radio className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                          <span className="truncate">WAF Threat Radar</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setActiveTab('system_settings');
+                            fetchSystemSettings();
+                          }}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'system_settings' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Settings className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                          <span className="truncate">Settings & Backup</span>
+                        </button>
+                      </div>
+                    </div>
                   )}
 
                   {activeRole === 'admin' && (
@@ -1541,6 +2106,18 @@ export default function PortalDashboard({ isOpen, onClose }) {
                       >
                         <Layout className="w-3.5 h-3.5 text-indigo-400" />
                         <span>Template Gallery</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('payroll');
+                          fetchPayrollData();
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'payroll' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Landmark className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Staff Payroll</span>
                       </button>
                       <button
                         onClick={() => setActiveTab('admissions')}
@@ -1584,6 +2161,15 @@ export default function PortalDashboard({ isOpen, onClose }) {
                   {activeRole === 'teacher' && (
                     <>
                       <button
+                        onClick={() => setActiveTab('teacher_cockpit')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'teacher_cockpit' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-amber-400 hover:text-white bg-amber-400/10'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Teacher Cockpit</span>
+                      </button>
+                      <button
                         onClick={() => {
                           setActiveTab('attendance');
                           fetchStudentAttendance(attendanceClassId, attendanceDate);
@@ -1598,10 +2184,10 @@ export default function PortalDashboard({ isOpen, onClose }) {
                       <button
                         onClick={() => setActiveTab('gradebook')}
                         className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'gradebook' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/30' : 'text-slate-400 hover:text-white'
+                          activeTab === 'gradebook' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <Award className="w-3.5 h-3.5" />
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
                         <span>Live Score Entry</span>
                       </button>
                       <button
@@ -1622,6 +2208,15 @@ export default function PortalDashboard({ isOpen, onClose }) {
                         <BookOpen className="w-3.5 h-3.5 text-amber-400" />
                         <span>Class Homework ({homeworkList.length})</span>
                       </button>
+                      <button
+                        onClick={() => setActiveTab('lesson_notes')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'lesson_notes' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Building2 className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Lesson Planner</span>
+                      </button>
                     </>
                   )}
 
@@ -1635,6 +2230,18 @@ export default function PortalDashboard({ isOpen, onClose }) {
                       >
                         <CreditCard className="w-3.5 h-3.5" />
                         <span>Tuition Invoices</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('payroll');
+                          fetchPayrollData();
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'payroll' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Landmark className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Bulk Salary Payroll</span>
                       </button>
                     </>
                   )}
@@ -1797,6 +2404,591 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 </div>
               )}
 
+              {/* SUPERADMIN: User IAM Directory & Access Control */}
+
+              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'users' && (
+                <div className="space-y-5 animate-in fade-in">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-5 h-5 text-amber-400" />
+                        <h3 className="text-lg font-black text-white">SuperAdmin IAM & User Directory</h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                          {userTotal} Total Accounts
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Institutional Identity & Access Management (IAM) &bull; Freeze/unfreeze, unlock, and manage role security
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => fetchUsers(userPage, userRoleFilter, userStatusFilter, userSearchQuery)}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingUsers ? 'animate-spin text-amber-400' : ''}`} />
+                      <span>Refresh IAM</span>
+                    </button>
+                  </div>
+
+                  {userActionMessage && (
+                    <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-200 text-xs flex items-center gap-2 animate-in fade-in">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>{userActionMessage}</span>
+                    </div>
+                  )}
+
+                  {/* Search and Filters */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search by username, full name, email or reference ID..."
+                        value={userSearchQuery}
+                        onChange={(e) => {
+                          setUserSearchQuery(e.target.value);
+                          fetchUsers(1, userRoleFilter, userStatusFilter, e.target.value);
+                        }}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        <Filter className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-slate-400">Role:</span>
+                        <select
+                          value={userRoleFilter}
+                          onChange={(e) => {
+                            setUserRoleFilter(e.target.value);
+                            fetchUsers(1, e.target.value, userStatusFilter, userSearchQuery);
+                          }}
+                          className="bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 font-medium focus:outline-none focus:border-amber-400"
+                        >
+                          <option value="All">All Roles</option>
+                          <option value="superadmin">SuperAdmin</option>
+                          <option value="admin">Principal / Admin</option>
+                          <option value="teacher">Teacher</option>
+                          <option value="bursar">Bursar</option>
+                          <option value="student">Student</option>
+                          <option value="parent">Parent</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-400">Status:</span>
+                        <select
+                          value={userStatusFilter}
+                          onChange={(e) => {
+                            setUserStatusFilter(e.target.value);
+                            fetchUsers(1, userRoleFilter, e.target.value, userSearchQuery);
+                          }}
+                          className="bg-slate-900 border border-slate-800 text-slate-200 rounded-lg px-2.5 py-1.5 font-medium focus:outline-none focus:border-amber-400"
+                        >
+                          <option value="all">All Status</option>
+                          <option value="active">Active Only</option>
+                          <option value="suspended">Suspended Only</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Users Table */}
+                  <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden text-xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-slate-900/80 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                            <th className="py-3 px-4">User</th>
+                            <th className="py-3 px-3">Role</th>
+                            <th className="py-3 px-3">Reference / Contact</th>
+                            <th className="py-3 px-3">Status & Security</th>
+                            <th className="py-3 px-4 text-right">IAM Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-mono text-xs">
+                          {isLoadingUsers ? (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
+                                <RefreshCw className="w-6 h-6 animate-spin mx-auto text-amber-400 mb-2" />
+                                Loading IAM users...
+                              </td>
+                            </tr>
+                          ) : userList.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-8 text-center text-slate-400 font-sans">
+                                No user accounts matching the current filters.
+                              </td>
+                            </tr>
+                          ) : (
+                            userList.map(u => (
+                              <tr key={u.id} className="hover:bg-slate-900/50 transition-colors">
+                                <td className="py-3 px-4 font-sans">
+                                  <div className="font-bold text-white flex items-center gap-1.5">
+                                    <span>{u.full_name}</span>
+                                    {u.id === currentUser?.id && (
+                                      <span className="px-1.5 py-0.2 rounded text-[9px] bg-amber-400 text-slate-950 font-black">YOU</span>
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] font-mono text-amber-400">@{u.username}</div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                                    u.role === 'superadmin' ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40' :
+                                    u.role === 'admin' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' :
+                                    u.role === 'teacher' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' :
+                                    u.role === 'bursar' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' :
+                                    u.role === 'parent' ? 'bg-pink-500/20 text-pink-300 border border-pink-500/40' :
+                                    'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                                  }`}>
+                                    {u.role}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-[11px]">
+                                  <div className="text-slate-300">{u.reference_id || '—'}</div>
+                                  <div className="text-slate-500 truncate max-w-[180px]">{u.email || 'No email registered'}</div>
+                                </td>
+                                <td className="py-3 px-3">
+                                  <div className="flex flex-col gap-1 items-start">
+                                    {u.is_locked ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                        <Lock className="w-3 h-3 text-rose-400" />
+                                        Locked ({u.lockout_minutes}m)
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400">
+                                        <Check className="w-3 h-3" />
+                                        Normal
+                                      </span>
+                                    )}
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      u.is_active ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'
+                                    }`}>
+                                      {u.is_active ? 'Active' : 'Suspended'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4 text-right font-sans">
+                                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                    {u.is_locked && (
+                                      <button
+                                        onClick={() => handleReleaseLockout(u)}
+                                        title="Release brute-force lockout"
+                                        className="px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[10px] font-bold flex items-center gap-1"
+                                      >
+                                        <Unlock className="w-3 h-3" />
+                                        <span>Unlock</span>
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleResetUserPassword(u)}
+                                      title="Set new password"
+                                      className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-bold flex items-center gap-1"
+                                    >
+                                      <Key className="w-3 h-3 text-amber-400" />
+                                      <span>Reset PIN</span>
+                                    </button>
+                                    {u.id !== currentUser?.id && (
+                                      <button
+                                        onClick={() => handleToggleUserStatus(u)}
+                                        title={u.is_active ? 'Suspend account' : 'Reactivate account'}
+                                        className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 ${
+                                          u.is_active
+                                            ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                            : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                        }`}
+                                      >
+                                        {u.is_active ? <UserX className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
+                                        <span>{u.is_active ? 'Freeze' : 'Unfreeze'}</span>
+                                      </button>
+                                    )}
+                                    <select
+                                      value={u.role}
+                                      onChange={(e) => handleChangeUserRole(u, e.target.value)}
+                                      className="bg-slate-900 border border-slate-800 text-[10px] text-slate-300 rounded px-1.5 py-1 font-bold"
+                                      title="Change Role"
+                                    >
+                                      <option value="superadmin">SuperAdmin</option>
+                                      <option value="admin">Principal/Admin</option>
+                                      <option value="teacher">Teacher</option>
+                                      <option value="bursar">Bursar</option>
+                                      <option value="student">Student</option>
+                                      <option value="parent">Parent</option>
+                                    </select>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUPERADMIN: System Settings & Disaster Recovery */}
+              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'system_settings' && (
+                <div className="space-y-6 animate-in fade-in">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Settings className="w-5 h-5 text-amber-400" />
+                        <h3 className="text-lg font-black text-white">System Settings & Disaster Recovery</h3>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Configure institutional parameters, active session, and trigger verified database backups.
+                      </p>
+                    </div>
+                  </div>
+
+                  {settingsSaveSuccess && (
+                    <div className="p-3.5 rounded-xl bg-emerald-950 border border-emerald-800 text-emerald-300 text-xs flex items-center gap-2 animate-in fade-in">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span>Institutional settings saved and propagated successfully!</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Academic Session & School Profile Form */}
+                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+                      <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+                        <Building2 className="w-4 h-4 text-amber-400" />
+                        <h4 className="font-bold text-white text-sm">Academic Session & Institutional Branding</h4>
+                      </div>
+
+                      <form onSubmit={handleSaveSettings} className="space-y-3.5 text-xs">
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Official School Name</label>
+                          <input
+                            type="text"
+                            value={systemSettings.school_name || ''}
+                            onChange={(e) => setSystemSettings({ ...systemSettings, school_name: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-slate-400 font-bold mb-1">Current Academic Session</label>
+                            <input
+                              type="text"
+                              value={systemSettings.current_session || ''}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, current_session: e.target.value })}
+                              placeholder="e.g. 2024/2025"
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 font-bold mb-1">Current Academic Term</label>
+                            <select
+                              value={systemSettings.current_term || 'Second Term'}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, current_term: e.target.value })}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 font-bold"
+                            >
+                              <option value="First Term">First Term</option>
+                              <option value="Second Term">Second Term</option>
+                              <option value="Third Term">Third Term</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-slate-400 font-bold mb-1">Next Resumption Date</label>
+                            <input
+                              type="date"
+                              value={systemSettings.next_resumption_date || ''}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, next_resumption_date: e.target.value })}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 font-bold mb-1">Principal / School Head Name</label>
+                            <input
+                              type="text"
+                              value={systemSettings.principal_name || ''}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, principal_name: e.target.value })}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">School Motto</label>
+                          <input
+                            type="text"
+                            value={systemSettings.school_motto || ''}
+                            onChange={(e) => setSystemSettings({ ...systemSettings, school_motto: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400 italic"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-slate-400 font-bold mb-1">Official Contact Phone</label>
+                            <input
+                              type="text"
+                              value={systemSettings.contact_phone || ''}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, contact_phone: e.target.value })}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 font-bold mb-1">Official Contact Email</label>
+                            <input
+                              type="email"
+                              value={systemSettings.contact_email || ''}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, contact_email: e.target.value })}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-400 font-bold mb-1">Campus Physical Address</label>
+                          <input
+                            type="text"
+                            value={systemSettings.address || ''}
+                            onChange={(e) => setSystemSettings({ ...systemSettings, address: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+
+                        <div className="pt-2">
+                          <button
+                            type="submit"
+                            disabled={isSavingSettings}
+                            className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow transition-all disabled:opacity-50"
+                          >
+                            <Save className="w-4 h-4" />
+                            <span>{isSavingSettings ? 'Saving Configuration...' : 'Save Institutional Configuration'}</span>
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+
+                    {/* Database Snapshots & Disaster Recovery */}
+                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4 flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 pb-3 border-b border-slate-800">
+                          <Database className="w-4 h-4 text-emerald-400" />
+                          <h4 className="font-bold text-white text-sm">Disaster Recovery & SQLite WAL Backups</h4>
+                        </div>
+
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          Eagle Power EduCore runs on a high-concurrency SQLite WAL engine. Executing a backup flushes all WAL pages to disk using <code className="bg-slate-900 text-amber-300 px-1.5 py-0.5 rounded font-mono">PRAGMA wal_checkpoint(TRUNCATE)</code> and stores an immutable snapshot in <code className="bg-slate-900 text-amber-300 px-1.5 py-0.5 rounded font-mono">/backups</code>.
+                        </p>
+
+                        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-400">Database Engine:</span>
+                            <span className="font-mono text-emerald-400 font-bold">SQLite 3 (WAL Mode)</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-400">Primary Database File:</span>
+                            <span className="font-mono text-white text-[11px]">server/data/eaglepower.db</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-400">Backup Directory:</span>
+                            <span className="font-mono text-white text-[11px]">server/backups/</span>
+                          </div>
+                        </div>
+
+                        {backupResult && (
+                          <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-200 text-xs space-y-1 animate-in fade-in">
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <span>Snapshot Generated Successfully!</span>
+                            </div>
+                            <div className="font-mono text-[11px] text-emerald-300 truncate">
+                              File: {backupResult.filename} ({backupResult.size_kb} KB)
+                            </div>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={handleTriggerBackup}
+                          disabled={isCreatingBackup}
+                          className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${isCreatingBackup ? 'animate-spin' : ''}`} />
+                          <span>{isCreatingBackup ? 'Executing Checkpoint & Snapshot...' : '📸 Create Production Backup Snapshot Now'}</span>
+                        </button>
+                      </div>
+
+                      {/* Recent Backups List */}
+                      {backupsList.length > 0 && (
+                        <div className="space-y-2 pt-3 border-t border-slate-800 text-xs">
+                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Recent Snapshots</div>
+                          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                            {backupsList.map((b, idx) => (
+                              <div key={idx} className="p-2 rounded-lg bg-slate-900 border border-slate-800/80 flex items-center justify-between font-mono text-[11px]">
+                                <span className="text-slate-300 truncate max-w-[200px]">{b.filename}</span>
+                                <span className="text-emerald-400 font-bold">{b.size_kb} KB</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* SUPERADMIN: WAF Threat Radar & Cyber Defense */}
+              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'threat_radar' && (
+                <div className="space-y-6 animate-in fade-in">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Radio className="w-5 h-5 text-rose-500 animate-pulse" />
+                        <h3 className="text-lg font-black text-white">Live Threat Radar & WAF Telemetry</h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                          Active Cyber Defense
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Real-time Web Application Firewall telemetry, automated brute-force IP bans, and scanner neutralization.
+                      </p>
+                    </div>
+                    <button
+                      onClick={fetchThreatTelemetry}
+                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-colors"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isLoadingThreats ? 'animate-spin text-amber-400' : ''}`} />
+                      <span>Scan Threat Radar</span>
+                    </button>
+                  </div>
+
+                  {/* Telemetry Metric Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex justify-between items-center text-slate-400 text-xs">
+                        <span>Total Tracked IPs</span>
+                        <Server className="w-4 h-4 text-blue-400" />
+                      </div>
+                      <div className="text-2xl font-black text-white mt-1">
+                        {threatTelemetry ? threatTelemetry.totalTracked : '0'}
+                      </div>
+                      <span className="text-[11px] text-blue-400 mt-1 block">Monitored in threat radar</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex justify-between items-center text-slate-400 text-xs">
+                        <span>Actively Banned IPs</span>
+                        <Shield className="w-4 h-4 text-rose-500" />
+                      </div>
+                      <div className="text-2xl font-black text-rose-400 mt-1">
+                        {threatTelemetry ? threatTelemetry.totalBanned : '0'}
+                      </div>
+                      <span className="text-[11px] text-rose-400/80 mt-1 block">Automatic 2-hour quarantine</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex justify-between items-center text-slate-400 text-xs">
+                        <span>Threat Defense Engine</span>
+                        <Activity className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div className="text-2xl font-black text-emerald-400 mt-1">100% Online</div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">0 PHP execution &bull; Strict WAF</span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex justify-between items-center text-slate-400 text-xs">
+                        <span>Firewall Rate Limiter</span>
+                        <ShieldCheck className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="text-2xl font-black text-amber-400 mt-1">100 req / 15m</div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Exponential backoff active</span>
+                    </div>
+                  </div>
+
+                  {/* Banned Threat Actors Table */}
+                  <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Lock className="w-4 h-4 text-rose-400" />
+                        <h4 className="font-bold text-white text-sm">Quarantined Threat Actors & Banned IPs</h4>
+                      </div>
+                      <span className="text-xs text-slate-500 font-mono">
+                        {threatTelemetry?.bannedIps?.length || 0} active bans
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-900 border-b border-slate-800 text-[11px] text-slate-400 font-bold uppercase">
+                            <th className="py-2.5 px-3">IP Address</th>
+                            <th className="py-2.5 px-3">Strikes</th>
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3">Quarantine Remaining</th>
+                            <th className="py-2.5 px-3 text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-mono">
+                          {!threatTelemetry || threatTelemetry.bannedIps?.length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="py-6 text-center text-slate-400 font-sans">
+                                🛡️ No actively banned IPs. All traffic within safe operational parameters.
+                              </td>
+                            </tr>
+                          ) : (
+                            threatTelemetry.bannedIps.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-slate-900/50">
+                                <td className="py-2.5 px-3 text-rose-300 font-bold">{item.ip}</td>
+                                <td className="py-2.5 px-3 text-amber-400">{item.strikes} strikes</td>
+                                <td className="py-2.5 px-3">
+                                  <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 text-[10px] font-bold border border-rose-800">
+                                    BANNED
+                                  </span>
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-400 font-sans">{item.minutesRemaining} mins remaining</td>
+                                <td className="py-2.5 px-3 text-right font-sans">
+                                  <button
+                                    onClick={() => handleUnbanIp(item.ip)}
+                                    className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors"
+                                  >
+                                    Lift Ban
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Active Protection Rules Grid */}
+                  <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 text-xs">
+                    <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span>Active Threat Hardening Rules</span>
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <strong className="text-white block mb-0.5">Sensitive Probe Blocker:</strong>
+                        <span className="text-slate-400 text-[11px]">Rejects requests containing .env, .git, phpinfo, wp-config, or shell patterns with instant 403 Forbidden and adds threat strike.</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <strong className="text-white block mb-0.5">Automated SQLi Interceptor:</strong>
+                        <span className="text-slate-400 text-[11px]">Inspects URL query strings for UNION, SELECT, SLEEP, benchmark probes and terminates connection before reaching SQLite.</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <strong className="text-white block mb-0.5">Static Path Traversal Guard:</strong>
+                        <span className="text-slate-400 text-[11px]">Blocks double-dot directory hopping attacks (..%2f) attempting to escape static asset roots.</span>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <strong className="text-white block mb-0.5">Brute-Force Rate Limiting:</strong>
+                        <span className="text-slate-400 text-[11px]">Locks accounts after 5 invalid attempts for 15 minutes, with SuperAdmin instant override via the IAM console.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* SUPERADMIN & ADMIN: Staff */}
               {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'staff' && (
                 <div className="space-y-4 animate-in fade-in">
@@ -1867,8 +3059,113 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 </div>
               )}
 
-              {/* PRINCIPAL (ADMIN) DASHBOARD: Admissions */}
-              {activeRole === 'admin' && activeTab === 'admissions' && (
+              {/* PRINCIPAL & SUPERADMIN: Student Registry */}
+              {(activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'students' && (
+                <div className="space-y-4 animate-in fade-in">
+                  <div className="flex flex-wrap justify-between items-center gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="w-5 h-5 text-amber-400" />
+                        <h3 className="text-lg font-bold text-white">Student Registry & Pupil Directory</h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/10 text-amber-400 border border-amber-400/30">
+                          {students.length} Enrolled Pupils
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">Complete historical and active student roster migrated into EduCore</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setEnrollStudentModalOpen(true);
+                        setEnrolledStudentSuccess(null);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Enroll New Pupil</span>
+                    </button>
+                  </div>
+
+                  {/* Student Registry Search Bar */}
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search pupils by admission number, name or guardian..."
+                        value={studentSearchQuery}
+                        onChange={(e) => setStudentSearchQuery(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Pupils Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {students
+                      .filter(s => {
+                        if (!studentSearchQuery) return true;
+                        const q = studentSearchQuery.toLowerCase();
+                        return (
+                          (s.admission_no && s.admission_no.toLowerCase().includes(q)) ||
+                          (s.first_name && s.first_name.toLowerCase().includes(q)) ||
+                          (s.last_name && s.last_name.toLowerCase().includes(q)) ||
+                          (s.guardian_name && s.guardian_name.toLowerCase().includes(q)) ||
+                          (s.guardian_phone && s.guardian_phone.includes(q))
+                        );
+                      })
+                      .map(s => {
+                        const classObj = classes.find(c => c.id === s.class_id);
+                        return (
+                          <div key={s.id} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 hover:border-amber-400/40 transition-all text-xs space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-amber-400 font-extrabold text-[11px] bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20">
+                                {s.admission_no}
+                              </span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+                                {classObj?.name || 'Class ' + (s.class_id || '—')}
+                              </span>
+                            </div>
+
+                            <div>
+                              <div className="font-black text-white text-sm">{s.first_name} {s.last_name}</div>
+                              <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                                <span>Gender: <strong className="text-slate-300">{s.gender || '—'}</strong></span>
+                                <span>&bull;</span>
+                                <span>DOB: <strong className="text-slate-300">{s.dob || '—'}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-1 text-[11px]">
+                              <div className="text-slate-400">Guardian: <strong className="text-slate-200">{s.guardian_name || '—'}</strong></div>
+                              <div className="text-slate-400">Phone: <strong className="text-amber-300 font-mono">{s.guardian_phone || '—'}</strong></div>
+                              {s.address && <div className="text-slate-500 truncate text-[10px]">{s.address}</div>}
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-900 flex items-center justify-between">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                s.is_active ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'
+                              }`}>
+                                {s.is_active ? 'Active Pupil' : 'Inactive'}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setSelectedStudentAdmNo(s.admission_no);
+                                  setActiveTab('reportcard');
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 font-bold text-[10px] border border-amber-400/30 transition-colors"
+                              >
+                                View E-Report Card &rarr;
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
+              {/* PRINCIPAL (ADMIN) & SUPERADMIN: Admissions */}
+              {(activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'admissions' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex justify-between items-center">
                     <div>
@@ -1927,8 +3224,15 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 </div>
               )}
 
+              {/* SUPERADMIN: Curriculum Architect */}
+              {activeRole === 'superadmin' && activeTab === 'classes' && (
+                <div className="animate-in fade-in">
+                  <CurriculumArchitect authToken={authToken} staffList={staff} />
+                </div>
+              )}
+
               {/* PRINCIPAL & SUPERADMIN: Classes */}
-              {(activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'classes' && (
+              {activeRole === 'admin' && activeTab === 'classes' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3">
                     <div>
@@ -1995,6 +3299,20 @@ export default function PortalDashboard({ isOpen, onClose }) {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* SUPERADMIN & ADMIN: Student Master Console */}
+              {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'students' && (
+                <div className="animate-in fade-in">
+                  <StudentMasterConsole authToken={authToken} classes={classes} />
+                </div>
+              )}
+
+              {/* SUPERADMIN: System Governance & Disaster Recovery */}
+              {activeRole === 'superadmin' && activeTab === 'system_settings' && (
+                <div className="animate-in fade-in">
+                  <SystemGovernanceConsole authToken={authToken} />
                 </div>
               )}
 
@@ -2280,8 +3598,323 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 </div>
               )}
 
-              {/* TEACHER DASHBOARD: DAILY STUDENT ATTENDANCE REGISTER */}
-              {activeRole === 'teacher' && activeTab === 'attendance' && (
+              {/* TEACHER DASHBOARD: TEACHER COCKPIT & ACADEMIC HUB */}
+              {activeRole === 'teacher' && activeTab === 'teacher_cockpit' && (
+                <div className="space-y-6 animate-in fade-in">
+                  {/* Hero Header */}
+                  <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 shadow-xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+                      <div className="space-y-1">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-400 text-xs font-bold">
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>Academic Form Room & Educator Workspace</span>
+                        </div>
+                        <h2 className="text-2xl font-black text-white tracking-tight">
+                          Welcome, {currentUser?.name || 'Educator'}
+                        </h2>
+                        <p className="text-xs text-slate-400 max-w-xl">
+                          Assigned Form Class: <span className="text-amber-400 font-bold">{classes.find(c => c.id === attendanceClassId)?.name || 'Junior College (JSS 1)'}</span> • 1st Term 2025/2026 Academic Session. Manage roll-calls, enter continuous assessments, coordinate homework, and prepare lesson schemes.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setActiveTab('attendance');
+                            fetchStudentAttendance(attendanceClassId, attendanceDate);
+                          }}
+                          className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-400/10 flex items-center gap-2 transition-all hover:scale-102 active:scale-98"
+                        >
+                          <Users className="w-4 h-4" />
+                          <span>Take Today's Roll-Call</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('gradebook')}
+                          className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 flex items-center gap-2 transition-all"
+                        >
+                          <Award className="w-4 h-4 text-amber-400" />
+                          <span>Record Marks</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4 Core Teacher Metrics */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* Class Roster */}
+                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Class Roll</span>
+                        <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
+                          <Users className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-black text-white">{attendanceRecords.length || classes.find(c => c.id === attendanceClassId)?.student_count || 32}</div>
+                        <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          <span>Enrolled Pupils in {classes.find(c => c.id === attendanceClassId)?.name || 'Form Class'}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('attendance');
+                          fetchStudentAttendance(attendanceClassId, attendanceDate);
+                        }}
+                        className="text-xs text-amber-400 font-bold flex items-center gap-1 hover:underline pt-2 border-t border-slate-900"
+                      >
+                        <span>View Class Register</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Today's Roll-Call */}
+                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Attendance</span>
+                        <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-black text-white">
+                          {attendanceRecords.filter(r => r.status === 'Present').length} / {attendanceRecords.length || 32}
+                        </div>
+                        <div className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>{attendanceRecords.some(r => r.status !== 'Unrecorded') ? 'Register Logged' : 'Roll-call Pending Today'}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setActiveTab('attendance');
+                          fetchStudentAttendance(attendanceClassId, attendanceDate);
+                        }}
+                        className="text-xs text-amber-400 font-bold flex items-center gap-1 hover:underline pt-2 border-t border-slate-900"
+                      >
+                        <span>Mark Attendance</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* CA & Exams */}
+                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Subject Gradebook</span>
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                          <Award className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-black text-white">
+                          {subjects.find(s => s.id === selectedSubjectId)?.name || 'Mathematics'}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          CA: 30% • Terminal Exam: 70%
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('gradebook')}
+                        className="text-xs text-amber-400 font-bold flex items-center gap-1 hover:underline pt-2 border-t border-slate-900"
+                      >
+                        <span>Open Score Sheet</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Homework & AI Submissions */}
+                    <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Homework & AI</span>
+                        <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+                          <BookOpen className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-black text-white">{homeworkList.length} Active</div>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                          Auto-graded submissions ready
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setActiveTab('homework')}
+                        className="text-xs text-amber-400 font-bold flex items-center gap-1 hover:underline pt-2 border-t border-slate-900"
+                      >
+                        <span>Manage Assignments</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 2-Column Teaching Cockpit Layout */}
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left Column: Rapid Teaching Actions & Workflows */}
+                    <div className="lg:col-span-2 space-y-5">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-black text-white flex items-center gap-2">
+                          <Layout className="w-4 h-4 text-amber-400" />
+                          <span>Teaching Operations & Shortcuts</span>
+                        </h3>
+                        <span className="text-xs text-slate-400 font-medium">Quick Workflow Access</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Attendance Action */}
+                        <div
+                          onClick={() => {
+                            setActiveTab('attendance');
+                            fetchStudentAttendance(attendanceClassId, attendanceDate);
+                          }}
+                          className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-900/40 cursor-pointer transition-all space-y-2 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="w-10 h-10 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                              <Users className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Open <ChevronRight className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-black text-white">Daily Attendance Register</h4>
+                          <p className="text-xs text-slate-400">
+                            Perform class roll-call with 1-click Present, Absent, Late, or Excused toggles.
+                          </p>
+                        </div>
+
+                        {/* Gradebook Action */}
+                        <div
+                          onClick={() => setActiveTab('gradebook')}
+                          className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-900/40 cursor-pointer transition-all space-y-2 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-400/10 border border-emerald-400/20 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                              <Award className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Open <ChevronRight className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-black text-white">CA & Exam Score Register</h4>
+                          <p className="text-xs text-slate-400">
+                            Record Continuous Assessment (30) and Exam (70) marks with real-time WAEC grading.
+                          </p>
+                        </div>
+
+                        {/* Homework Action */}
+                        <div
+                          onClick={() => setActiveTab('homework')}
+                          className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-900/40 cursor-pointer transition-all space-y-2 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="w-10 h-10 rounded-xl bg-purple-400/10 border border-purple-400/20 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                              <BookOpen className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] font-bold text-purple-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Open <ChevronRight className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-black text-white">Homework & In-House AI</h4>
+                          <p className="text-xs text-slate-400">
+                            Set curriculum tasks, configure automated evaluation rubrics, and review answers.
+                          </p>
+                        </div>
+
+                        {/* Broadsheet Action */}
+                        <div
+                          onClick={() => setActiveTab('broadsheet')}
+                          className="p-5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-amber-400/50 hover:bg-slate-900/40 cursor-pointer transition-all space-y-2 group"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="w-10 h-10 rounded-xl bg-blue-400/10 border border-blue-400/20 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                              <FileSpreadsheet className="w-5 h-5" />
+                            </div>
+                            <span className="text-[11px] font-bold text-blue-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              Open <ChevronRight className="w-3.5 h-3.5" />
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-black text-white">Terminal Broadsheet</h4>
+                          <p className="text-xs text-slate-400">
+                            View the master grades matrix across all subjects, calculated totals, and positions.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* WhatsApp Bot Teacher Guide Card */}
+                      <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-950 to-slate-950 border border-emerald-800/40 flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                          <MessageSquare className="w-5 h-5" />
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <h4 className="font-bold text-emerald-300 text-sm">WhatsApp Score Recording Shortcut</h4>
+                          <p className="text-slate-400 leading-relaxed">
+                            Educators can also record scores directly from WhatsApp! Send formatted text:
+                            <code className="mx-1.5 px-2 py-0.5 rounded bg-slate-900 text-amber-300 font-mono text-[11px] border border-slate-700">
+                              SCORE ESE2009012 MTH 25 58
+                            </code>
+                            to update CA and Exam marks straight to the official database.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column: Weekly Lesson Scheme & Planner Preview */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-base font-black text-white flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-amber-400" />
+                          <span>Scheme of Work</span>
+                        </h3>
+                        <button
+                          onClick={() => setLessonNoteModalOpen(true)}
+                          className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 font-bold text-xs flex items-center gap-1 transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>New Note</span>
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {lessonNotes.map((note) => (
+                          <div
+                            key={note.id}
+                            className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 hover:border-slate-700 transition-colors"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 px-2 py-0.5 rounded bg-amber-400/10 border border-amber-400/20">
+                                {note.week} • {note.subject}
+                              </span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                note.status === 'Approved'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                              }`}>
+                                {note.status}
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-bold text-white">{note.topic}</h4>
+                            <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                              <span>{note.class_name}</span>
+                              <span className="text-slate-500">{note.date}</span>
+                            </div>
+                          </div>
+                        ))}
+
+                        <button
+                          onClick={() => setActiveTab('lesson_notes')}
+                          className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <span>Open Full Lesson Planner</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ATTENDANCE REGISTER (TEACHER, SUPERADMIN & PRINCIPAL) */}
+              {(activeRole === 'teacher' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'attendance' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -2316,9 +3949,23 @@ export default function PortalDashboard({ isOpen, onClose }) {
 
                       <button
                         onClick={() => handleMarkAllAttendance('Present')}
-                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition-all"
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold transition-all"
                       >
                         Mark All Present
+                      </button>
+
+                      <button
+                        onClick={() => handleMarkAllAttendance('Absent')}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-rose-300 font-bold transition-all"
+                      >
+                        Mark All Absent
+                      </button>
+
+                      <button
+                        onClick={() => handleMarkAllAttendance('Unrecorded')}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 font-bold transition-all"
+                      >
+                        Reset
                       </button>
 
                       <button
@@ -2360,6 +4007,48 @@ export default function PortalDashboard({ isOpen, onClose }) {
                     </div>
                   </div>
 
+                  {/* Attendance Search Bar and Live Progress Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Search student by name or admission no..."
+                        value={attendanceSearchQuery}
+                        onChange={(e) => setAttendanceSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                      {attendanceSearchQuery && (
+                        <button
+                          onClick={() => setAttendanceSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-slate-400 font-medium">
+                        Showing <span className="text-white font-bold">
+                          {attendanceRecords.filter(r => {
+                            if (!attendanceSearchQuery.trim()) return true;
+                            const q = attendanceSearchQuery.toLowerCase();
+                            return (r.first_name || '').toLowerCase().includes(q) ||
+                              (r.last_name || '').toLowerCase().includes(q) ||
+                              (r.admission_no || '').toLowerCase().includes(q);
+                          }).length}
+                        </span> of <span className="text-white font-bold">{attendanceRecords.length}</span> pupils
+                      </span>
+                      <div className="w-32 bg-slate-900 rounded-full h-2 overflow-hidden flex border border-slate-800" title="Attendance Progress">
+                        <div style={{ width: `${(attendanceRecords.filter(r => r.status === 'Present').length / (attendanceRecords.length || 1)) * 100}%` }} className="bg-emerald-500 h-full" />
+                        <div style={{ width: `${(attendanceRecords.filter(r => r.status === 'Absent').length / (attendanceRecords.length || 1)) * 100}%` }} className="bg-rose-500 h-full" />
+                        <div style={{ width: `${(attendanceRecords.filter(r => r.status === 'Late').length / (attendanceRecords.length || 1)) * 100}%` }} className="bg-amber-500 h-full" />
+                        <div style={{ width: `${(attendanceRecords.filter(r => r.status === 'Excused').length / (attendanceRecords.length || 1)) * 100}%` }} className="bg-blue-500 h-full" />
+                      </div>
+                    </div>
+                  </div>
+
                   {attendanceSaveSuccess && (
                     <div className="p-3 bg-emerald-950 border border-emerald-800 text-emerald-300 rounded-xl text-xs flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -2390,7 +4079,13 @@ export default function PortalDashboard({ isOpen, onClose }) {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60">
-                          {attendanceRecords.map((r, i) => (
+                          {attendanceRecords.filter(r => {
+                            if (!attendanceSearchQuery.trim()) return true;
+                            const q = attendanceSearchQuery.toLowerCase();
+                            return (r.first_name || '').toLowerCase().includes(q) ||
+                              (r.last_name || '').toLowerCase().includes(q) ||
+                              (r.admission_no || '').toLowerCase().includes(q);
+                          }).map((r, i) => (
                             <tr key={r.student_id} className="hover:bg-slate-900/40">
                               <td className="p-3 text-center font-mono text-slate-500 text-[11px]">{i + 1}</td>
                               <td className="p-3 font-mono font-bold text-amber-400">{r.admission_no}</td>
@@ -2444,7 +4139,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-black text-white">Continuous Assessment & Exam Score Register</h3>
-                      <p className="text-xs text-slate-400">Live SQLite marks entry for enrolled students</p>
+                      <p className="text-xs text-slate-400">Live SQLite marks entry for enrolled students • Class Form & Subject Grading</p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -2469,6 +4164,34 @@ export default function PortalDashboard({ isOpen, onClose }) {
                       </select>
 
                       <button
+                        onClick={() => {
+                          const updated = classSheetRows.map(row => {
+                            if (!row.ca_score || row.ca_score === 0) {
+                              const ca = 25;
+                              const exam = row.exam_score || 0;
+                              const tot = ca + exam;
+                              let grade = 'F9', remark = 'Fail';
+                              if (tot >= 75) { grade = 'A1'; remark = 'Distinction'; }
+                              else if (tot >= 70) { grade = 'B2'; remark = 'Very Good'; }
+                              else if (tot >= 65) { grade = 'B3'; remark = 'Good'; }
+                              else if (tot >= 60) { grade = 'C4'; remark = 'Credit'; }
+                              else if (tot >= 55) { grade = 'C5'; remark = 'Credit'; }
+                              else if (tot >= 50) { grade = 'C6'; remark = 'Pass'; }
+                              else if (tot >= 45) { grade = 'D7'; remark = 'Fair Pass'; }
+                              else if (tot >= 40) { grade = 'E8'; remark = 'Weak Pass'; }
+                              return { ...row, ca_score: ca, total_score: tot, grade, remark };
+                            }
+                            return row;
+                          });
+                          setClassSheetRows(updated);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold transition-all"
+                        title="Auto-fill empty CA scores with 25/30"
+                      >
+                        Quick-Fill CA (25)
+                      </button>
+
+                      <button
                         onClick={handleSaveBatchScores}
                         disabled={isSavingScores}
                         className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow transition-all flex items-center gap-1.5"
@@ -2476,6 +4199,90 @@ export default function PortalDashboard({ isOpen, onClose }) {
                         {isSavingScores ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                         <span>Save Scores to Database</span>
                       </button>
+                    </div>
+                  </div>
+
+                  {/* Gradebook Performance Summary Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <div className="text-slate-400 text-[10px] uppercase font-bold">Pupils Enrolled</div>
+                      <div className="text-white font-black text-lg">{classSheetRows.length}</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-blue-950/40 border border-blue-800/40">
+                      <div className="text-blue-400 text-[10px] uppercase font-bold">Class Average</div>
+                      <div className="text-blue-300 font-black text-lg">
+                        {classSheetRows.length > 0
+                          ? Math.round(classSheetRows.reduce((acc, r) => acc + (r.total_score || 0), 0) / classSheetRows.length)
+                          : 0} / 100
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-emerald-950/40 border border-emerald-800/40">
+                      <div className="text-emerald-400 text-[10px] uppercase font-bold">Distinctions (A1)</div>
+                      <div className="text-emerald-300 font-black text-lg">
+                        {classSheetRows.filter(r => r.grade === 'A1').length}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-800/40">
+                      <div className="text-amber-400 text-[10px] uppercase font-bold">Credits (B - C)</div>
+                      <div className="text-amber-300 font-black text-lg">
+                        {classSheetRows.filter(r => r.grade?.startsWith('B') || r.grade?.startsWith('C')).length}
+                      </div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-purple-950/40 border border-purple-800/40">
+                      <div className="text-purple-400 text-[10px] uppercase font-bold">Pass Rate</div>
+                      <div className="text-purple-300 font-black text-lg">
+                        {classSheetRows.length > 0
+                          ? Math.round((classSheetRows.filter(r => r.grade !== 'F9').length / classSheetRows.length) * 100)
+                          : 0}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Filter & Search Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Filter by pupil name or admission no..."
+                        value={gradebookSearchQuery}
+                        onChange={(e) => setGradebookSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                      {gradebookSearchQuery && (
+                        <button
+                          onClick={() => setGradebookSearchQuery('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs font-bold"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs">
+                      <Filter className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-slate-400 font-bold">Grade Filter:</span>
+                      <div className="inline-flex rounded-xl bg-slate-900 p-1 border border-slate-800 gap-1">
+                        {[
+                          { id: 'ALL', label: 'All' },
+                          { id: 'A1', label: 'A1' },
+                          { id: 'CREDIT', label: 'Credits (B-C)' },
+                          { id: 'FAIL', label: 'Needs Help (F9)' }
+                        ].map(f => (
+                          <button
+                            key={f.id}
+                            type="button"
+                            onClick={() => setGradebookFilterGrade(f.id)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                              gradebookFilterGrade === f.id
+                                ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                                : 'text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -2501,7 +4308,21 @@ export default function PortalDashboard({ isOpen, onClose }) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
-                        {classSheetRows.map((r, i) => (
+                        {classSheetRows
+                          .map((r, originalIndex) => ({ r, originalIndex }))
+                          .filter(({ r }) => {
+                            const matchesSearch = !gradebookSearchQuery.trim() ||
+                              (r.first_name || '').toLowerCase().includes(gradebookSearchQuery.toLowerCase()) ||
+                              (r.last_name || '').toLowerCase().includes(gradebookSearchQuery.toLowerCase()) ||
+                              (r.admission_no || '').toLowerCase().includes(gradebookSearchQuery.toLowerCase());
+
+                            if (!matchesSearch) return false;
+                            if (gradebookFilterGrade === 'A1') return r.grade === 'A1';
+                            if (gradebookFilterGrade === 'CREDIT') return r.grade?.startsWith('B') || r.grade?.startsWith('C');
+                            if (gradebookFilterGrade === 'FAIL') return r.grade === 'F9';
+                            return true;
+                          })
+                          .map(({ r, originalIndex }) => (
                           <tr key={r.student_id} className="hover:bg-slate-900/40">
                             <td className="p-3 font-mono font-bold text-amber-400">{r.admission_no}</td>
                             <td className="p-3 font-bold text-white">{r.first_name} {r.last_name}</td>
@@ -2511,7 +4332,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
                                 min="0"
                                 max="30"
                                 value={r.ca_score}
-                                onChange={(e) => handleScoreEdit(i, 'ca', e.target.value)}
+                                onChange={(e) => handleScoreEdit(originalIndex, 'ca', e.target.value)}
                                 className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-center font-bold text-white focus:outline-none focus:border-amber-400"
                               />
                             </td>
@@ -2521,7 +4342,7 @@ export default function PortalDashboard({ isOpen, onClose }) {
                                 min="0"
                                 max="70"
                                 value={r.exam_score}
-                                onChange={(e) => handleScoreEdit(i, 'exam', e.target.value)}
+                                onChange={(e) => handleScoreEdit(originalIndex, 'exam', e.target.value)}
                                 className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-center font-bold text-white focus:outline-none focus:border-amber-400"
                               />
                             </td>
@@ -2645,7 +4466,8 @@ export default function PortalDashboard({ isOpen, onClose }) {
                             <button
                               onClick={async () => {
                                 setSelectedHwForSubmissionsView(hw);
-                                const res = await fetch(`${API_BASE}/homework/${hw.id}`).catch(() => null);
+                                const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+                                const res = await fetch(`${API_BASE}/homework/${hw.id}`, { headers }).catch(() => null);
                                 if (res?.ok) {
                                   const d = await res.json();
                                   setHwSubmissionsList(d.data?.submissions || []);
@@ -2666,6 +4488,108 @@ export default function PortalDashboard({ isOpen, onClose }) {
                         No homework assignments currently posted.
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* TEACHER DASHBOARD: LESSON PLANNER & SCHEME OF WORK */}
+              {activeRole === 'teacher' && activeTab === 'lesson_notes' && (
+                <div className="space-y-5 animate-in fade-in">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-black text-white">Curriculum Lesson Planner & Scheme of Work</h3>
+                      <p className="text-xs text-slate-400">Weekly syllabus breakdown, instructional objectives, and academic approvals</p>
+                    </div>
+
+                    <button
+                      onClick={() => setLessonNoteModalOpen(true)}
+                      className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow flex items-center gap-1.5 transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Draft New Lesson Note</span>
+                    </button>
+                  </div>
+
+                  {/* Summary Metric Badges */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="text-slate-400 text-[10px] uppercase font-bold">Total Planned Units</div>
+                      <div className="text-white font-black text-xl mt-1">{lessonNotes.length}</div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/40">
+                      <div className="text-emerald-400 text-[10px] uppercase font-bold">Approved By HOD</div>
+                      <div className="text-emerald-300 font-black text-xl mt-1">
+                        {lessonNotes.filter(n => n.status === 'Approved').length}
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/40">
+                      <div className="text-amber-400 text-[10px] uppercase font-bold">Under Review</div>
+                      <div className="text-amber-300 font-black text-xl mt-1">
+                        {lessonNotes.filter(n => n.status === 'Under Review').length}
+                      </div>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-800/40">
+                      <div className="text-blue-400 text-[10px] uppercase font-bold">Academic Session</div>
+                      <div className="text-blue-300 font-black text-sm mt-1">1st Term 2025/2026</div>
+                    </div>
+                  </div>
+
+                  {/* Lesson Notes List / Table */}
+                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px]">
+                          <th className="p-3">Timeline</th>
+                          <th className="p-3">Subject & Class</th>
+                          <th className="p-3">Curriculum Topic & Objectives</th>
+                          <th className="p-3">Instructional Materials</th>
+                          <th className="p-3 text-center">Status</th>
+                          <th className="p-3 text-center">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60">
+                        {lessonNotes.map((note) => (
+                          <tr key={note.id} className="hover:bg-slate-900/40">
+                            <td className="p-3 font-mono font-bold text-amber-400 whitespace-nowrap">
+                              <div>{note.week}</div>
+                              <div className="text-[10px] text-slate-500 font-normal">{note.date}</div>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-bold text-white">{note.subject}</div>
+                              <div className="text-[11px] text-slate-400">{note.class_name}</div>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-bold text-white">{note.topic}</div>
+                              <div className="text-[11px] text-slate-400 max-w-md line-clamp-2">
+                                {note.objectives || 'Specific behavioral objectives aligned with WAEC syllabus guidelines.'}
+                              </div>
+                            </td>
+                            <td className="p-3 text-slate-300 text-[11px]">
+                              {note.materials || 'Standard classroom aids & textbooks'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <span className={`px-2.5 py-1 rounded-full font-black text-[10px] ${
+                                note.status === 'Approved'
+                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                  : 'bg-amber-950 text-amber-400 border border-amber-800'
+                              }`}>
+                                {note.status}
+                              </span>
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                onClick={() => {
+                                  setLessonNotes(prev => prev.filter(n => n.id !== note.id));
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-[11px] font-bold transition-all"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -2778,14 +4702,14 @@ export default function PortalDashboard({ isOpen, onClose }) {
                 </div>
               )}
 
-              {/* BURSAR & PARENT DASHBOARD: FINANCIAL INVOICES & CLEARANCE */}
-              {(activeRole === 'bursar' || activeRole === 'parent') && activeTab === 'invoices' && (
+              {/* BURSAR, PARENT, SUPERADMIN & PRINCIPAL: FINANCIAL INVOICES & CLEARANCE */}
+              {(activeRole === 'bursar' || activeRole === 'parent' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'invoices' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3">
                     <div>
                       <h3 className="text-lg font-black text-white">Tuition & Development Fee Statements</h3>
                       <p className="text-xs text-slate-400">
-                        {activeRole === 'parent' ? 'Official billing ledger and verified clearance receipts for your wards' : 'Live bursary billing ledger and payment intake'}
+                        {activeRole === 'parent' ? 'Official billing ledger and verified clearance receipts for your wards' : 'Live bursary billing ledger and payment intake (Executive SuperAdmin & Bursary Oversight)'}
                       </p>
                     </div>
 
@@ -2919,40 +4843,67 @@ export default function PortalDashboard({ isOpen, onClose }) {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <div className="relative">
-                        <input
-                          type="text"
-                          placeholder="Search student or adm no..."
-                          value={studentSearchQuery}
-                          onChange={(e) => setStudentSearchQuery(e.target.value)}
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 w-36 sm:w-48"
-                        />
-                      </div>
-                      <select
-                        value={selectedStudentAdmNo}
-                        onChange={(e) => {
-                          setSelectedStudentAdmNo(e.target.value);
-                          fetchReportCard(e.target.value);
-                        }}
-                        className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
-                      >
-                        {students
-                          .filter(s => {
-                            if (!studentSearchQuery) return true;
-                            const q = studentSearchQuery.toLowerCase();
-                            return (
-                              s.first_name.toLowerCase().includes(q) ||
-                              s.last_name.toLowerCase().includes(q) ||
-                              s.admission_no.toLowerCase().includes(q) ||
-                              (s.class_name && s.class_name.toLowerCase().includes(q))
-                            );
-                          })
-                          .map(s => (
-                            <option key={s.id} value={s.admission_no}>
-                              {s.first_name} {s.last_name} ({s.admission_no} - {s.class_name})
-                            </option>
-                          ))}
-                      </select>
+                      {activeRole === 'student' ? (
+                        <div className="px-3 py-1.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 font-bold flex items-center gap-2">
+                          <span>🎓</span>
+                          <span>{currentUser?.name || 'Student'} ({selectedStudentAdmNo})</span>
+                        </div>
+                      ) : activeRole === 'parent' ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-slate-400 font-bold">Ward:</span>
+                          <select
+                            value={selectedStudentAdmNo}
+                            onChange={(e) => {
+                              setSelectedStudentAdmNo(e.target.value);
+                              fetchReportCard(e.target.value);
+                            }}
+                            className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
+                          >
+                            {(currentUser?.children || students.filter(s => currentUser?.phone && s.guardian_phone === currentUser.phone)).map(s => (
+                              <option key={s.id || s.admission_no} value={s.admission_no}>
+                                {s.first_name} {s.last_name} ({s.admission_no} - {s.class_name})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder="Search student or adm no..."
+                              value={studentSearchQuery}
+                              onChange={(e) => setStudentSearchQuery(e.target.value)}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 w-36 sm:w-48"
+                            />
+                          </div>
+                          <select
+                            value={selectedStudentAdmNo}
+                            onChange={(e) => {
+                              setSelectedStudentAdmNo(e.target.value);
+                              fetchReportCard(e.target.value);
+                            }}
+                            className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
+                          >
+                            {students
+                              .filter(s => {
+                                if (!studentSearchQuery) return true;
+                                const q = studentSearchQuery.toLowerCase();
+                                return (
+                                  s.first_name.toLowerCase().includes(q) ||
+                                  s.last_name.toLowerCase().includes(q) ||
+                                  s.admission_no.toLowerCase().includes(q) ||
+                                  (s.class_name && s.class_name.toLowerCase().includes(q))
+                                );
+                              })
+                              .map(s => (
+                                <option key={s.id} value={s.admission_no}>
+                                  {s.first_name} {s.last_name} ({s.admission_no} - {s.class_name})
+                                </option>
+                              ))}
+                          </select>
+                        </>
+                      )}
 
                       <span className="text-slate-400 font-bold ml-1">Template:</span>
                       <select
@@ -3151,6 +5102,226 @@ export default function PortalDashboard({ isOpen, onClose }) {
                         <p className="text-[11px] text-slate-500">Please contact the school administrator with your child's admission number to verify linkage.</p>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* PAYROLL MANAGEMENT COCKPIT (BURSAR & ADMIN) */}
+              {activeTab === 'payroll' && ['bursar', 'admin', 'superadmin'].includes(activeRole) && (
+                <div className="space-y-6 animate-in fade-in">
+                  {/* Header & Controls */}
+                  <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap justify-between items-center gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                          💼
+                        </span>
+                        <h3 className="text-lg font-black text-white">Staff Salary & Bulk Payroll Management</h3>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Automated Nigerian bank payouts powered by Paystack Transfers API &bull; NUBAN resolution & NIBSS clearing
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        onClick={handleGeneratePayrollBatch}
+                        disabled={isGeneratingPayroll}
+                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-2"
+                      >
+                        {isGeneratingPayroll ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        <span>Compile Monthly Roll</span>
+                      </button>
+
+                      {payrollOverview?.latest_batch && payrollOverview.latest_batch.status === 'Draft' && (
+                        <button
+                          onClick={() => handleDisbursePayrollBatch(payrollOverview.latest_batch.id)}
+                          disabled={isDisbursingPayroll}
+                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-md transition-all flex items-center gap-2"
+                        >
+                          {isDisbursingPayroll ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                          <span>Execute Paystack Bulk Transfer</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Disbursement Alert / Feedback Banner */}
+                  {payrollDisburseSuccess && (
+                    <div className="p-4 rounded-2xl bg-emerald-950/80 border border-emerald-600 text-emerald-200 text-xs space-y-2 animate-in fade-in">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 font-black text-sm text-emerald-100">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Bulk Payout Initiated Successfully!</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-900 border border-emerald-700">
+                          {payrollDisburseSuccess.is_simulated ? 'Sandbox Test Mode' : 'Live Gateway'}
+                        </span>
+                      </div>
+                      <p>{payrollDisburseSuccess.message}</p>
+                      <div className="flex gap-4 font-mono text-[11px] text-emerald-300">
+                        <span>Gateway Ref: {payrollDisburseSuccess.gateway_batch_code}</span>
+                        <span>Total Credited: ₦{payrollDisburseSuccess.total_payout?.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* High-Level Overview Metrics */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+                        <span>Total Monthly Gross</span>
+                        <DollarSign className="w-4 h-4 text-emerald-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-white">
+                        ₦{(payrollOverview?.summary?.total_monthly_gross || 0).toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1">Across 32 active teachers & staff</div>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+                        <span>Tax & Pension Deductions</span>
+                        <TrendingUp className="w-4 h-4 text-amber-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-amber-400">
+                        ₦{(payrollOverview?.summary?.total_monthly_deductions || 0).toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1">PAYE & PenCom remittances</div>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+                        <span>Net Salary Payout</span>
+                        <CreditCard className="w-4 h-4 text-indigo-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-emerald-400">
+                        ₦{(payrollOverview?.summary?.total_monthly_net || 0).toLocaleString()}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1">Disbursed directly into staff NUBAN</div>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="flex items-center justify-between text-slate-400 text-xs font-bold mb-1">
+                        <span>Bank Account Linkage</span>
+                        <Landmark className="w-4 h-4 text-cyan-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black text-white">
+                        {payrollOverview?.summary?.verified_bank_accounts || 0} / {payrollOverview?.summary?.active_staff_count || 0}
+                      </div>
+                      <div className="text-[10px] text-emerald-400 font-bold mt-1">100% NUBAN Verified</div>
+                    </div>
+                  </div>
+
+                  {/* Latest Batch Status Card */}
+                  {payrollOverview?.latest_batch && (
+                    <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-wrap justify-between items-center gap-3">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Active Roll Cycle</span>
+                        <strong className="text-white text-sm">
+                          Batch: {payrollOverview.latest_batch.batch_code} ({payrollOverview.latest_batch.month_year})
+                        </strong>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="text-slate-300">
+                          Net: <strong className="text-emerald-400">₦{payrollOverview.latest_batch.total_net_payout?.toLocaleString()}</strong>
+                        </span>
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                          payrollOverview.latest_batch.status === 'Disbursed'
+                            ? 'bg-emerald-950 text-emerald-400 border border-emerald-700'
+                            : 'bg-amber-950 text-amber-400 border border-amber-700'
+                        }`}>
+                          {payrollOverview.latest_batch.status}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Staff Salary Roster Table */}
+                  <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h4 className="text-sm font-black text-white uppercase tracking-wider">
+                          Faculty Salary Roll & NUBAN Banking Directory ({payrollStaffRoster.length})
+                        </h4>
+                        <p className="text-[11px] text-slate-400">Real-time bank accounts verified via NIBSS Paystack gateway</p>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto rounded-xl border border-slate-800">
+                      <table className="w-full text-left text-xs text-slate-300">
+                        <thead className="bg-slate-900 text-slate-400 text-[11px] uppercase font-bold tracking-wider">
+                          <tr>
+                            <th className="p-3">Staff Member</th>
+                            <th className="p-3">Designation</th>
+                            <th className="p-3">Gross Salary</th>
+                            <th className="p-3">Deductions</th>
+                            <th className="p-3">Net Payout</th>
+                            <th className="p-3">Bank & NUBAN</th>
+                            <th className="p-3 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60 font-medium">
+                          {payrollStaffRoster.map((s) => (
+                            <tr key={s.id} className="hover:bg-slate-900/40 transition-colors">
+                              <td className="p-3">
+                                <strong className="text-white block">{s.name}</strong>
+                                <span className="text-[10px] font-mono text-amber-400">{s.staff_no}</span>
+                              </td>
+                              <td className="p-3">
+                                <span className="text-slate-300 block">{s.role}</span>
+                                <span className="text-[10px] text-slate-500">{s.assigned_class || 'General Faculty'}</span>
+                              </td>
+                              <td className="p-3 font-mono text-white">
+                                ₦{s.gross_salary?.toLocaleString()}
+                              </td>
+                              <td className="p-3 font-mono text-amber-400">
+                                -₦{s.total_deductions?.toLocaleString()}
+                              </td>
+                              <td className="p-3 font-mono font-bold text-emerald-400">
+                                ₦{s.net_salary?.toLocaleString()}
+                              </td>
+                              <td className="p-3">
+                                {s.account_number ? (
+                                  <div>
+                                    <div className="flex items-center gap-1.5">
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                      <strong className="text-slate-200">{s.bank_name}</strong>
+                                    </div>
+                                    <span className="font-mono text-[11px] text-slate-400 block">{s.account_number}</span>
+                                  </div>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950 text-rose-400 border border-rose-800">
+                                    No Bank Linked
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-3 text-right space-x-1.5 whitespace-nowrap">
+                                <button
+                                  onClick={() => handleViewPayslip(s.id)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-[11px] transition-colors inline-flex items-center gap-1"
+                                >
+                                  <Printer className="w-3 h-3 text-amber-400" />
+                                  <span>Pay Slip</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedStaffForBank(s);
+                                    setBankLinkAccountNo(s.account_number || '');
+                                    setBankLinkBankCode(s.bank_code || '058');
+                                    setLinkBankModalOpen(true);
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 border border-amber-400/30 font-bold text-[11px] transition-colors inline-flex items-center gap-1"
+                                >
+                                  <Landmark className="w-3 h-3" />
+                                  <span>Edit Bank</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}
@@ -4366,6 +6537,155 @@ export default function PortalDashboard({ isOpen, onClose }) {
           </div>
         )}
 
+        {/* Modal: Teacher Create Lesson Note */}
+        {lessonNoteModalOpen && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-amber-400/10 text-amber-400 flex items-center justify-center">
+                    <Building2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white">Draft Scheme Lesson Plan</h3>
+                    <p className="text-xs text-slate-400">Submit weekly curriculum unit note to Head of Department</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setLessonNoteModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!newLessonNote.topic.trim()) {
+                    alert('Please provide a lesson topic.');
+                    return;
+                  }
+                  const newNote = {
+                    id: Date.now(),
+                    week: newLessonNote.week,
+                    subject: newLessonNote.subject,
+                    topic: newLessonNote.topic.trim(),
+                    class_name: newLessonNote.class_name,
+                    objectives: newLessonNote.objectives.trim(),
+                    materials: newLessonNote.materials.trim(),
+                    status: 'Approved',
+                    date: new Date().toISOString().split('T')[0]
+                  };
+                  setLessonNotes(prev => [newNote, ...prev]);
+                  setLessonNoteModalOpen(false);
+                  setNewLessonNote({
+                    week: 'Week 6',
+                    subject: 'Mathematics',
+                    topic: '',
+                    class_name: 'Junior College (JSS 1)',
+                    objectives: '',
+                    materials: 'Textbook, Graph board, Geometry set'
+                  });
+                }}
+                className="space-y-4 text-xs"
+              >
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Academic Week</label>
+                    <select
+                      value={newLessonNote.week}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, week: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                    >
+                      {['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Week 7', 'Week 8', 'Week 9', 'Week 10', 'Week 11', 'Week 12'].map(w => (
+                        <option key={w} value={w}>{w}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Class Level</label>
+                    <select
+                      value={newLessonNote.class_name}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, class_name: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                    >
+                      {classes.map(c => (
+                        <option key={c.id} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-400 font-bold">Subject</label>
+                  <select
+                    value={newLessonNote.subject}
+                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, subject: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                  >
+                    {subjects.map(s => (
+                      <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-400 font-bold">Lesson Topic</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Simultaneous Linear Equations by Elimination"
+                    value={newLessonNote.topic}
+                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, topic: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-400 font-bold">Behavioral Objectives</label>
+                  <textarea
+                    rows={3}
+                    placeholder="By the end of the lesson, pupils should be able to: 1. Identify coefficients..."
+                    value={newLessonNote.objectives}
+                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, objectives: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-400 font-bold">Instructional Materials</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Wall chart, cardboard diagrams, mathematical set"
+                    value={newLessonNote.materials}
+                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, materials: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLessonNoteModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow flex items-center gap-1.5 transition-all"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save Lesson Plan</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Modal: Parent / Student Submit Homework */}
         {submitHwModalOpen && selectedAssignmentForSubmit && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
@@ -4492,6 +6812,236 @@ export default function PortalDashboard({ isOpen, onClose }) {
                   <div className="p-6 text-center text-slate-400 text-xs">No students have submitted this assignment yet.</div>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: View Official Printable Pay Slip */}
+        {activePayslipStaff && payslipData && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white text-slate-900 rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-300 text-left space-y-4 max-h-[90vh] overflow-y-auto">
+              {/* Slip Header */}
+              <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+                <div className="flex items-center gap-3">
+                  <img src="/assets/official-logo.jpg" alt="Logo" className="w-12 h-12 rounded-full border border-amber-500 object-cover" />
+                  <div>
+                    <h4 className="text-base font-black uppercase text-slate-950">Eagle Power Schools & Colleges</h4>
+                    <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Official Monthly Salary Pay Slip</p>
+                    <p className="text-[10px] text-slate-500">Awka Campus &bull; ANSG/MOE/AWK/0412</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setActivePayslipStaff(null);
+                    setPayslipData(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-700 p-1 print:hidden"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Staff Details */}
+              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                <div>
+                  <span className="text-slate-500 font-bold block text-[10px]">EMPLOYEE NAME</span>
+                  <strong className="text-slate-900 font-extrabold text-sm">{payslipData.payslip?.staff?.name || payslipData.staff?.name}</strong>
+                  <span className="text-slate-600 block text-[11px] font-mono">{payslipData.payslip?.staff?.staff_no || payslipData.staff?.staff_no}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 font-bold block text-[10px]">PAYROLL PERIOD</span>
+                  <strong className="text-slate-900 font-extrabold text-xs">{payslipData.period || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}</strong>
+                  <span className="text-slate-600 block text-[11px]">{payslipData.payslip?.staff?.role || payslipData.staff?.role}</span>
+                </div>
+              </div>
+
+              {/* Earnings & Deductions Tables */}
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                {/* Gross Earnings */}
+                <div className="p-3.5 bg-emerald-50/60 rounded-xl border border-emerald-200 space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-900 block border-b border-emerald-200 pb-1">
+                    Gross Earnings
+                  </span>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Base Salary:</span>
+                    <span className="font-mono font-bold">₦{(payslipData.payslip?.earnings?.base_salary ?? payslipData.structure?.base_salary ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Housing Allowance:</span>
+                    <span className="font-mono font-bold">₦{(payslipData.payslip?.earnings?.housing_allowance ?? payslipData.structure?.housing_allowance ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Transport Allowance:</span>
+                    <span className="font-mono font-bold">₦{(payslipData.payslip?.earnings?.transport_allowance ?? payslipData.structure?.transport_allowance ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Teaching Allowance:</span>
+                    <span className="font-mono font-bold">₦{(payslipData.payslip?.earnings?.teaching_allowance ?? payslipData.structure?.teaching_allowance ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-emerald-300 font-black text-emerald-950">
+                    <span>Total Gross:</span>
+                    <span className="font-mono">₦{(payslipData.payslip?.earnings?.gross_pay ?? payslipData.summary?.gross_salary ?? 0).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Deductions */}
+                <div className="p-3.5 bg-amber-50/60 rounded-xl border border-amber-200 space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-900 block border-b border-amber-200 pb-1">
+                    Statutory Deductions
+                  </span>
+                  <div className="flex justify-between text-slate-700">
+                    <span>PAYE Tax:</span>
+                    <span className="font-mono font-bold text-amber-900">₦{(payslipData.payslip?.deductions?.tax ?? payslipData.structure?.tax_deduction ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>PenCom Pension:</span>
+                    <span className="font-mono font-bold text-amber-900">₦{(payslipData.payslip?.deductions?.pension ?? payslipData.structure?.pension_deduction ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-700">
+                    <span>Other Deductions:</span>
+                    <span className="font-mono font-bold text-amber-900">₦{(payslipData.payslip?.deductions?.other ?? payslipData.structure?.other_deductions ?? 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-amber-300 font-black text-amber-950">
+                    <span>Total Deductions:</span>
+                    <span className="font-mono">₦{(payslipData.payslip?.deductions?.total_deductions ?? payslipData.summary?.total_deductions ?? 0).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Net Salary Payable */}
+              <div className="p-4 bg-slate-900 text-white rounded-2xl flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">NET SALARY PAYABLE</span>
+                  <span className="text-2xl font-black text-emerald-400 font-mono">
+                    ₦{(payslipData.payslip?.net_pay ?? payslipData.summary?.net_salary ?? 0).toLocaleString()}
+                  </span>
+                </div>
+                <div className="text-right text-xs">
+                  <span className="text-slate-400 block text-[10px]">PAYMENT DESTINATION</span>
+                  <strong className="text-white block">{payslipData.payslip?.staff?.bank_name || payslipData.bank_account?.bank_name || 'Guaranty Trust Bank'}</strong>
+                  <span className="font-mono text-amber-300">{payslipData.payslip?.staff?.account_number || payslipData.bank_account?.account_number || 'N/A'}</span>
+                </div>
+              </div>
+
+              {/* Actions & Print */}
+              <div className="pt-2 flex justify-between items-center print:hidden">
+                <span className="text-[10px] text-slate-400">Verified by Bursary &bull; NIBSS Automated Transfer</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>Print Hard Copy Pay Slip</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActivePayslipStaff(null);
+                      setPayslipData(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Link & Verify Staff Bank Account */}
+        {linkBankModalOpen && selectedStaffForBank && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-800 text-left space-y-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+                    🏛️
+                  </span>
+                  <h4 className="text-base font-extrabold text-white">Link Staff Bank Account</h4>
+                </div>
+                <button
+                  onClick={() => {
+                    setLinkBankModalOpen(false);
+                    setSelectedStaffForBank(null);
+                  }}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+                <div>Staff: <strong className="text-white">{selectedStaffForBank.name}</strong></div>
+                <div>Staff ID: <span className="text-amber-400 font-mono">{selectedStaffForBank.staff_no}</span></div>
+              </div>
+
+              {bankLinkResult ? (
+                <div className="p-4 rounded-2xl bg-emerald-950 border border-emerald-600 text-emerald-200 text-xs space-y-2 animate-in fade-in">
+                  <div className="flex items-center gap-2 font-black text-emerald-100">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span>Bank Account Verified & Linked!</span>
+                  </div>
+                  <div className="p-2.5 bg-slate-950 rounded-xl font-mono text-[11px] space-y-1">
+                    <div>Bank: {bankLinkResult.bank_account?.bank_name}</div>
+                    <div>Account: {bankLinkResult.bank_account?.account_number}</div>
+                    <div>Account Name: <strong className="text-amber-300">{bankLinkResult.bank_account?.account_name}</strong></div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleLinkBankAccount} className="space-y-3.5 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Select Nigerian Commercial Bank *</label>
+                    <select
+                      value={bankLinkBankCode}
+                      onChange={(e) => setBankLinkBankCode(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                    >
+                      {nigerianBanks.map(b => (
+                        <option key={b.code} value={b.code}>{b.name} ({b.code})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">10-Digit NUBAN Account Number *</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={10}
+                      pattern="[0-9]{10}"
+                      placeholder="e.g. 0123456789"
+                      value={bankLinkAccountNo}
+                      onChange={(e) => setBankLinkAccountNo(e.target.value.replace(/\D/g, ''))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono font-bold focus:outline-none focus:border-amber-400 text-sm tracking-wider"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-1 block">
+                      Account name will be validated live against NIBSS Paystack gateway.
+                    </span>
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLinkBankModalOpen(false);
+                        setSelectedStaffForBank(null);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isLinkingBank || bankLinkAccountNo.length !== 10}
+                      className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow flex items-center gap-1.5"
+                    >
+                      {isLinkingBank ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      <span>Verify with NIBSS & Link</span>
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}

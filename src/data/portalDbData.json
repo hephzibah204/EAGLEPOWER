@@ -426,7 +426,7 @@
       "address": "Awka, Anambra State",
       "is_active": 1,
       "created_at": "2026-10-14 22:09:51",
-      "updated_at": "2026-10-15 17:23:25",
+      "updated_at": "2026-10-15 18:37:37",
       "middle_name": null,
       "religion": null,
       "nationality": "Nigerian",
@@ -7004,6 +7004,23 @@
   ],
   "payroll_batches": [
     {
+      "id": 52,
+      "batch_code": "PAY-2026-10-7544",
+      "month_year": "Test Run 7541",
+      "period_start": null,
+      "period_end": null,
+      "total_staff": 27,
+      "total_gross": 3291000,
+      "total_deductions": 290400,
+      "total_net_payout": 3000600,
+      "status": "Disbursed",
+      "paystack_batch_code": "PAY-PSTK-MOCK-457559",
+      "created_by": "Adaeze Uzoefuna (Principal)",
+      "approved_by": "Adaeze Uzoefuna (Principal)",
+      "disbursed_at": "2026-10-15 18:37:37",
+      "created_at": "2026-10-15 18:37:37"
+    },
+    {
       "id": 51,
       "batch_code": "PAY-2026-10-5170",
       "month_year": "Test Run 5167",
@@ -7379,6 +7396,20 @@
     }
   ],
   "visitors": [
+    {
+      "id": 94,
+      "pass_no": "VIS-2026-661282",
+      "visitor_name": "Sir Jude Okonkwo",
+      "phone": "0803 777 6655",
+      "purpose": "School Fees Inquiry & Bursary Clearance",
+      "person_to_see": "Mr. Chukwuma Okafor (Bursar)",
+      "id_card_type": "National ID (NIN)",
+      "check_in_time": "2026-10-15 18:37:36",
+      "check_out_time": "2026-10-15 18:37:36",
+      "status": "Checked Out",
+      "badge_no": "BADGE-12",
+      "remarks": null
+    },
     {
       "id": 93,
       "pass_no": "VIS-2026-409615",
@@ -7977,6 +8008,90 @@
     }
   ],
   "admissions": [
+    {
+      "id": 121,
+      "application_no": "ADM-2026-768929",
+      "student_name": "Sanitize Test",
+      "gender": "Male",
+      "dob": null,
+      "applying_class": "JSS 1",
+      "parent_name": "Guardian Test",
+      "parent_phone": "08099887766",
+      "parent_email": "sanitize@example.com",
+      "address": "12 Test Road",
+      "previous_school": null,
+      "status": "Under Review",
+      "submitted_at": "2026-10-15 18:37:37",
+      "middle_name": null,
+      "religion": null,
+      "nationality": "Nigerian",
+      "state_of_origin": null,
+      "lga_of_origin": null,
+      "blood_group": null,
+      "genotype": null,
+      "allergies": null,
+      "medical_conditions": null,
+      "special_needs": null,
+      "emergency_contact_name": null,
+      "emergency_contact_phone": null,
+      "emergency_contact_relationship": null,
+      "entry_mode": "Fresh Admission",
+      "last_class_passed": null,
+      "guardian_title": null,
+      "guardian_relationship": null,
+      "guardian_alt_phone": null,
+      "guardian_occupation": null,
+      "guardian_office_address": null,
+      "mother_name": null,
+      "mother_phone": null,
+      "mother_email": null,
+      "mother_occupation": null,
+      "boarding_status": "Day Student",
+      "transport_mode": "Private Pick-up",
+      "bus_route": null
+    },
+    {
+      "id": 120,
+      "application_no": "ADM-2026-659059",
+      "student_name": "David Obiora Eze",
+      "gender": "Male",
+      "dob": "2017-05-14",
+      "applying_class": "Primary 2",
+      "parent_name": "Engr. Obiora Eze",
+      "parent_phone": "+234 803 999 8888",
+      "parent_email": "obiora.eze@gmail.com",
+      "address": "Awka, Anambra State",
+      "previous_school": "Great Heritage Academy",
+      "status": "Under Review",
+      "submitted_at": "2026-10-15 18:37:36",
+      "middle_name": null,
+      "religion": null,
+      "nationality": "Nigerian",
+      "state_of_origin": null,
+      "lga_of_origin": null,
+      "blood_group": null,
+      "genotype": null,
+      "allergies": null,
+      "medical_conditions": null,
+      "special_needs": null,
+      "emergency_contact_name": null,
+      "emergency_contact_phone": null,
+      "emergency_contact_relationship": null,
+      "entry_mode": "Fresh Admission",
+      "last_class_passed": null,
+      "guardian_title": null,
+      "guardian_relationship": null,
+      "guardian_alt_phone": null,
+      "guardian_occupation": null,
+      "guardian_office_address": null,
+      "mother_name": null,
+      "mother_phone": null,
+      "mother_email": null,
+      "mother_occupation": null,
+      "boarding_status": "Day Student",
+      "transport_mode": "Private Pick-up",
+      "bus_route": null
+    },
     {
       "id": 119,
       "application_no": "ADM-2026-535165",
@@ -9919,7 +10034,7 @@
       "reference_id": null,
       "full_name": "Proprietor & Director",
       "is_active": 1,
-      "last_login": "2026-10-15 17:23:23",
+      "last_login": "2026-10-15 18:37:36",
       "created_at": "2026-10-14 22:09:49"
     },
     {
@@ -9930,7 +10045,7 @@
       "reference_id": null,
       "full_name": "Adaeze Uzoefuna (Principal)",
       "is_active": 1,
-      "last_login": "2026-10-15 17:23:23",
+      "last_login": "2026-10-15 18:37:36",
       "created_at": "2026-10-14 22:09:50"
     },
     {
@@ -9974,7 +10089,7 @@
       "reference_id": "ESE2009012",
       "full_name": "Ugochi Nathaniel",
       "is_active": 1,
-      "last_login": "2026-10-15 17:23:24",
+      "last_login": "2026-10-15 18:37:36",
       "created_at": "2026-10-14 22:09:51"
     },
     {
@@ -11494,9 +11609,346 @@
       "is_active": 1,
       "last_login": "2026-10-15 17:23:25",
       "created_at": "2026-10-15 17:23:24"
+    },
+    {
+      "id": 490,
+      "username": "parent_api_1792089456679",
+      "email": "parent_api_1792089456679@gmail.com",
+      "role": "parent",
+      "reference_id": "ESE2009012",
+      "full_name": "Mrs. Adaeze Okeke",
+      "is_active": 1,
+      "last_login": null,
+      "created_at": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 491,
+      "username": "teacher_api_1792089456942",
+      "email": "teacher_api_1792089456942@eaglepowerschools.com.ng",
+      "role": "teacher",
+      "reference_id": "EPS-STF-29",
+      "full_name": "Temporary Test Teacher",
+      "is_active": 1,
+      "last_login": "2026-10-15 18:37:37",
+      "created_at": "2026-10-15 18:37:37"
     }
   ],
   "audit_logs": [
+    {
+      "id": 1714,
+      "user_id": "343",
+      "action": "CREATE_DATABASE_BACKUP",
+      "entity": "SYSTEM",
+      "details": "Created database backup: eaglepower_backup_2026-10-15T18-37-37-908Z.db (784.0 KB)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1713,
+      "user_id": "343",
+      "action": "UNLOCK_TERM_GRADES",
+      "entity": "ACADEMICS",
+      "details": "SuperAdmin UNLOCKED term grade alterations",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1712,
+      "user_id": "343",
+      "action": "LOCK_TERM_GRADES",
+      "entity": "ACADEMICS",
+      "details": "SuperAdmin LOCKED term grade alterations",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1711,
+      "user_id": "343",
+      "action": "DELETE_SUBJECT",
+      "entity": "ACADEMICS",
+      "details": "Deleted subject: Advanced Robotics & AI (TST7845)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1710,
+      "user_id": "343",
+      "action": "UPDATE_SUBJECT",
+      "entity": "ACADEMICS",
+      "details": "Updated subject Robotics & Automation (TST7845) -> Advanced Robotics & AI (TST7845)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1709,
+      "user_id": "343",
+      "action": "CREATE_SUBJECT",
+      "entity": "ACADEMICS",
+      "details": "Created subject: Robotics & Automation (TST7845)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1708,
+      "user_id": "343",
+      "action": "UPDATE_CLASS",
+      "entity": "ACADEMICS",
+      "details": "Updated class Creche -> Creche (Tuition: ₦45000)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1707,
+      "user_id": "343",
+      "action": "BULK_PROMOTE_STUDENTS",
+      "entity": "STUDENTS",
+      "details": "Bulk promoted 1 students to Creche for session 2025/2026",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1706,
+      "user_id": "343",
+      "action": "TRANSFER_STUDENT",
+      "entity": "STUDENTS",
+      "details": "Transferred student 2010134483 from Creche to Creche. Reason: Administrative transfer",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1705,
+      "user_id": "343",
+      "action": "UPDATE_STUDENT",
+      "entity": "STUDENTS",
+      "details": "Updated record for student 2010134483 (Chukwuemeka Nwuzor)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1704,
+      "user_id": "343",
+      "action": "RELEASE_LOCKOUT",
+      "entity": "IAM",
+      "details": "SuperAdmin released account lockout for teacher_api_1792089456942",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1703,
+      "user_id": "343",
+      "action": "ACTIVATE_USER",
+      "entity": "IAM",
+      "details": "SuperAdmin activated account for teacher_api_1792089456942 (ID 491)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1702,
+      "user_id": "343",
+      "action": "SUSPEND_USER",
+      "entity": "IAM",
+      "details": "SuperAdmin suspended account for teacher_api_1792089456942 (ID 491)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1701,
+      "user_id": "343",
+      "action": "CREATE_DATABASE_BACKUP",
+      "entity": "SYSTEM",
+      "details": "Created database backup: eaglepower_backup_2026-10-15T18-37-37-756Z.db (780.0 KB)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1700,
+      "user_id": "343",
+      "action": "UPDATE_SYSTEM_SETTINGS",
+      "entity": "SYSTEM",
+      "details": "Updated session to 2024/2025 (Second Term), resumption: 2025-05-05",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1699,
+      "user_id": "ANONYMOUS",
+      "action": "SECURITY_THREAT_BLOCKED",
+      "entity": "WAF",
+      "details": "Blocked probe from IP ::1: Malicious URL path pattern detected: /(?:\\.\\.[\\/\\\\]|\\.\\.%2f|\\.\\.%5c)/i [URL: /..%2f..%2fserver%2fsrc%2findex.js]",
+      "ip_address": "::1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1698,
+      "user_id": "ANONYMOUS",
+      "action": "NEW_ADMISSION_APPLICATION",
+      "entity": "ADMISSIONS",
+      "details": "New application submitted: ADM-2026-768929 for Sanitize Test",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1697,
+      "user_id": "ANONYMOUS",
+      "action": "SECURITY_THREAT_BLOCKED",
+      "entity": "WAF",
+      "details": "Blocked probe from IP ::ffff:127.0.0.1: Malicious query payload pattern detected: /(?:union\\s+(?:all\\s+)?select)/i [URL: /api/academics/classes?probe=UNION%20SELECT%201,2,3]",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1696,
+      "user_id": "ANONYMOUS",
+      "action": "SECURITY_THREAT_BLOCKED",
+      "entity": "WAF",
+      "details": "Blocked probe from IP ::1: Malicious URL path pattern detected: /\\/\\.(?:env|git|svn|hg|bzr|htaccess|htpasswd|ssh|aws|docker)/i [URL: /.env]",
+      "ip_address": "::1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1695,
+      "user_id": "344",
+      "action": "BATCH_AI_REPORT_COMMENTS",
+      "entity": "REPORTS",
+      "details": "Auto-generated AI report card comments for class ID 2 (15 students)",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1694,
+      "user_id": "344",
+      "action": "DISBURSE_PAYROLL",
+      "entity": "PAYROLL",
+      "details": "Bulk disbursed payroll batch PAY-2026-10-7544 (₦3,000,600) to 27 staff via Paystack",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1693,
+      "user_id": "344",
+      "action": "GENERATE_PAYROLL",
+      "entity": "PAYROLL",
+      "details": "Generated payroll batch PAY-2026-10-7544 (Test Run 7541) for 27 staff: ₦3,000,600",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1692,
+      "user_id": "344",
+      "action": "RECORD_STUDENT_ATTENDANCE",
+      "entity": "student_attendance",
+      "details": "{\"class_id\":1,\"date\":\"2026-10-15\",\"count\":1}",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1691,
+      "user_id": "344",
+      "action": "CREATE_HOMEWORK",
+      "entity": "ACADEMICS",
+      "details": "Created homework assignment HW-457465 (Fractions & Proportions Homework) for class 1",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1690,
+      "user_id": "344",
+      "action": "DEACTIVATE_STAFF",
+      "entity": "STAFF",
+      "details": "Deactivated staff EPS-STF-29",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1689,
+      "user_id": "491",
+      "action": "LOGIN_SUCCESS",
+      "entity": "AUTH",
+      "details": "User logged in successfully via teacher role",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1688,
+      "user_id": "344",
+      "action": "ADD_STAFF",
+      "entity": "STAFF",
+      "details": "Added staff member Temporary Test Teacher (EPS-STF-29) with role Assistant Science Teacher",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:37"
+    },
+    {
+      "id": 1687,
+      "user_id": "490",
+      "action": "USER_REGISTERED",
+      "entity": "AUTH",
+      "details": "New parent account registered: parent_api_1792089456679",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 1686,
+      "user_id": "344",
+      "action": "SAVE_REPORT_EXTRAS",
+      "entity": "REPORT_EXTRAS",
+      "details": "Updated report remarks/traits for student 202",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 1685,
+      "user_id": "ANONYMOUS",
+      "action": "VISITOR_CHECKOUT",
+      "entity": "FRONTDESK",
+      "details": "Visitor ID 94 checked out",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 1684,
+      "user_id": "ANONYMOUS",
+      "action": "VISITOR_CHECKIN",
+      "entity": "FRONTDESK",
+      "details": "Visitor Sir Jude Okonkwo checked in with pass VIS-2026-661282",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 1683,
+      "user_id": "ANONYMOUS",
+      "action": "NEW_ADMISSION_APPLICATION",
+      "entity": "ADMISSIONS",
+      "details": "New application submitted: ADM-2026-659059 for David Obiora Eze",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 1682,
+      "user_id": "348",
+      "action": "LOGIN_SUCCESS",
+      "entity": "AUTH",
+      "details": "User logged in successfully via student role",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 1681,
+      "user_id": "343",
+      "action": "LOGIN_SUCCESS",
+      "entity": "AUTH",
+      "details": "User logged in successfully via superadmin role",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
+    {
+      "id": 1680,
+      "user_id": "344",
+      "action": "LOGIN_SUCCESS",
+      "entity": "AUTH",
+      "details": "User logged in successfully via admin role",
+      "ip_address": "::ffff:127.0.0.1",
+      "timestamp": "2026-10-15 18:37:36"
+    },
     {
       "id": 1679,
       "user_id": "343",
@@ -12081,321 +12533,6 @@
       "details": "Visitor Sir Jude Okonkwo checked in with pass VIS-2026-804227",
       "ip_address": "::ffff:127.0.0.1",
       "timestamp": "2026-10-15 16:38:18"
-    },
-    {
-      "id": 1614,
-      "user_id": "ANONYMOUS",
-      "action": "NEW_ADMISSION_APPLICATION",
-      "entity": "ADMISSIONS",
-      "details": "New application submitted: ADM-2026-803011 for David Obiora Eze",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:38:18"
-    },
-    {
-      "id": 1613,
-      "user_id": "348",
-      "action": "LOGIN_SUCCESS",
-      "entity": "AUTH",
-      "details": "User logged in successfully via student role",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:38:17"
-    },
-    {
-      "id": 1612,
-      "user_id": "343",
-      "action": "LOGIN_SUCCESS",
-      "entity": "AUTH",
-      "details": "User logged in successfully via superadmin role",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:38:17"
-    },
-    {
-      "id": 1611,
-      "user_id": "344",
-      "action": "LOGIN_SUCCESS",
-      "entity": "AUTH",
-      "details": "User logged in successfully via admin role",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:38:17"
-    },
-    {
-      "id": 1610,
-      "user_id": "343",
-      "action": "CREATE_DATABASE_BACKUP",
-      "entity": "SYSTEM",
-      "details": "Created database backup: eaglepower_backup_2026-10-15T16-30-35-855Z.db (732.0 KB)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1609,
-      "user_id": "343",
-      "action": "UNLOCK_TERM_GRADES",
-      "entity": "ACADEMICS",
-      "details": "SuperAdmin UNLOCKED term grade alterations",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1608,
-      "user_id": "343",
-      "action": "LOCK_TERM_GRADES",
-      "entity": "ACADEMICS",
-      "details": "SuperAdmin LOCKED term grade alterations",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1607,
-      "user_id": "343",
-      "action": "DELETE_SUBJECT",
-      "entity": "ACADEMICS",
-      "details": "Deleted subject: Advanced Robotics & AI (TST5803)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1606,
-      "user_id": "343",
-      "action": "UPDATE_SUBJECT",
-      "entity": "ACADEMICS",
-      "details": "Updated subject Robotics & Automation (TST5803) -> Advanced Robotics & AI (TST5803)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1605,
-      "user_id": "343",
-      "action": "CREATE_SUBJECT",
-      "entity": "ACADEMICS",
-      "details": "Created subject: Robotics & Automation (TST5803)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1604,
-      "user_id": "343",
-      "action": "UPDATE_CLASS",
-      "entity": "ACADEMICS",
-      "details": "Updated class Creche -> Creche (Tuition: ₦45000)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1603,
-      "user_id": "343",
-      "action": "BULK_PROMOTE_STUDENTS",
-      "entity": "STUDENTS",
-      "details": "Bulk promoted 1 students to Creche for session 2025/2026",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1602,
-      "user_id": "343",
-      "action": "TRANSFER_STUDENT",
-      "entity": "STUDENTS",
-      "details": "Transferred student 2010134483 from Creche to Creche. Reason: Administrative transfer",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1601,
-      "user_id": "343",
-      "action": "UPDATE_STUDENT",
-      "entity": "STUDENTS",
-      "details": "Updated record for student 2010134483 (Chukwuemeka Nwuzor)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1600,
-      "user_id": "343",
-      "action": "RELEASE_LOCKOUT",
-      "entity": "IAM",
-      "details": "SuperAdmin released account lockout for teacher_api_1792081834629",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1599,
-      "user_id": "343",
-      "action": "ACTIVATE_USER",
-      "entity": "IAM",
-      "details": "SuperAdmin activated account for teacher_api_1792081834629 (ID 485)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1598,
-      "user_id": "343",
-      "action": "SUSPEND_USER",
-      "entity": "IAM",
-      "details": "SuperAdmin suspended account for teacher_api_1792081834629 (ID 485)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1597,
-      "user_id": "343",
-      "action": "CREATE_DATABASE_BACKUP",
-      "entity": "SYSTEM",
-      "details": "Created database backup: eaglepower_backup_2026-10-15T16-30-35-727Z.db (732.0 KB)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1596,
-      "user_id": "343",
-      "action": "UPDATE_SYSTEM_SETTINGS",
-      "entity": "SYSTEM",
-      "details": "Updated session to 2024/2025 (Second Term), resumption: 2025-05-05",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1595,
-      "user_id": "ANONYMOUS",
-      "action": "SECURITY_THREAT_BLOCKED",
-      "entity": "WAF",
-      "details": "Blocked probe from IP ::1: Malicious URL path pattern detected: /(?:\\.\\.[\\/\\\\]|\\.\\.%2f|\\.\\.%5c)/i [URL: /..%2f..%2fserver%2fsrc%2findex.js]",
-      "ip_address": "::1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1594,
-      "user_id": "ANONYMOUS",
-      "action": "NEW_ADMISSION_APPLICATION",
-      "entity": "ADMISSIONS",
-      "details": "New application submitted: ADM-2026-567663 for Sanitize Test",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1593,
-      "user_id": "ANONYMOUS",
-      "action": "SECURITY_THREAT_BLOCKED",
-      "entity": "WAF",
-      "details": "Blocked probe from IP ::ffff:127.0.0.1: Malicious query payload pattern detected: /(?:union\\s+(?:all\\s+)?select)/i [URL: /api/academics/classes?probe=UNION%20SELECT%201,2,3]",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1592,
-      "user_id": "ANONYMOUS",
-      "action": "SECURITY_THREAT_BLOCKED",
-      "entity": "WAF",
-      "details": "Blocked probe from IP ::1: Malicious URL path pattern detected: /\\/\\.(?:env|git|svn|hg|bzr|htaccess|htpasswd|ssh|aws|docker)/i [URL: /.env]",
-      "ip_address": "::1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1591,
-      "user_id": "344",
-      "action": "BATCH_AI_REPORT_COMMENTS",
-      "entity": "REPORTS",
-      "details": "Auto-generated AI report card comments for class ID 2 (15 students)",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1590,
-      "user_id": "344",
-      "action": "DISBURSE_PAYROLL",
-      "entity": "PAYROLL",
-      "details": "Bulk disbursed payroll batch PAY-2026-10-5420 (₦2,602,500) to 26 staff via Paystack",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1589,
-      "user_id": "344",
-      "action": "GENERATE_PAYROLL",
-      "entity": "PAYROLL",
-      "details": "Generated payroll batch PAY-2026-10-5420 (Test Run 5418) for 26 staff: ₦2,602,500",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1588,
-      "user_id": "344",
-      "action": "RECORD_STUDENT_ATTENDANCE",
-      "entity": "student_attendance",
-      "details": "{\"class_id\":1,\"date\":\"2026-10-15\",\"count\":1}",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1587,
-      "user_id": "344",
-      "action": "CREATE_HOMEWORK",
-      "entity": "ACADEMICS",
-      "details": "Created homework assignment HW-835339 (Fractions & Proportions Homework) for class 1",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1586,
-      "user_id": "485",
-      "action": "LOGIN_SUCCESS",
-      "entity": "AUTH",
-      "details": "User logged in successfully via teacher role",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1585,
-      "user_id": "344",
-      "action": "ADD_STAFF",
-      "entity": "STAFF",
-      "details": "Added staff member Mrs. Folake Adeyemi (EPS-STF-26) with role English Language Teacher",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:35"
-    },
-    {
-      "id": 1584,
-      "user_id": "484",
-      "action": "USER_REGISTERED",
-      "entity": "AUTH",
-      "details": "New parent account registered: parent_api_1792081834274",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:34"
-    },
-    {
-      "id": 1583,
-      "user_id": "344",
-      "action": "SAVE_REPORT_EXTRAS",
-      "entity": "REPORT_EXTRAS",
-      "details": "Updated report remarks/traits for student 202",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:34"
-    },
-    {
-      "id": 1582,
-      "user_id": "ANONYMOUS",
-      "action": "VISITOR_CHECKOUT",
-      "entity": "FRONTDESK",
-      "details": "Visitor ID 90 checked out",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:34"
-    },
-    {
-      "id": 1581,
-      "user_id": "ANONYMOUS",
-      "action": "VISITOR_CHECKIN",
-      "entity": "FRONTDESK",
-      "details": "Visitor Sir Jude Okonkwo checked in with pass VIS-2026-419986",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:34"
-    },
-    {
-      "id": 1580,
-      "user_id": "ANONYMOUS",
-      "action": "NEW_ADMISSION_APPLICATION",
-      "entity": "ADMISSIONS",
-      "details": "New application submitted: ADM-2026-418094 for David Obiora Eze",
-      "ip_address": "::ffff:127.0.0.1",
-      "timestamp": "2026-10-15 16:30:34"
     }
   ],
   "system_settings": {
@@ -12411,7 +12548,7 @@
     "contact_phone": "+234 803 359 1058",
     "contact_email": "info@eaglepowerschools.com.ng",
     "address": "2 & 9 Amikwo Road, Awka, Anambra State",
-    "updated_at": "2026-10-15 17:23:25",
+    "updated_at": "2026-10-15 18:37:37",
     "term_locked": 0
   }
 }

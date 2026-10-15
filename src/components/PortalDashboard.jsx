@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
+  Menu,
   X,
   Shield,
   ShieldCheck,
@@ -104,26 +105,58 @@ export default function PortalDashboard({
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // Mobile menu drawer state
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   // Active Role and Tab
   const [activeRole, setActiveRole] = useState(() => currentUser?.role || initialRole || (isExecutive ? 'superadmin' : 'admin'));
-  const [activeTabInternal, setActiveTabInternal] = useState(() => initialTab || 'overview');
+  
+  // Intelligent tab initialization: URL params -> URL path -> initialTab -> role default
+  const [activeTabInternal, setActiveTabInternal] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam) return tabParam.replace(/-/g, '_');
+
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      if (pathParts[0] === 'portal' && pathParts[1] && pathParts[1] !== 'login') {
+        return pathParts[1].replace(/-/g, '_');
+      }
+    }
+    if (initialTab) return initialTab;
+    const role = currentUser?.role || initialRole || (isExecutive ? 'superadmin' : 'admin');
+    if (role === 'teacher') return 'teacher_cockpit';
+    if (role === 'bursar') return 'invoices';
+    if (role === 'student') return 'reportcard';
+    if (role === 'parent') return 'child_overview';
+    if (role === 'frontdesk') return 'visitors';
+    return isExecutive ? 'executive_cockpit' : 'overview';
+  });
 
   const setActiveTab = useCallback((tabId) => {
     setActiveTabInternal(tabId);
+    setIsMobileMenuOpen(false); // Close mobile drawer when an item is selected
     if (!isModal && typeof window !== 'undefined') {
       const cleanTab = tabId.replace(/_/g, '-');
-      window.history.pushState(null, '', `/portal/${cleanTab}`);
+      const path = window.location.pathname;
+      if (path.includes('/executive-console') || path.includes('/superadmin')) {
+        window.history.pushState(null, '', `${window.location.pathname.replace(/\/$/, '')}?tab=${cleanTab}`);
+      } else {
+        window.history.pushState(null, '', `/portal/${cleanTab}`);
+      }
     }
   }, [isModal]);
 
   const activeTab = activeTabInternal;
 
-  // Synchronize when initialTab prop changes
+  // Synchronize ONLY when initialTab prop explicitly changes from parent component
+  const prevInitialTabRef = useRef(initialTab);
   useEffect(() => {
-    if (initialTab && initialTab !== activeTabInternal) {
+    if (initialTab && initialTab !== prevInitialTabRef.current) {
+      prevInitialTabRef.current = initialTab;
       setActiveTabInternal(initialTab);
     }
-  }, [initialTab, activeTabInternal]);
+  }, [initialTab]);
 
   // Support browser Back/Forward navigation
   useEffect(() => {
@@ -1743,6 +1776,17 @@ export default function PortalDashboard({
         {/* Top Header Bar */}
         <div className="bg-slate-950 px-5 py-3.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
+            {currentUser && (
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                className="p-2 md:hidden text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors shrink-0"
+                title="Toggle Menu"
+                aria-label="Toggle Navigation Sidebar"
+              >
+                {isMobileMenuOpen ? <X className="w-4 h-4 text-amber-400" /> : <Menu className="w-4 h-4" />}
+              </button>
+            )}
             <img 
               src="/assets/official-logo.jpg" 
               alt="Eagle Power Schools Seal" 
@@ -1981,11 +2025,35 @@ export default function PortalDashboard({
           </div>
         ) : (
           /* When Logged In: Role-Based Dashboard View */
-          <div className="flex grow overflow-hidden">
+          <div className="flex grow overflow-hidden relative">
+            {/* Mobile Drawer Backdrop */}
+            {isMobileMenuOpen && (
+              <div 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-40 md:hidden"
+              />
+            )}
             
             {/* Sidebar */}
-            <aside className="w-56 md:w-60 bg-slate-950/80 border-r border-slate-800 p-3.5 flex flex-col justify-between shrink-0 hidden md:flex text-xs overflow-y-auto">
+            <aside className={`w-64 md:w-60 bg-slate-950 border-r border-slate-800 p-3.5 flex flex-col justify-between shrink-0 text-xs overflow-y-auto transition-all ${
+              isMobileMenuOpen 
+                ? 'fixed inset-y-0 left-0 z-50 shadow-2xl flex w-72' 
+                : 'hidden md:flex'
+            }`}>
               <div className="space-y-4">
+                {/* Mobile Drawer Header */}
+                <div className="flex items-center justify-between md:hidden pb-2 mb-1 border-b border-slate-800">
+                  <span className="font-bold text-amber-400 text-xs uppercase tracking-wider">Navigation Menu</span>
+                  <button 
+                    type="button"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="p-1 text-slate-400 hover:text-white rounded-lg bg-slate-900 border border-slate-800"
+                    title="Close Menu"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
                 <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
                   <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">Logged in User</span>
                   <strong className="text-white font-extrabold text-xs block mt-0.5 truncate">{currentUser.full_name}</strong>
@@ -2647,16 +2715,6 @@ export default function PortalDashboard({
                       <span className="text-[11px] text-slate-400 mt-1 block">0 PHP execution &bull; Bcrypt</span>
                     </div>
                   </div>
-
-                  <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-5 h-5 text-amber-400" />
-                      <h4 className="font-extrabold text-white text-sm">Vulnerability Elimination & Mitigation Report</h4>
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      The compromised legacy PHP system suffered from unauthenticated file upload exploitation. In this modern Node.js EduCore architecture, all 96 historical pupils and 16 classes were preserved while completely eliminating execution of PHP scripts.
-                    </p>
-                  </div>
                 </div>
               )}
 
@@ -2883,8 +2941,8 @@ export default function PortalDashboard({
                 </div>
               )}
 
-              {/* SUPERADMIN: System Settings & Disaster Recovery */}
-              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'system_settings' && (
+              {/* PRINCIPAL: System Settings */}
+              {activeRole === 'admin' && activeTab === 'system_settings' && (
                 <div className="space-y-6 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -3315,8 +3373,8 @@ export default function PortalDashboard({
                 </div>
               )}
 
-              {/* PRINCIPAL & SUPERADMIN: Student Registry */}
-              {(activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'students' && (
+              {/* PRINCIPAL: Student Registry */}
+              {activeRole === 'admin' && activeTab === 'students' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3">
                     <div>
@@ -3569,8 +3627,8 @@ export default function PortalDashboard({
                 </div>
               )}
 
-              {/* SUPERADMIN & ADMIN: Student Master Console */}
-              {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'students' && (
+              {/* SUPERADMIN: Student Master Console */}
+              {activeRole === 'superadmin' && activeTab === 'students' && (
                 <div className="animate-in fade-in">
                   <StudentMasterConsole authToken={authToken} classes={classes} />
                 </div>
@@ -3584,7 +3642,7 @@ export default function PortalDashboard({
               )}
 
               {/* PRINCIPAL & RECEPTION: FRONT DESK & VISITOR MANAGEMENT */}
-              {(activeRole === 'admin' || activeRole === 'frontdesk' || activeRole === 'superadmin') && activeTab === 'visitors' && (
+              {(activeRole === 'admin' || activeRole === 'frontdesk' || activeRole === 'superadmin') && (activeTab === 'visitors' || (activeRole === 'frontdesk' && activeTab === 'overview')) && (
                 <div className="space-y-4 animate-in fade-in">
                   {/* Front Desk Sub-Tab Selector */}
                   <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 p-2 rounded-2xl border border-slate-800">
@@ -3984,7 +4042,7 @@ export default function PortalDashboard({
               )}
 
               {/* TEACHER DASHBOARD: TEACHER COCKPIT & ACADEMIC HUB */}
-              {activeRole === 'teacher' && activeTab === 'teacher_cockpit' && (
+              {activeRole === 'teacher' && (activeTab === 'teacher_cockpit' || activeTab === 'overview') && (
                 <div className="space-y-6 animate-in fade-in">
                   {/* Hero Header */}
                   <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 shadow-xl relative overflow-hidden">
@@ -5093,8 +5151,7 @@ export default function PortalDashboard({
               )}
 
               {/* BURSAR, PARENT, SUPERADMIN & PRINCIPAL: FINANCIAL INVOICES & CLEARANCE */}
-              {/* BURSAR, PARENT, SUPERADMIN & PRINCIPAL: FINANCIAL INVOICES & CLEARANCE */}
-              {(activeRole === 'bursar' || activeRole === 'parent' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'invoices' && (() => {
+              {(activeRole === 'bursar' || activeRole === 'parent' || activeRole === 'superadmin' || activeRole === 'admin') && (activeTab === 'invoices' || (activeRole === 'bursar' && activeTab === 'overview')) && (() => {
                 const displayedInvoices = invoices.filter(inv => {
                   if (activeRole === 'parent' && currentUser?.children && currentUser.children.length > 0) {
                     const childAdmNos = currentUser.children.map(c => c.admission_no);
@@ -5341,7 +5398,7 @@ export default function PortalDashboard({
               )}
 
               {/* ACADEMIC EVALUATION: OFFICIAL PRODUCTION REPORT CARD (STUDENT, PARENT, ADMIN, SUPERADMIN, BURSAR) */}
-              {(activeRole === 'student' || activeRole === 'parent' || activeRole === 'admin' || activeRole === 'superadmin' || activeRole === 'bursar') && activeTab === 'reportcard' && (
+              {(activeRole === 'student' || activeRole === 'parent' || activeRole === 'admin' || activeRole === 'superadmin' || activeRole === 'bursar') && (activeTab === 'reportcard' || (activeRole === 'student' && activeTab === 'overview')) && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
                     <div>
@@ -5790,7 +5847,7 @@ export default function PortalDashboard({
               })()}
 
               {/* PARENT DASHBOARD: CHILD OVERVIEW */}
-              {activeRole === 'parent' && activeTab === 'child_overview' && (
+              {activeRole === 'parent' && (activeTab === 'child_overview' || activeTab === 'overview') && (
                 <div className="space-y-6 animate-in fade-in">
                   <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap justify-between items-center gap-4">
                     <div>

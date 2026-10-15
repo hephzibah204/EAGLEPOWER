@@ -158,10 +158,18 @@ export default function PortalDashboard({
       try {
         const url = new URL(window.location.href);
         url.searchParams.set('tab', cleanTab);
-        window.history.replaceState(null, '', url.pathname + url.search);
+        window.history.pushState(null, '', url.pathname + url.search);
       } catch {
         // Fallback safely if URL constructor fails
       }
+      try {
+        const mainEl = document.querySelector('main');
+        if (mainEl) {
+          mainEl.scrollTop = 0;
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } catch {}
     }
   }, [isModal]);
 
@@ -190,6 +198,10 @@ export default function PortalDashboard({
         if (pathParts[0] === 'portal' && pathParts[1]) {
           const tab = pathParts[1].replace(/-/g, '_');
           setActiveTabInternal(tab);
+          return;
+        }
+        if (window.location.pathname.includes('/superadmin')) {
+          setActiveTabInternal('overview');
         }
       };
       window.addEventListener('popstate', handlePopState);

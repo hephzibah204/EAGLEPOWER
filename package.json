@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "next dev",
     "dev:vite": "vite",
-    "build": "next build",
-    "build:vite": "vite build",
+    "export:json": "node server/src/scripts/exportDbToJson.js",
+    "build": "npm run export:json && next build",
+    "build:vite": "npm run export:json && vite build",
     "start": "next start",
     "lint": "oxlint",
     "preview": "vite preview",
@@ -17,7 +18,7 @@
     "server:test": "node server/src/scripts/testApi.js",
     "start:prod": "npm run build && node server/src/index.js",
     "deploy": "wrangler pages deploy out",
-    "pages:build": "next build"
+    "pages:build": "npm run export:json && next build"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

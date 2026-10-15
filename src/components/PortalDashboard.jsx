@@ -18,6 +18,7 @@ import {
   Sparkles,
   Lock,
   Check,
+  Copy,
   FileSpreadsheet,
   Layout,
   Plus,
@@ -40,7 +41,11 @@ import {
   Unlock,
   Activity,
   Server,
-  Layers
+  Layers,
+  HeartPulse,
+  Bus,
+  MapPin,
+  User
 } from 'lucide-react';
 import { getApiBase } from '../config/api';
 import BroadsheetView from './reports/BroadsheetView';
@@ -56,8 +61,25 @@ import StudentMasterConsole from './superadmin/modules/StudentMasterConsole';
 import CurriculumArchitect from './superadmin/modules/CurriculumArchitect';
 import SystemGovernanceConsole from './superadmin/modules/SystemGovernanceConsole';
 
-export default function PortalDashboard({ isOpen = true, onClose, isModal = false, initialTab }) {
+export default function PortalDashboard({
+  isOpen = true,
+  onClose,
+  isModal = false,
+  initialTab,
+  initialRole,
+  isExecutiveConsole = false
+}) {
   const API_BASE = getApiBase();
+
+  const isExecutive = Boolean(
+    isExecutiveConsole ||
+    initialRole === 'superadmin' ||
+    (typeof window !== 'undefined' && (
+      window.location.pathname.includes('/executive-console') ||
+      window.location.pathname.includes('/superadmin')
+    ))
+  );
+
   // Authentication & Session
   const [authToken, setAuthToken] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -83,7 +105,7 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
   const [loginLoading, setLoginLoading] = useState(false);
 
   // Active Role and Tab
-  const [activeRole, setActiveRole] = useState(() => currentUser?.role || 'admin');
+  const [activeRole, setActiveRole] = useState(() => currentUser?.role || initialRole || (isExecutive ? 'superadmin' : 'admin'));
   const [activeTabInternal, setActiveTabInternal] = useState(() => initialTab || 'overview');
 
   const setActiveTab = useCallback((tabId) => {
@@ -250,17 +272,52 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
 
   // Enroll Student & Parent Modal States
   const [enrollStudentModalOpen, setEnrollStudentModalOpen] = useState(false);
+  const [enrollModalTab, setEnrollModalTab] = useState('biodata');
   const [newStudentForm, setNewStudentForm] = useState({
     admission_no: '',
     first_name: '',
+    middle_name: '',
     last_name: '',
     gender: 'Male',
     dob: '2016-01-01',
+    religion: 'Christianity',
+    nationality: 'Nigerian',
+    state_of_origin: 'Anambra State',
+    lga_of_origin: 'Awka South',
+    mother_tongue: 'Igbo / English',
     class_id: 1,
+    // Health & Medical Safety
+    blood_group: 'O+',
+    genotype: 'AA',
+    allergies: 'None',
+    medical_conditions: 'None',
+    special_needs: 'None',
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relationship: 'Father',
+    // Academic Placement & Pedigree
+    entry_mode: 'Fresh Admission',
+    previous_school: '',
+    last_class_passed: '',
+    reason_for_transfer: '',
+    // Guardian & Parent Record
+    guardian_title: 'Mr',
     guardian_name: '',
+    guardian_relationship: 'Father',
     guardian_phone: '',
+    guardian_alt_phone: '',
     guardian_email: '',
-    address: 'Awka, Anambra State'
+    guardian_occupation: '',
+    guardian_office_address: '',
+    address: 'Awka, Anambra State',
+    mother_name: '',
+    mother_phone: '',
+    mother_email: '',
+    mother_occupation: '',
+    // Logistics & Commute
+    boarding_status: 'Day',
+    transport_mode: 'Parent Dropoff',
+    bus_route: 'None'
   });
   const [isEnrollingStudent, setIsEnrollingStudent] = useState(false);
   const [enrolledStudentSuccess, setEnrolledStudentSuccess] = useState(null);
@@ -296,6 +353,10 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
   const [isSubmittingHw, setIsSubmittingHw] = useState(false);
   const [hwSubmissionResult, setHwSubmissionResult] = useState(null);
   const [selectedHwForSubmissionsView, setSelectedHwForSubmissionsView] = useState(null);
+  const [hwSubmissionsList, setHwSubmissionsList] = useState([]);
+  const [invoiceSearchQuery, setInvoiceSearchQuery] = useState('');
+  const [invoiceDivisionFilter, setInvoiceDivisionFilter] = useState('All');
+  const [frontDeskSearchQuery, setFrontDeskSearchQuery] = useState('');
   // Payroll Management States
   const [payrollOverview, setPayrollOverview] = useState(null);
   const [payrollStaffRoster, setPayrollStaffRoster] = useState([]);
@@ -313,6 +374,9 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
   const [bankLinkBankCode, setBankLinkBankCode] = useState('058');
   const [isLinkingBank, setIsLinkingBank] = useState(false);
   const [bankLinkResult, setBankLinkResult] = useState(null);
+  const [parentBankModalOpen, setParentBankModalOpen] = useState(false);
+  const [selectedInvoiceForParent, setSelectedInvoiceForParent] = useState(null);
+  const [copiedBankText, setCopiedBankText] = useState(null);
 
   // ==========================================
   // SuperAdmin Omni-Control States & Handlers
@@ -582,6 +646,7 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
           setSelectedStudentAdmNo(currentUser.children[0].admission_no);
         }
       }
+      else if (currentUser.role === 'frontdesk') setActiveTab('visitors');
       else setActiveTab('executive_cockpit');
     }
   }, [currentUser, initialTab, setActiveTab]);
@@ -1023,10 +1088,10 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
   }, [API_BASE, authToken]);
 
   useEffect(() => {
-    if (isOpen && activeRole === 'teacher') {
+    if (isOpen && (activeRole === 'teacher' || activeTab === 'gradebook')) {
       fetchClassSheet(selectedClassId, selectedSubjectId);
     }
-  }, [isOpen, activeRole, selectedClassId, selectedSubjectId, fetchClassSheet]);
+  }, [isOpen, activeRole, activeTab, selectedClassId, selectedSubjectId, fetchClassSheet]);
 
   // Load student report card
   const fetchReportCard = useCallback(async (admNo) => {
@@ -1068,7 +1133,7 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
 
   if (!isOpen) return null;
 
-  // Real Authentication Handler (Public Portal Isolated)
+  // Real Authentication Handler (Public Portal & Executive Console Aware)
   const handlePerformLogin = async (e, customUser, customPass) => {
     if (e) e.preventDefault();
     setLoginLoading(true);
@@ -1077,30 +1142,48 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
     const u = customUser || loginUsername;
     const p = customPass || loginPassword;
 
-    // Client-side guard: Prevent SuperAdmin from using public portal login
-    if (u.trim().toLowerCase() === 'superadmin') {
+    // Client-side guard: Prevent SuperAdmin from using public portal login (unless on dedicated Executive Console)
+    if (!isExecutive && u.trim().toLowerCase() === 'superadmin') {
       setLoginLoading(false);
       setLoginError('SuperAdmin accounts are restricted from the public portal. Please access the dedicated Executive Security Console at /executive-console.');
       return;
     }
 
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const loginUrl = isExecutive 
+        ? `${API_BASE}/auth/executive-login` 
+        : `${API_BASE}/auth/login`;
+
+      const headers = { 
+        'Content-Type': 'application/json',
+        'x-portal-type': isExecutive ? 'executive' : 'public'
+      };
+
+      const bodyPayload = { 
+        username: u.trim(), 
+        password: p,
+        portal_source: isExecutive ? 'executive' : 'public'
+      };
+
+      let res = await fetch(loginUrl, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'x-portal-type': 'public'
-        },
-        body: JSON.stringify({ 
-          username: u.trim(), 
-          password: p,
-          portal_source: 'public'
-        })
+        headers,
+        body: JSON.stringify(bodyPayload)
       });
+
+      // Fallback: If executive-login returns 404, fallback to /auth/login with executive portal_source
+      if (res.status === 404 && isExecutive) {
+        res = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(bodyPayload)
+        });
+      }
+
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.token) {
-        if (data.is_superadmin) {
+        if (data.is_superadmin && !isExecutive) {
           setLoginError('SuperAdmin accounts are restricted from the public portal. Please access the dedicated Executive Security Console at /executive-console.');
         } else {
           setLoginError(data.message || 'Login failed. Please verify credentials.');
@@ -1112,9 +1195,11 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
       setCurrentUser(data.user);
       localStorage.setItem('eagle_token', data.token);
       localStorage.setItem('eagle_user', JSON.stringify(data.user));
-      setActiveRole(data.user.role === 'superadmin' ? 'admin' : data.user.role);
+      setActiveRole(data.user.role);
 
-      if (data.user.role === 'student' && data.user.reference_id) {
+      if (data.user.role === 'superadmin') {
+        setActiveTab('overview');
+      } else if (data.user.role === 'student' && data.user.reference_id) {
         setSelectedStudentAdmNo(data.user.reference_id);
       }
     } catch {
@@ -1406,6 +1491,9 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
 
       if (res.ok) {
         setAdmissions(prev => prev.map(a => a.id === id ? { ...a, status } : a));
+        if (status === 'Admitted') {
+          fetchAllData();
+        }
       }
     } catch (err) {
       alert('Status update failed: ' + err.message);
@@ -1750,6 +1838,14 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
               >
                 👪 Parent
               </button>
+              <button
+                onClick={() => { setActiveRole('frontdesk'); setActiveTab('visitors'); }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                  activeRole === 'frontdesk' ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                🏢 Front Desk
+              </button>
             </div>
           )}
 
@@ -1788,24 +1884,32 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
         {!currentUser ? (
           <div className="grow overflow-y-auto p-6 flex flex-col items-center justify-center max-w-xl mx-auto w-full space-y-5">
             <div className="text-center space-y-1.5">
-              <div className="w-14 h-14 rounded-2xl bg-amber-400/10 border border-amber-400/30 flex items-center justify-center text-amber-400 mx-auto shadow-inner">
-                <Lock className="w-7 h-7" />
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto shadow-inner ${
+                isExecutive
+                  ? 'bg-amber-400/20 border border-amber-400/40 text-amber-400 ring-4 ring-amber-400/10'
+                  : 'bg-amber-400/10 border border-amber-400/30 text-amber-400'
+              }`}>
+                {isExecutive ? <ShieldCheck className="w-7 h-7" /> : <Lock className="w-7 h-7" />}
               </div>
-              <h3 className="text-xl font-black text-white">Eagle Power EduCore Portal</h3>
+              <h3 className="text-xl font-black text-white">
+                {isExecutive ? 'EaglePower Executive Security Console' : 'Eagle Power EduCore Portal'}
+              </h3>
               <p className="text-xs text-slate-400">
-                Secure institutional authentication for Parents, Students, Faculty & Administrators.
+                {isExecutive
+                  ? 'Dedicated Institutional Governance & High-Privilege Administration'
+                  : 'Secure institutional authentication for Parents, Students, Faculty & Administrators.'}
               </p>
             </div>
 
             {/* Login Form */}
-            <form onSubmit={handlePerformLogin} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs">
+            <form onSubmit={handlePerformLogin} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs shadow-xl">
               {loginError && (
                 <div className="w-full p-3.5 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex flex-col gap-2.5">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
                     <span className="leading-relaxed">{loginError}</span>
                   </div>
-                  {loginError.includes('/executive-console') && (
+                  {!isExecutive && loginError.includes('/executive-console') && (
                     <a
                       href="/executive-console"
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs self-start transition-all shadow"
@@ -1817,19 +1921,23 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                 </div>
               )}
               <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Username / Admission Number / Phone</label>
+                <label className="block font-bold text-slate-300 uppercase mb-1">
+                  {isExecutive ? 'SuperAdmin Username / Executive ID' : 'Username / Admission Number / Phone'}
+                </label>
                 <input
                   type="text"
                   required
                   value={loginUsername}
                   onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder="e.g. admin, ESE2009012, or 08037098816"
+                  placeholder={isExecutive ? 'superadmin' : 'e.g. admin, ESE2009012, or 08037098816'}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">Password / Secure Access PIN</label>
+                <label className="block font-bold text-slate-300 uppercase mb-1">
+                  {isExecutive ? 'Master Security Passkey' : 'Password / Secure Access PIN'}
+                </label>
                 <input
                   type="password"
                   required
@@ -1845,32 +1953,51 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                 disabled={loginLoading}
                 className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
               >
-                {loginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-                <span>Authenticate & Launch Portal</span>
+                {loginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : isExecutive ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                <span>{isExecutive ? 'Authenticate Executive Console' : 'Authenticate & Launch Portal'}</span>
               </button>
             </form>
 
             {/* Institutional Portal Guidance & Protection Notice */}
-            <div className="w-full p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-400 space-y-2.5">
-              <div className="flex items-center gap-2 text-amber-400 font-black text-xs uppercase tracking-wider">
-                <ShieldCheck className="w-4 h-4 shrink-0" />
-                <span>Verified Portal Authentication</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px] leading-relaxed">
-                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <strong className="text-white block mb-0.5">🏛️ Administrative & Faculty:</strong>
-                  <span>Sign in with your assigned staff username or staff ID number and your secure access password.</span>
+            {isExecutive ? (
+              <div className="w-full p-4 rounded-2xl bg-slate-950 border border-amber-900/40 text-xs text-slate-400 space-y-2.5">
+                <div className="flex items-center gap-2 text-amber-400 font-black text-xs uppercase tracking-wider">
+                  <Shield className="w-4 h-4 shrink-0" />
+                  <span>Executive Governance Security Protocol</span>
                 </div>
-                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
-                  <strong className="text-white block mb-0.5">🎒 Enrolled Students:</strong>
-                  <span>Sign in using your school Admission Number (e.g. <span className="font-mono text-amber-300">ESE2009012</span>) and access PIN.</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 sm:col-span-2">
-                  <strong className="text-white block mb-0.5">👪 Parents & Guardians:</strong>
-                  <span>Sign in using your registered telephone number or child's admission number. Parent credentials are provisioned automatically upon student enrollment. For first-time onboarding or PIN resets, please contact the School Administrative Desk.</span>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  This console is restricted to the School Director, Proprietor, and System SuperAdministrators. All session activities and audit logs are cryptographically sealed.
+                </p>
+                <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-[11px]">
+                  <span className="text-slate-500">Public Portal User?</span>
+                  <a href="/portal/login" className="text-amber-400 hover:underline font-bold flex items-center gap-1">
+                    <span>Switch to Faculty / Student Portal</span>
+                    &rarr;
+                  </a>
                 </div>
               </div>
-            </div>
+            ) : (
+              <div className="w-full p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-slate-400 space-y-2.5">
+                <div className="flex items-center gap-2 text-amber-400 font-black text-xs uppercase tracking-wider">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span>Verified Portal Authentication</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px] leading-relaxed">
+                  <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <strong className="text-white block mb-0.5">🏛️ Administrative & Faculty:</strong>
+                    <span>Sign in with your assigned staff username or staff ID number and your secure access password.</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
+                    <strong className="text-white block mb-0.5">🎒 Enrolled Students:</strong>
+                    <span>Sign in using your school Admission Number (e.g. <span className="font-mono text-amber-300">ESE2009012</span>) and access PIN.</span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 sm:col-span-2">
+                    <strong className="text-white block mb-0.5">👪 Parents & Guardians:</strong>
+                    <span>Sign in using your registered telephone number or child's admission number. Parent credentials are provisioned automatically upon student enrollment. For first-time onboarding or PIN resets, please contact the School Administrative Desk.</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* When Logged In: Role-Based Dashboard View */
@@ -1920,6 +2047,15 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         >
                           <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                           <span className="truncate">Master Broadsheet</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('gradebook')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'gradebook' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="truncate">Live Score Entry</span>
                         </button>
                         <button
                           onClick={() => setActiveTab('classes')}
@@ -2147,6 +2283,60 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         <span>Staff Faculty</span>
                       </button>
                       <button
+                        onClick={() => setActiveTab('students')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'students' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <GraduationCap className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Students Directory</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('attendance');
+                          fetchStudentAttendance(attendanceClassId, attendanceDate);
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'attendance' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Class Roll-Call</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('broadsheet')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'broadsheet' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Academic Broadsheet</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('gradebook')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'gradebook' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Live Score Entry</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('reportcard');
+                          if (students[0]?.admission_no && !selectedStudentAdmNo) {
+                            setSelectedStudentAdmNo(students[0].admission_no);
+                            fetchReportCard(students[0].admission_no);
+                          }
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'reportcard' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Termly Report Cards</span>
+                      </button>
+                      <button
                         onClick={() => setActiveTab('visitors')}
                         className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
                           activeTab === 'visitors' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/30' : 'text-slate-400 hover:text-white'
@@ -2243,6 +2433,21 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         <Landmark className="w-3.5 h-3.5 text-emerald-400" />
                         <span>Bulk Salary Payroll</span>
                       </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('reportcard');
+                          if (students[0]?.admission_no && !selectedStudentAdmNo) {
+                            setSelectedStudentAdmNo(students[0].admission_no);
+                            fetchReportCard(students[0].admission_no);
+                          }
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'reportcard' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Clearance & Reports</span>
+                      </button>
                     </>
                   )}
 
@@ -2265,6 +2470,15 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                       >
                         <BookOpen className="w-3.5 h-3.5 text-amber-400" />
                         <span>Assignments & Tasks</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('student_profile')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'student_profile' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <GraduationCap className="w-3.5 h-3.5 text-blue-400" />
+                        <span>My Academic Profile</span>
                       </button>
                     </>
                   )}
@@ -2320,6 +2534,68 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         <CreditCard className="w-3.5 h-3.5" />
                         <span>Tuition & Fees</span>
                       </button>
+                      <button
+                        onClick={() => setActiveTab('student_profile')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'student_profile' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <GraduationCap className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Child ID & Profile</span>
+                      </button>
+                    </>
+                  )}
+
+                  {activeRole === 'frontdesk' && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setActiveTab('visitors');
+                          setFrontDeskSubTab('visitors');
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'visitors' && frontDeskSubTab === 'visitors' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Shield className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Security Passes ({visitors.length})</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('visitors');
+                          setFrontDeskSubTab('enquiries');
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'visitors' && frontDeskSubTab === 'enquiries' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Users className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Admission Enquiries ({enquiries.length})</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('visitors');
+                          setFrontDeskSubTab('calls');
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'visitors' && frontDeskSubTab === 'calls' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <PhoneCall className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Call Logs ({calls.length})</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('visitors');
+                          setFrontDeskSubTab('complaints');
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'visitors' && frontDeskSubTab === 'complaints' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Feedback & Complaints ({complaints.length})</span>
+                      </button>
                     </>
                   )}
                 </nav>
@@ -2338,8 +2614,8 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                 <ExecutiveReportingCockpit authToken={authToken} />
               )}
 
-              {/* SUPERADMIN DASHBOARD */}
-              {activeRole === 'superadmin' && activeTab === 'overview' && (
+              {/* EXECUTIVE & SUPERADMIN DASHBOARD: OVERVIEW KPIS */}
+              {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'overview' && (
                 <div className="space-y-6 animate-in fade-in">
                   <div>
                     <h3 className="text-lg font-black text-white">Executive Command Overview</h3>
@@ -3141,21 +3417,32 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                               {s.address && <div className="text-slate-500 truncate text-[10px]">{s.address}</div>}
                             </div>
 
-                            <div className="pt-2 border-t border-slate-900 flex items-center justify-between">
+                            <div className="pt-2 border-t border-slate-900 flex items-center justify-between gap-1.5">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                                 s.is_active ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-red-950 text-red-400 border border-red-800'
                               }`}>
-                                {s.is_active ? 'Active Pupil' : 'Inactive'}
+                                {s.is_active ? 'Active' : 'Inactive'}
                               </span>
-                              <button
-                                onClick={() => {
-                                  setSelectedStudentAdmNo(s.admission_no);
-                                  setActiveTab('reportcard');
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 font-bold text-[10px] border border-amber-400/30 transition-colors"
-                              >
-                                View E-Report Card &rarr;
-                              </button>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setSelectedStudentAdmNo(s.admission_no);
+                                    setActiveTab('student_profile');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[10px] border border-slate-700 transition-colors"
+                                >
+                                  ID & Profile
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedStudentAdmNo(s.admission_no);
+                                    setActiveTab('reportcard');
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 font-bold text-[10px] border border-amber-400/30 transition-colors"
+                                >
+                                  Report Card &rarr;
+                                </button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -3317,7 +3604,7 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
               )}
 
               {/* PRINCIPAL & RECEPTION: FRONT DESK & VISITOR MANAGEMENT */}
-              {activeRole === 'admin' && activeTab === 'visitors' && (
+              {(activeRole === 'admin' || activeRole === 'frontdesk' || activeRole === 'superadmin') && activeTab === 'visitors' && (
                 <div className="space-y-4 animate-in fade-in">
                   {/* Front Desk Sub-Tab Selector */}
                   <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 p-2 rounded-2xl border border-slate-800">
@@ -3408,6 +3695,28 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                     </div>
                   </div>
 
+                  {/* Front Desk Instant Search Bar */}
+                  <div className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Search visitor pass, phone, caller, admission enquiry, or complaint..."
+                        value={frontDeskSearchQuery}
+                        onChange={(e) => setFrontDeskSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-4 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                    </div>
+                    {frontDeskSearchQuery && (
+                      <button
+                        onClick={() => setFrontDeskSearchQuery('')}
+                        className="px-2.5 py-1 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-lg transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
                   {/* Sub-tab 1: Visitors Book */}
                   {frontDeskSubTab === 'visitors' && (
                     <div className="space-y-3">
@@ -3418,12 +3727,37 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         </span>
                       </div>
                       <div className="space-y-2.5">
-                        {visitors.length === 0 ? (
+                        {visitors
+                          .filter(v => {
+                            if (!frontDeskSearchQuery) return true;
+                            const q = frontDeskSearchQuery.toLowerCase();
+                            return (
+                              v.visitor_name?.toLowerCase().includes(q) ||
+                              v.phone?.toLowerCase().includes(q) ||
+                              v.pass_no?.toLowerCase().includes(q) ||
+                              v.badge_no?.toLowerCase().includes(q) ||
+                              v.person_to_see?.toLowerCase().includes(q) ||
+                              v.purpose?.toLowerCase().includes(q)
+                            );
+                          }).length === 0 ? (
                           <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-2xl border border-slate-800 text-xs">
-                            No visitor records found.
+                            No visitor records found matching your search.
                           </div>
                         ) : (
-                          visitors.map(v => (
+                          visitors
+                            .filter(v => {
+                              if (!frontDeskSearchQuery) return true;
+                              const q = frontDeskSearchQuery.toLowerCase();
+                              return (
+                                v.visitor_name?.toLowerCase().includes(q) ||
+                                v.phone?.toLowerCase().includes(q) ||
+                                v.pass_no?.toLowerCase().includes(q) ||
+                                v.badge_no?.toLowerCase().includes(q) ||
+                                v.person_to_see?.toLowerCase().includes(q) ||
+                                v.purpose?.toLowerCase().includes(q)
+                              );
+                            })
+                            .map(v => (
                             <div key={v.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center text-xs">
                               <div>
                                 <div className="flex items-center gap-2">
@@ -3462,12 +3796,37 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         </span>
                       </div>
                       <div className="space-y-2.5">
-                        {enquiries.length === 0 ? (
+                        {enquiries
+                          .filter(enq => {
+                            if (!frontDeskSearchQuery) return true;
+                            const q = frontDeskSearchQuery.toLowerCase();
+                            return (
+                              enq.name?.toLowerCase().includes(q) ||
+                              enq.phone?.toLowerCase().includes(q) ||
+                              enq.email?.toLowerCase().includes(q) ||
+                              enq.enquiry_no?.toLowerCase().includes(q) ||
+                              enq.class_interested?.toLowerCase().includes(q) ||
+                              enq.notes?.toLowerCase().includes(q)
+                            );
+                          }).length === 0 ? (
                           <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-2xl border border-slate-800 text-xs">
-                            No admission enquiries logged yet.
+                            No admission enquiries match your search.
                           </div>
                         ) : (
-                          enquiries.map(enq => (
+                          enquiries
+                            .filter(enq => {
+                              if (!frontDeskSearchQuery) return true;
+                              const q = frontDeskSearchQuery.toLowerCase();
+                              return (
+                                enq.name?.toLowerCase().includes(q) ||
+                                enq.phone?.toLowerCase().includes(q) ||
+                                enq.email?.toLowerCase().includes(q) ||
+                                enq.enquiry_no?.toLowerCase().includes(q) ||
+                                enq.class_interested?.toLowerCase().includes(q) ||
+                                enq.notes?.toLowerCase().includes(q)
+                              );
+                            })
+                            .map(enq => (
                             <div key={enq.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-wrap justify-between items-center gap-3 text-xs">
                               <div>
                                 <div className="flex items-center gap-2">
@@ -3514,12 +3873,33 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         </span>
                       </div>
                       <div className="space-y-2.5">
-                        {calls.length === 0 ? (
+                        {calls
+                          .filter(cl => {
+                            if (!frontDeskSearchQuery) return true;
+                            const q = frontDeskSearchQuery.toLowerCase();
+                            return (
+                              cl.caller_name?.toLowerCase().includes(q) ||
+                              cl.phone?.toLowerCase().includes(q) ||
+                              cl.purpose?.toLowerCase().includes(q) ||
+                              cl.message?.toLowerCase().includes(q)
+                            );
+                          }).length === 0 ? (
                           <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-2xl border border-slate-800 text-xs">
-                            No telephone logs found.
+                            No telephone logs match your search.
                           </div>
                         ) : (
-                          calls.map(cl => (
+                          calls
+                            .filter(cl => {
+                              if (!frontDeskSearchQuery) return true;
+                              const q = frontDeskSearchQuery.toLowerCase();
+                              return (
+                                cl.caller_name?.toLowerCase().includes(q) ||
+                                cl.phone?.toLowerCase().includes(q) ||
+                                cl.purpose?.toLowerCase().includes(q) ||
+                                cl.message?.toLowerCase().includes(q)
+                              );
+                            })
+                            .map(cl => (
                             <div key={cl.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex justify-between items-center text-xs">
                               <div>
                                 <div className="flex items-center gap-2">
@@ -3555,12 +3935,37 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         </span>
                       </div>
                       <div className="space-y-2.5">
-                        {complaints.length === 0 ? (
+                        {complaints
+                          .filter(cp => {
+                            if (!frontDeskSearchQuery) return true;
+                            const q = frontDeskSearchQuery.toLowerCase();
+                            return (
+                              cp.complainant_name?.toLowerCase().includes(q) ||
+                              cp.complainant_phone?.toLowerCase().includes(q) ||
+                              cp.complaint_no?.toLowerCase().includes(q) ||
+                              cp.complaint_type?.toLowerCase().includes(q) ||
+                              cp.description?.toLowerCase().includes(q) ||
+                              cp.assigned_to?.toLowerCase().includes(q)
+                            );
+                          }).length === 0 ? (
                           <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-2xl border border-slate-800 text-xs">
-                            No complaints or grievances logged.
+                            No complaints match your search query.
                           </div>
                         ) : (
-                          complaints.map(cp => (
+                          complaints
+                            .filter(cp => {
+                              if (!frontDeskSearchQuery) return true;
+                              const q = frontDeskSearchQuery.toLowerCase();
+                              return (
+                                cp.complainant_name?.toLowerCase().includes(q) ||
+                                cp.complainant_phone?.toLowerCase().includes(q) ||
+                                cp.complaint_no?.toLowerCase().includes(q) ||
+                                cp.complaint_type?.toLowerCase().includes(q) ||
+                                cp.description?.toLowerCase().includes(q) ||
+                                cp.assigned_to?.toLowerCase().includes(q)
+                              );
+                            })
+                            .map(cp => (
                             <div key={cp.id} className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-wrap justify-between items-center gap-3 text-xs">
                               <div className="max-w-2xl">
                                 <div className="flex items-center gap-2">
@@ -4133,8 +4538,8 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                 </div>
               )}
 
-              {/* TEACHER DASHBOARD: LIVE PRODUCTION GRADEBOOK */}
-              {activeRole === 'teacher' && activeTab === 'gradebook' && (
+              {/* LIVE PRODUCTION GRADEBOOK (TEACHER & ADMIN) */}
+              {(activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'gradebook' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -4610,8 +5015,13 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                         onChange={(e) => fetchStudentAiProgress(e.target.value)}
                         className="bg-slate-950 border border-slate-800 text-slate-200 font-bold px-3 py-1.5 rounded-xl text-xs"
                       >
-                        {students.slice(0, 30).map(s => (
-                          <option key={s.id} value={s.id}>{s.first_name} {s.last_name} ({s.admission_no})</option>
+                        {(activeRole === 'parent' && currentUser?.children && currentUser.children.length > 0
+                          ? currentUser.children
+                          : students
+                        ).map(s => (
+                          <option key={s.id || s.admission_no} value={s.id}>
+                            {s.first_name} {s.last_name} ({s.admission_no} - {s.class_name || 'Enrolled'})
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -4703,121 +5113,238 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
               )}
 
               {/* BURSAR, PARENT, SUPERADMIN & PRINCIPAL: FINANCIAL INVOICES & CLEARANCE */}
-              {(activeRole === 'bursar' || activeRole === 'parent' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'invoices' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex flex-wrap justify-between items-center gap-3">
-                    <div>
-                      <h3 className="text-lg font-black text-white">Tuition & Development Fee Statements</h3>
-                      <p className="text-xs text-slate-400">
-                        {activeRole === 'parent' ? 'Official billing ledger and verified clearance receipts for your wards' : 'Live bursary billing ledger and payment intake (Executive SuperAdmin & Bursary Oversight)'}
-                      </p>
-                    </div>
+              {/* BURSAR, PARENT, SUPERADMIN & PRINCIPAL: FINANCIAL INVOICES & CLEARANCE */}
+              {(activeRole === 'bursar' || activeRole === 'parent' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'invoices' && (() => {
+                const displayedInvoices = invoices.filter(inv => {
+                  if (activeRole === 'parent' && currentUser?.children && currentUser.children.length > 0) {
+                    const childAdmNos = currentUser.children.map(c => c.admission_no);
+                    const matchesChild = childAdmNos.includes(inv.admission_no);
+                    const matchesPhone = currentUser.phone && inv.guardian_phone === currentUser.phone;
+                    if (!matchesChild && !matchesPhone) return false;
+                  }
+                  if (invoiceFilter !== 'All' && inv.status !== invoiceFilter) return false;
+                  if (invoiceDivisionFilter !== 'All' && inv.division !== invoiceDivisionFilter) return false;
+                  if (invoiceSearchQuery) {
+                    const q = invoiceSearchQuery.toLowerCase();
+                    const nameMatch = `${inv.first_name || ''} ${inv.last_name || ''}`.toLowerCase().includes(q);
+                    const admMatch = (inv.admission_no || '').toLowerCase().includes(q);
+                    const invMatch = (inv.invoice_no || '').toLowerCase().includes(q);
+                    const parentMatch = (inv.guardian_name || '').toLowerCase().includes(q) || (inv.guardian_phone || '').includes(q);
+                    const classMatch = (inv.class_name || '').toLowerCase().includes(q);
+                    if (!nameMatch && !admMatch && !invMatch && !parentMatch && !classMatch) return false;
+                  }
+                  return true;
+                });
 
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-400 font-bold">Filter:</span>
-                      {['All', 'Unpaid', 'Partial', 'Paid'].map(st => (
-                        <button
-                          key={st}
-                          onClick={() => setInvoiceFilter(st)}
-                          className={`px-3 py-1 rounded-lg font-bold transition-colors ${
-                            invoiceFilter === st ? 'bg-amber-400 text-slate-950 font-black' : 'bg-slate-950 text-slate-400 hover:text-white'
-                          }`}
-                        >
-                          {st}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                const totalInvoiced = invoices.reduce((sum, i) => sum + (Number(i.amount_due) || 0), 0);
+                const totalCollected = invoices.reduce((sum, i) => sum + (Number(i.amount_paid) || 0), 0);
+                const totalDebt = Math.max(0, totalInvoiced - totalCollected);
+                const recoveryRate = totalInvoiced > 0 ? Math.round((totalCollected / totalInvoiced) * 100) : 0;
 
-                  {/* Active Printed Receipt Banner */}
-                  {activeReceipt && (
-                    <div className="p-4 rounded-2xl bg-emerald-950 border border-emerald-700 text-emerald-300 text-xs flex justify-between items-center animate-in fade-in">
+                return (
+                  <div className="space-y-4 animate-in fade-in">
+                    {/* Header */}
+                    <div className="flex flex-wrap justify-between items-center gap-3">
                       <div>
-                        <strong>Payment Verified!</strong> Receipt #{activeReceipt.receiptNo} issued for {activeReceipt.studentName} ({activeReceipt.className}) of ₦{activeReceipt.amount.toLocaleString()} via {activeReceipt.method}.
+                        <h3 className="text-lg font-black text-white flex items-center gap-2">
+                          <CreditCard className="w-5 h-5 text-amber-400" />
+                          <span>Tuition & Development Fee Statements</span>
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          {activeRole === 'parent'
+                            ? 'Official billing ledger and verified clearance receipts for your wards'
+                            : 'Live bursary billing ledger, reconciliation, and payment intake (Executive & Bursary Oversight)'}
+                        </p>
                       </div>
-                      <button
-                        onClick={() => window.print()}
-                        className="px-3 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white font-bold flex items-center gap-1"
-                      >
-                        <Printer className="w-3.5 h-3.5" />
-                        <span>Print Receipt</span>
-                      </button>
+
+                      {/* Status Badges */}
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-slate-400 font-bold mr-1">Status:</span>
+                        {['All', 'Unpaid', 'Partial', 'Paid'].map(st => (
+                          <button
+                            key={st}
+                            onClick={() => setInvoiceFilter(st)}
+                            className={`px-3 py-1 rounded-xl font-bold transition-colors ${
+                              invoiceFilter === st
+                                ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                                : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                            }`}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
 
-                  <div className="space-y-3">
-                    {invoices
-                      .filter(inv => {
-                        if (activeRole === 'parent' && currentUser?.children && currentUser.children.length > 0) {
-                          const childAdmNos = currentUser.children.map(c => c.admission_no);
-                          const matchesChild = childAdmNos.includes(inv.admission_no);
-                          const matchesPhone = currentUser.phone && inv.guardian_phone === currentUser.phone;
-                          if (!matchesChild && !matchesPhone) return false;
-                        }
-                        return invoiceFilter === 'All' || inv.status === invoiceFilter;
-                      })
-                      .slice(0, 20)
-                      .map(inv => (
-                        <div key={inv.id} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-amber-400 font-bold">{inv.invoice_no}</span>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                inv.status === 'Paid' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-                                inv.status === 'Partial' ? 'bg-blue-950 text-blue-400 border border-blue-800' :
-                                'bg-red-950 text-red-400 border border-red-800'
-                              }`}>{inv.status}</span>
-                            </div>
-                            <div className="text-sm font-extrabold text-white">
-                              {inv.first_name} {inv.last_name} &bull; <span className="font-mono text-slate-400">{inv.admission_no}</span>
-                            </div>
-                            <div className="text-slate-400">
-                              Class: <strong className="text-white">{inv.class_name}</strong> &bull; Parent: <strong className="text-slate-200">{inv.guardian_name} ({inv.guardian_phone})</strong>
-                            </div>
-                            <div className="text-slate-400">
-                              Due: <strong className="text-white">₦{inv.amount_due.toLocaleString()}</strong> &bull; Paid: <strong className="text-emerald-400">₦{inv.amount_paid.toLocaleString()}</strong> &bull; Outstanding: <strong className="text-red-400">₦{(inv.amount_due - inv.amount_paid).toLocaleString()}</strong>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            {inv.status !== 'Paid' && (
-                              <button
-                                onClick={() => {
-                                  setSelectedInvoice(inv);
-                                  setPaymentAmount(String(inv.amount_due - inv.amount_paid));
-                                  setPaymentModalOpen(true);
-                                }}
-                                className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow"
-                              >
-                                Record Payment
-                              </button>
-                            )}
-                            {inv.status === 'Paid' && (
-                              <button
-                                onClick={() => {
-                                  setActiveReceipt({
-                                    receiptNo: `RCT-${inv.invoice_no}`,
-                                    invoiceNo: inv.invoice_no,
-                                    studentName: `${inv.first_name} ${inv.last_name}`,
-                                    admissionNo: inv.admission_no,
-                                    className: inv.class_name,
-                                    amount: inv.amount_paid,
-                                    method: 'Bank Transfer (Verified Clearance)',
-                                    date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                                  });
-                                }}
-                                className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5"
-                              >
-                                <Printer className="w-3.5 h-3.5" />
-                                <span>Verified Clearance</span>
-                              </button>
-                            )}
+                    {/* Financial Telemetry Banner for Bursar & Leadership */}
+                    {activeRole !== 'parent' && (
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                        <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Gross Invoiced Fees</span>
+                          <div className="text-xl font-black text-white mt-1">₦{totalInvoiced.toLocaleString()}</div>
+                          <span className="text-[10px] text-slate-500 mt-0.5 block">{invoices.length} Registered Ledgers</span>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                          <span className="text-[10px] text-emerald-400 uppercase font-bold block">Total Remitted & Paid</span>
+                          <div className="text-xl font-black text-emerald-400 mt-1">₦{totalCollected.toLocaleString()}</div>
+                          <span className="text-[10px] text-emerald-500/80 mt-0.5 block">Verified Bank & Paystack Inflow</span>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                          <span className="text-[10px] text-rose-400 uppercase font-bold block">Unpaid Outstanding Debt</span>
+                          <div className="text-xl font-black text-rose-400 mt-1">₦{totalDebt.toLocaleString()}</div>
+                          <span className="text-[10px] text-rose-500/80 mt-0.5 block">Pending Bursary Recovery</span>
+                        </div>
+                        <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                          <span className="text-[10px] text-amber-400 uppercase font-bold block">Collection Clearance Rate</span>
+                          <div className="text-xl font-black text-amber-400 mt-1">{recoveryRate}%</div>
+                          <div className="w-full bg-slate-800 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                            <div className="bg-amber-400 h-full rounded-full transition-all" style={{ width: `${recoveryRate}%` }}></div>
                           </div>
                         </div>
-                      ))}
+                      </div>
+                    )}
+
+                    {/* Search & Division Filter Controls */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
+                      <div className="relative flex-1 max-w-md">
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input
+                          type="text"
+                          placeholder="Search pupil name, admission no, invoice #, or phone..."
+                          value={invoiceSearchQuery}
+                          onChange={(e) => setInvoiceSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-4 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {activeRole !== 'parent' && (
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <Filter className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="text-slate-400 font-bold">Division:</span>
+                            <select
+                              value={invoiceDivisionFilter}
+                              onChange={(e) => setInvoiceDivisionFilter(e.target.value)}
+                              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs font-bold px-2.5 py-1.5 rounded-xl"
+                            >
+                              <option value="All">All Divisions</option>
+                              <option value="Nursery">Nursery</option>
+                              <option value="Primary">Primary</option>
+                              <option value="Junior College">Junior College</option>
+                              <option value="Senior College">Senior College</option>
+                            </select>
+                          </div>
+                        )}
+
+                        <span className="text-slate-400 text-xs font-bold px-2 py-1 bg-slate-900 rounded-lg border border-slate-800">
+                          {displayedInvoices.length} of {invoices.length} statements
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Active Printed Receipt Banner */}
+                    {activeReceipt && (
+                      <div className="p-4 rounded-2xl bg-emerald-950 border border-emerald-700 text-emerald-300 text-xs flex justify-between items-center animate-in fade-in">
+                        <div>
+                          <strong>Payment Verified!</strong> Receipt #{activeReceipt.receiptNo} issued for {activeReceipt.studentName} ({activeReceipt.className}) of ₦{activeReceipt.amount.toLocaleString()} via {activeReceipt.method}.
+                        </div>
+                        <button
+                          onClick={() => window.print()}
+                          className="px-3 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-white font-bold flex items-center gap-1"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print Receipt</span>
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Invoices List */}
+                    <div className="space-y-3">
+                      {displayedInvoices.length === 0 ? (
+                        <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-2xl border border-slate-800 text-xs">
+                          No tuition fee invoices found matching the current search and filters.
+                        </div>
+                      ) : (
+                        displayedInvoices.map(inv => (
+                          <div key={inv.id} className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:border-slate-700 transition-colors">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-amber-400 font-bold">{inv.invoice_no}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                  inv.status === 'Paid' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                                  inv.status === 'Partial' ? 'bg-blue-950 text-blue-400 border border-blue-800' :
+                                  'bg-red-950 text-red-400 border border-red-800'
+                                }`}>{inv.status}</span>
+                                {inv.division && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 font-medium">
+                                    {inv.division}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm font-extrabold text-white">
+                                {inv.first_name} {inv.last_name} &bull; <span className="font-mono text-slate-400">{inv.admission_no}</span>
+                              </div>
+                              <div className="text-slate-400">
+                                Class: <strong className="text-white">{inv.class_name}</strong> &bull; Parent: <strong className="text-slate-200">{inv.guardian_name} ({inv.guardian_phone})</strong>
+                              </div>
+                              <div className="text-slate-400">
+                                Due: <strong className="text-white">₦{inv.amount_due.toLocaleString()}</strong> &bull; Paid: <strong className="text-emerald-400">₦{inv.amount_paid.toLocaleString()}</strong> &bull; Outstanding: <strong className="text-red-400">₦{(inv.amount_due - inv.amount_paid).toLocaleString()}</strong>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {inv.status !== 'Paid' && activeRole === 'parent' && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedInvoiceForParent(inv);
+                                    setParentBankModalOpen(true);
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-md flex items-center gap-1.5 transition-transform active:scale-95"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                  <span>{inv.status === 'Partial' ? 'Pay Remaining Balance' : 'Pay Tuition / Bank Transfer'}</span>
+                                </button>
+                              )}
+                              {inv.status !== 'Paid' && activeRole !== 'parent' && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedInvoice(inv);
+                                    setPaymentAmount(String(inv.amount_due - inv.amount_paid));
+                                    setPaymentModalOpen(true);
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow"
+                                >
+                                  Record Payment
+                                </button>
+                              )}
+                              {inv.status === 'Paid' && (
+                                <button
+                                  onClick={() => {
+                                    setActiveReceipt({
+                                      receiptNo: `RCT-${inv.invoice_no}`,
+                                      invoiceNo: inv.invoice_no,
+                                      studentName: `${inv.first_name} ${inv.last_name}`,
+                                      admissionNo: inv.admission_no,
+                                      className: inv.class_name,
+                                      amount: inv.amount_paid,
+                                      method: 'Bank Transfer (Verified Clearance)',
+                                      date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                                    });
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 border border-emerald-700/50 font-bold text-xs flex items-center gap-1.5"
+                                >
+                                  <Printer className="w-3.5 h-3.5" />
+                                  <span>Official Clearance Receipt</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* BROADSHEET & MASTER REPORT SHEETS MODULE */}
               {activeTab === 'broadsheet' && (
@@ -4833,8 +5360,8 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                 </div>
               )}
 
-              {/* STUDENT & PARENT DASHBOARD: OFFICIAL PRODUCTION REPORT CARD */}
-              {(activeRole === 'student' || activeRole === 'parent') && activeTab === 'reportcard' && (
+              {/* ACADEMIC EVALUATION: OFFICIAL PRODUCTION REPORT CARD (STUDENT, PARENT, ADMIN, SUPERADMIN, BURSAR) */}
+              {(activeRole === 'student' || activeRole === 'parent' || activeRole === 'admin' || activeRole === 'superadmin' || activeRole === 'bursar') && activeTab === 'reportcard' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
                     <div>
@@ -5018,6 +5545,270 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                 </div>
               )}
 
+              {/* STUDENT & GUARDIAN: OFFICIAL ACADEMIC DOSSIER & STUDENT IDENTITY SLIP */}
+              {(activeRole === 'student' || activeRole === 'parent' || activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'student_profile' && (() => {
+                const effectiveAdmNo = activeRole === 'student'
+                  ? (currentUser?.reference_id || selectedStudentAdmNo)
+                  : (selectedStudentAdmNo || (currentUser?.children && currentUser.children[0]?.admission_no) || currentUser?.reference_id);
+                const targetStudent = students.find(s => s.admission_no === effectiveAdmNo)
+                  || currentUser?.studentDetails
+                  || (currentUser?.children && currentUser.children[0])
+                  || students[0]
+                  || { first_name: 'David', last_name: 'Okeke', admission_no: 'ESE2009012', class_name: 'Junior College (JSS 1)', division: 'Junior College', gender: 'Male', guardian_name: 'Mr. & Mrs. Okeke', guardian_phone: '08033591058' };
+
+                const enrolledSubjects = subjects.filter(sub => {
+                  if (targetStudent.division && sub.division) {
+                    return sub.division === targetStudent.division || sub.division === 'All';
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-6 animate-in fade-in">
+                    {/* Header Controls */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+                            🎓
+                          </span>
+                          <h3 className="text-lg font-black text-white">Official Student Academic Profile & Identity Slip</h3>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Authentic institution profile, verified curriculum enrollment, and printable student identity clearance.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {activeRole !== 'student' && (
+                          <select
+                            value={targetStudent.admission_no}
+                            onChange={(e) => {
+                              setSelectedStudentAdmNo(e.target.value);
+                              fetchReportCard(e.target.value);
+                            }}
+                            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-xl"
+                          >
+                            {(activeRole === 'parent' && currentUser?.children ? currentUser.children : students).map(s => (
+                              <option key={s.id || s.admission_no} value={s.admission_no}>
+                                {s.first_name} {s.last_name} ({s.admission_no})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        <button
+                          onClick={() => window.print()}
+                          className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow flex items-center gap-1.5 transition-all"
+                        >
+                          <Printer className="w-3.5 h-3.5" />
+                          <span>Print Official Student ID Slip</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Official Identity Slip Card */}
+                    <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+
+                      <div className="flex flex-col md:flex-row items-center md:items-start gap-6 relative z-10 border-b border-slate-800/80 pb-6">
+                        {/* Avatar / Passport Placeholder */}
+                        <div className="relative group shrink-0">
+                          <div className="w-28 h-28 rounded-2xl bg-slate-800 border-2 border-amber-400/50 flex flex-col items-center justify-center text-amber-400 overflow-hidden shadow-lg">
+                            <span className="text-4xl">🎓</span>
+                            <span className="text-[9px] font-bold text-slate-400 uppercase mt-1">Official ID</span>
+                          </div>
+                          <span className="absolute -bottom-2 -right-2 px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-500 text-slate-950 uppercase shadow">
+                            Active
+                          </span>
+                        </div>
+
+                        {/* Student Bio */}
+                        <div className="space-y-2 text-center md:text-left flex-1">
+                          <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-amber-400/10 border border-amber-400/30 text-amber-400">
+                              {targetStudent.admission_no}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/10 border border-blue-500/30 text-blue-400">
+                              {targetStudent.division || 'Junior College'}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/10 border border-purple-500/30 text-purple-400">
+                              {targetStudent.gender || 'Scholar'}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center gap-1">
+                              <HeartPulse className="w-3 h-3 text-rose-400" />
+                              <span>{targetStudent.blood_group || 'O+'} ({targetStudent.genotype || 'AA'})</span>
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                              {targetStudent.boarding_status || 'Day Student'}
+                            </span>
+                          </div>
+
+                          <h2 className="text-2xl font-black text-white">
+                            {targetStudent.first_name} {targetStudent.middle_name ? `${targetStudent.middle_name} ` : ''}{targetStudent.last_name}
+                          </h2>
+
+                          <p className="text-xs text-slate-300">
+                            Class: <strong className="text-amber-300">{targetStudent.class_name || 'Assigned Form'}</strong> &bull; Campus: <span className="text-white font-medium">Awka Main Campus</span> &bull; Academic Session: <span className="font-mono text-amber-300">{targetStudent.enrolled_session || '2024/2025'}</span>
+                          </p>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
+                            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-400">
+                              <span className="text-[10px] uppercase font-bold text-slate-500 block">Registered Guardian</span>
+                              <strong className="text-slate-200">
+                                {targetStudent.guardian_title ? `${targetStudent.guardian_title} ` : ''}{targetStudent.guardian_name || 'Guardian on File'}
+                                {targetStudent.guardian_relationship ? ` (${targetStudent.guardian_relationship})` : ''}
+                              </strong>
+                              <div className="font-mono text-[11px] text-amber-400">{targetStudent.guardian_phone || 'Emergency Contact'}</div>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-slate-400">
+                              <span className="text-[10px] uppercase font-bold text-slate-500 block">Residential Address</span>
+                              <span className="text-slate-300">{targetStudent.address || 'Awka, Anambra State'}</span>
+                              <div className="text-[10px] text-emerald-400 mt-0.5 font-bold">Verified Registration</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Institutional Dossier Matrix: Health, Origin, Family, Logistics */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-6 text-xs border-b border-slate-800/80 pb-6">
+                        {/* 1. Health & Medical Safety */}
+                        <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-rose-400 font-bold text-[11px]">
+                            <HeartPulse className="w-3.5 h-3.5" />
+                            <span>Medical & Health</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Blood / Genotype</span>
+                            <span className="font-bold text-white font-mono">{targetStudent.blood_group || 'O+'} &bull; {targetStudent.genotype || 'AA'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Allergies</span>
+                            <span className="text-slate-300 text-[11px]">{targetStudent.allergies || 'None declared'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Emergency Contact</span>
+                            <span className="text-amber-400 font-mono text-[11px] block">{targetStudent.emergency_contact_phone || targetStudent.guardian_phone || '—'}</span>
+                            <span className="text-slate-400 text-[10px]">{targetStudent.emergency_contact_name || targetStudent.guardian_name || 'Guardian'} ({targetStudent.emergency_contact_relationship || 'Parent'})</span>
+                          </div>
+                        </div>
+
+                        {/* 2. Origin & Identity */}
+                        <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-blue-400 font-bold text-[11px]">
+                            <MapPin className="w-3.5 h-3.5" />
+                            <span>Origin & Demographics</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">State / LGA of Origin</span>
+                            <span className="font-bold text-white text-[11px]">{targetStudent.state_of_origin || 'Anambra State'}{targetStudent.lga_of_origin ? ` (${targetStudent.lga_of_origin})` : ''}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Nationality / Religion</span>
+                            <span className="text-slate-300 text-[11px]">{targetStudent.nationality || 'Nigerian'} &bull; {targetStudent.religion || 'Christianity'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Mother Tongue & DOB</span>
+                            <span className="text-slate-300 text-[11px]">{targetStudent.mother_tongue || 'Igbo'} &bull; {targetStudent.dob || '—'}</span>
+                          </div>
+                        </div>
+
+                        {/* 3. Family Record */}
+                        <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-purple-400 font-bold text-[11px]">
+                            <Users className="w-3.5 h-3.5" />
+                            <span>Family & Parents</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Primary Guardian</span>
+                            <span className="font-bold text-white text-[11px]">{targetStudent.guardian_name || 'On File'}</span>
+                            <span className="text-slate-400 text-[10px] block">{targetStudent.guardian_occupation || 'Business / Civil'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Maternal Record</span>
+                            <span className="text-slate-300 text-[11px] block">{targetStudent.mother_name || 'Not on file'}</span>
+                            {targetStudent.mother_phone && <span className="font-mono text-[10px] text-slate-400">{targetStudent.mother_phone}</span>}
+                          </div>
+                        </div>
+
+                        {/* 4. Logistics & Pedigree */}
+                        <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-amber-400 font-bold text-[11px]">
+                            <Bus className="w-3.5 h-3.5" />
+                            <span>Logistics & Placement</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Boarding / Commute</span>
+                            <span className="font-bold text-white text-[11px]">{targetStudent.boarding_status || 'Day Student'} &bull; {targetStudent.transport_mode || 'Private Dropoff'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">School Bus Route</span>
+                            <span className="text-slate-300 text-[11px] line-clamp-1">{targetStudent.bus_route || 'None Assigned'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Entry Mode & School</span>
+                            <span className="text-slate-400 text-[10px] block">{targetStudent.entry_mode || 'Fresh Admission'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3 Standing Telemetry Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-6 text-xs">
+                        <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Instructional Attendance</span>
+                          <div className="text-2xl font-black text-emerald-400 mt-1">96.8%</div>
+                          <span className="text-[10px] text-emerald-500 mt-0.5 block">Exemplary Punctuality</span>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Enrolled Curriculum</span>
+                          <div className="text-2xl font-black text-amber-400 mt-1">{enrolledSubjects.length || 10} Subjects</div>
+                          <span className="text-[10px] text-slate-500 mt-0.5 block">WAEC / NECO Scheme</span>
+                        </div>
+
+                        <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase block">Tuition Status</span>
+                          <div className="text-2xl font-black text-blue-400 mt-1">Good Standing</div>
+                          <span className="text-[10px] text-blue-300 mt-0.5 block">Verified Bursary Clearance</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Enrolled Subjects Roster */}
+                    <div className="bg-slate-950 p-5 rounded-3xl border border-slate-800 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-amber-400" />
+                          <span>Registered Curriculum Subjects ({enrolledSubjects.length || 10})</span>
+                        </h4>
+                        <span className="text-xs text-slate-400">Class Form Subjects</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                        {(enrolledSubjects.length > 0 ? enrolledSubjects : [
+                          { id: 1, name: 'Mathematics', code: 'MTH', category: 'General' },
+                          { id: 2, name: 'English Language', code: 'ENG', category: 'General' },
+                          { id: 3, name: 'Basic Science', code: 'BSC', category: 'Science' },
+                          { id: 4, name: 'Social Studies', code: 'SOS', category: 'Humanities' },
+                          { id: 5, name: 'Civic Education', code: 'CVE', category: 'Humanities' },
+                          { id: 6, name: 'Agricultural Science', code: 'AGR', category: 'Vocational' }
+                        ]).map(sub => (
+                          <div key={sub.id} className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 flex justify-between items-center">
+                            <div>
+                              <strong className="text-white block font-bold">{sub.name}</strong>
+                              <span className="font-mono text-[10px] text-amber-400">{sub.code || 'SUB'}</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                              {sub.category || 'Core'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* PARENT DASHBOARD: CHILD OVERVIEW */}
               {activeRole === 'parent' && activeTab === 'child_overview' && (
                 <div className="space-y-6 animate-in fade-in">
@@ -5176,7 +5967,7 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                       <div className="text-xl sm:text-2xl font-black text-white">
                         ₦{(payrollOverview?.summary?.total_monthly_gross || 0).toLocaleString()}
                       </div>
-                      <div className="text-[10px] text-slate-500 mt-1">Across 32 active teachers & staff</div>
+                      <div className="text-[10px] text-slate-500 mt-1">Across {payrollOverview?.summary?.configured_salaries ?? (staff.length || 0)} active faculty & staff</div>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
@@ -5389,6 +6180,172 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Parent Tuition Settlement & Bank Remittance */}
+        {parentBankModalOpen && selectedInvoiceForParent && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in">
+            <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+                    🏛️
+                  </span>
+                  <div>
+                    <h4 className="text-base font-black text-white">Tuition Fee Settlement & Clearance</h4>
+                    <p className="text-[11px] text-slate-400">Official Eagle Power Integrated Schools Remittance</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setParentBankModalOpen(false)}
+                  className="p-1 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Student & Invoice Telemetry */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-white text-sm">
+                    {selectedInvoiceForParent.first_name} {selectedInvoiceForParent.last_name}
+                  </span>
+                  <span className="font-mono text-amber-400 font-extrabold bg-amber-400/10 px-2.5 py-0.5 rounded-full border border-amber-400/20">
+                    {selectedInvoiceForParent.admission_no}
+                  </span>
+                </div>
+                <div className="text-slate-400 text-[11px]">
+                  Class: <strong className="text-slate-200">{selectedInvoiceForParent.class_name}</strong> &bull; Invoice Ref: <strong className="text-slate-200 font-mono">{selectedInvoiceForParent.invoice_no}</strong>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-900 text-center">
+                  <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block font-semibold">Total Billed</span>
+                    <strong className="text-white text-xs font-black">₦{selectedInvoiceForParent.amount_due.toLocaleString()}</strong>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="text-[10px] text-slate-400 block font-semibold">Paid to Date</span>
+                    <strong className="text-emerald-400 text-xs font-black">₦{selectedInvoiceForParent.amount_paid.toLocaleString()}</strong>
+                  </div>
+                  <div className="p-2 rounded-xl bg-amber-400/10 border border-amber-400/30">
+                    <span className="text-[10px] text-amber-400 block font-semibold">To Settle</span>
+                    <strong className="text-amber-300 text-xs font-black">₦{(selectedInvoiceForParent.amount_due - selectedInvoiceForParent.amount_paid).toLocaleString()}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Official Bank Accounts */}
+              <div className="space-y-2 text-xs">
+                <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider block">
+                  Official School Bank Accounts (Select Either):
+                </span>
+
+                {/* Account 1: Moniepoint */}
+                <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5 hover:border-amber-400/40 transition-colors">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                        MONIEPOINT MFB
+                      </span>
+                      <span className="text-white font-extrabold text-sm font-mono tracking-wider">8219442018</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard?.writeText('8219442018');
+                        setCopiedBankText('8219442018');
+                        setTimeout(() => setCopiedBankText(null), 2500);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center gap-1 border border-slate-700"
+                    >
+                      {copiedBankText === '8219442018' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                      <span>{copiedBankText === '8219442018' ? 'Copied!' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Account Name: <strong className="text-slate-200">Eagle Power Integrated Schools Awka</strong>
+                  </div>
+                </div>
+
+                {/* Account 2: Zenith Bank */}
+                <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5 hover:border-amber-400/40 transition-colors">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-red-500/20 text-red-400 border border-red-500/30">
+                        ZENITH BANK
+                      </span>
+                      <span className="text-white font-extrabold text-sm font-mono tracking-wider">1014882910</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard?.writeText('1014882910');
+                        setCopiedBankText('1014882910');
+                        setTimeout(() => setCopiedBankText(null), 2500);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center gap-1 border border-slate-700"
+                    >
+                      {copiedBankText === '1014882910' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-slate-400" />}
+                      <span>{copiedBankText === '1014882910' ? 'Copied!' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Account Name: <strong className="text-slate-200">Eagle Power Integrated Schools Ltd</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transfer Narration Guide */}
+              <div className="p-3 rounded-2xl bg-amber-400/10 border border-amber-400/20 space-y-1.5 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-amber-400 text-[11px] uppercase tracking-wider">
+                    Required Transfer Narration / Remark:
+                  </span>
+                  <button
+                    onClick={() => {
+                      const narration = `${selectedInvoiceForParent.invoice_no} / ${selectedInvoiceForParent.admission_no}`;
+                      navigator.clipboard?.writeText(narration);
+                      setCopiedBankText('narration');
+                      setTimeout(() => setCopiedBankText(null), 2500);
+                    }}
+                    className="px-2 py-0.5 rounded-lg bg-slate-900 text-amber-300 text-[10px] font-bold flex items-center gap-1 border border-amber-400/30"
+                  >
+                    {copiedBankText === 'narration' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3 text-amber-400" />}
+                    <span>{copiedBankText === 'narration' ? 'Copied' : 'Copy Ref'}</span>
+                  </button>
+                </div>
+                <div className="font-mono text-white font-extrabold text-xs bg-slate-950 p-2 rounded-xl border border-slate-800">
+                  {selectedInvoiceForParent.invoice_no} / {selectedInvoiceForParent.admission_no}
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Please paste this narration in your bank app so our automated Bursary engine clears your receipt immediately.
+                </p>
+              </div>
+
+              {/* WhatsApp Receipt Submission Action */}
+              <div className="space-y-2 pt-2">
+                <a
+                  href={`https://wa.me/2348033591058?text=${encodeURIComponent(
+                    `Hello Eagle Power Bursary, I have made a tuition payment for my child:\n\n*Student:* ${selectedInvoiceForParent.first_name} ${selectedInvoiceForParent.last_name}\n*Admission No:* ${selectedInvoiceForParent.admission_no}\n*Class:* ${selectedInvoiceForParent.class_name}\n*Invoice Ref:* ${selectedInvoiceForParent.invoice_no}\n*Amount Transferred:* ₦${(selectedInvoiceForParent.amount_due - selectedInvoiceForParent.amount_paid).toLocaleString()}\n\nAttached is my payment transfer receipt. Kindly verify and issue our official e-clearance receipt.`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition-all hover:scale-[1.01] active:scale-[0.99]"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span>Send Payment Receipt to Bursar WhatsApp (+234 803 359 1058)</span>
+                </a>
+
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setParentBankModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs"
+                  >
+                    Close Window
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -6035,13 +6992,16 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
         {/* Modal: Enroll Student & Parent */}
         {enrollStudentModalOpen && (
           <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 text-left space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="bg-slate-900 rounded-3xl max-w-2xl w-full p-6 border border-slate-800 text-left space-y-4 max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <span className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
                     🎒
                   </span>
-                  <h4 className="text-base font-extrabold text-white">Enroll Student & Provision Parent Account</h4>
+                  <div>
+                    <h4 className="text-base font-extrabold text-white">Institutional Student Enrollment & Registry</h4>
+                    <p className="text-[11px] text-slate-400">Record complete biodata, medical safety, origin, parentage, and logistics</p>
+                  </div>
                 </div>
                 <button onClick={() => setEnrollStudentModalOpen(false)} className="text-slate-400 hover:text-white">
                   <X className="w-5 h-5" />
@@ -6078,135 +7038,530 @@ export default function PortalDashboard({ isOpen = true, onClose, isModal = fals
                   </div>
                 </div>
               ) : (
-                <form onSubmit={handleEnrollStudent} className="space-y-3 text-xs">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-slate-300 font-bold mb-1">First Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Chukwuemeka"
-                        value={newStudentForm.first_name}
-                        onChange={(e) => setNewStudentForm(prev => ({ ...prev, first_name: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-bold mb-1">Last Name *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. Okonkwo"
-                        value={newStudentForm.last_name}
-                        onChange={(e) => setNewStudentForm(prev => ({ ...prev, last_name: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-slate-300 font-bold mb-1">Admission Number *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="e.g. EPS-2025-010"
-                        value={newStudentForm.admission_no}
-                        onChange={(e) => setNewStudentForm(prev => ({ ...prev, admission_no: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-bold mb-1">Enrollment Class</label>
-                      <select
-                        value={newStudentForm.class_id}
-                        onChange={(e) => setNewStudentForm(prev => ({ ...prev, class_id: parseInt(e.target.value) || 1 }))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                <form onSubmit={handleEnrollStudent} className="space-y-4 text-xs">
+                  {/* Category Tabs */}
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-2xl border border-slate-800 overflow-x-auto scrollbar-none text-[11px]">
+                    {[
+                      { id: 'biodata', label: '👤 1. Biodata & Origin' },
+                      { id: 'health', label: '🩺 2. Health & Safety' },
+                      { id: 'academics', label: '🏫 3. Academics' },
+                      { id: 'guardians', label: '👨‍👩‍👧 4. Parents & Guardians' },
+                      { id: 'logistics', label: '🚌 5. Logistics' }
+                    ].map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setEnrollModalTab(t.id)}
+                        className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-all ${
+                          enrollModalTab === t.id
+                            ? 'bg-amber-400 text-slate-950 shadow'
+                            : 'text-slate-400 hover:text-white'
+                        }`}
                       >
-                        {classes.map(c => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                        {t.label}
+                      </button>
+                    ))}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-slate-300 font-bold mb-1">Gender</label>
-                      <select
-                        value={newStudentForm.gender}
-                        onChange={(e) => setNewStudentForm(prev => ({ ...prev, gender: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                      >
-                        <option>Male</option>
-                        <option>Female</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-bold mb-1">Date of Birth</label>
-                      <input
-                        type="date"
-                        value={newStudentForm.dob}
-                        onChange={(e) => setNewStudentForm(prev => ({ ...prev, dob: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                  </div>
+                  {/* TAB 1: BIODATA & ORIGIN */}
+                  {enrollModalTab === 'biodata' && (
+                    <div className="space-y-3 animate-in fade-in">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">First Name *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Chukwuemeka"
+                            value={newStudentForm.first_name}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, first_name: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Middle Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Victor"
+                            value={newStudentForm.middle_name}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, middle_name: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Last Name / Surname *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Okonkwo"
+                            value={newStudentForm.last_name}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, last_name: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
 
-                  <div className="border-t border-slate-800 pt-2 space-y-2">
-                    <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">Guardian & Parent Information</span>
-                    <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Admission Number *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. EPS-2025-010"
+                            value={newStudentForm.admission_no}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, admission_no: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Enrollment Class *</label>
+                          <select
+                            value={newStudentForm.class_id}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, class_id: parseInt(e.target.value) || 1 }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            {classes.map(c => (
+                              <option key={c.id} value={c.id}>{c.name} ({c.division || 'General'})</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Gender</label>
+                          <select
+                            value={newStudentForm.gender}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, gender: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option>Male</option>
+                            <option>Female</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Date of Birth</label>
+                          <input
+                            type="date"
+                            value={newStudentForm.dob}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, dob: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">State of Origin</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Anambra State"
+                            value={newStudentForm.state_of_origin}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, state_of_origin: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">LGA of Origin</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Awka South"
+                            value={newStudentForm.lga_of_origin}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, lga_of_origin: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Religion</label>
+                          <select
+                            value={newStudentForm.religion}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, religion: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option>Christianity</option>
+                            <option>Islam</option>
+                            <option>Other</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: HEALTH & SAFETY */}
+                  {enrollModalTab === 'health' && (
+                    <div className="space-y-3 animate-in fade-in">
+                      <div className="p-2.5 rounded-xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-[11px] flex items-center gap-2">
+                        <HeartPulse className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>Crucial medical telemetry used by the school nurse, sports master, and emergency responders.</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Blood Group</label>
+                          <select
+                            value={newStudentForm.blood_group}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, blood_group: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option>O+</option>
+                            <option>O-</option>
+                            <option>A+</option>
+                            <option>A-</option>
+                            <option>B+</option>
+                            <option>B-</option>
+                            <option>AB+</option>
+                            <option>AB-</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Genotype</label>
+                          <select
+                            value={newStudentForm.genotype}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, genotype: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option>AA</option>
+                            <option>AS</option>
+                            <option>SS</option>
+                            <option>AC</option>
+                            <option>SC</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Known Allergies</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Groundnuts, Penicillin, Dust, None"
+                            value={newStudentForm.allergies}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, allergies: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Medical Conditions / Notes</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Mild Asthma, Inhaler needed, None"
+                            value={newStudentForm.medical_conditions}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, medical_conditions: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-800 pt-2">
+                        <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-2">Emergency Contact Information</span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Contact Person</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Mrs. Ngozi Okonkwo"
+                              value={newStudentForm.emergency_contact_name}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, emergency_contact_name: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Relationship</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Mother / Aunt"
+                              value={newStudentForm.emergency_contact_relationship}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, emergency_contact_relationship: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Emergency Phone</label>
+                            <input
+                              type="tel"
+                              placeholder="080XXXXXXXX"
+                              value={newStudentForm.emergency_contact_phone}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, emergency_contact_phone: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: ACADEMICS */}
+                  {enrollModalTab === 'academics' && (
+                    <div className="space-y-3 animate-in fade-in">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Entry Mode</label>
+                          <select
+                            value={newStudentForm.entry_mode}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, entry_mode: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option>Fresh Admission</option>
+                            <option>Transfer from another school</option>
+                            <option>Direct Entry</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Last Class Passed</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Primary 6 / JSS 2"
+                            value={newStudentForm.last_class_passed}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, last_class_passed: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
+
                       <div>
-                        <label className="block text-slate-300 font-bold mb-1">Guardian Name *</label>
+                        <label className="block text-slate-300 font-bold mb-1">Previous School Attended</label>
                         <input
                           type="text"
-                          required
-                          placeholder="e.g. Chief Jude Okonkwo"
-                          value={newStudentForm.guardian_name}
-                          onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_name: e.target.value }))}
+                          placeholder="e.g. Christ the King Primary School, Onitsha"
+                          value={newStudentForm.previous_school}
+                          onChange={(e) => setNewStudentForm(prev => ({ ...prev, previous_school: e.target.value }))}
                           className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
                         />
                       </div>
-                      <div>
-                        <label className="block text-slate-300 font-bold mb-1">Guardian Phone (Login ID) *</label>
-                        <input
-                          type="tel"
-                          required
-                          placeholder="0803XXXXXXX"
-                          value={newStudentForm.guardian_phone}
-                          onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_phone: e.target.value }))}
-                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 font-bold mb-1">Guardian Email (Optional)</label>
-                      <input
-                        type="email"
-                        placeholder="parent@example.com"
-                        value={newStudentForm.guardian_email}
-                        onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_email: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="pt-2 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEnrollStudentModalOpen(false)}
-                      className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isEnrollingStudent}
-                      className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow flex items-center gap-1.5"
-                    >
-                      {isEnrollingStudent ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <GraduationCap className="w-3.5 h-3.5" />}
-                      <span>Enroll Student & Provision Parent</span>
-                    </button>
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">Reason for Transfer (if applicable)</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Family relocation to Awka capital city"
+                          value={newStudentForm.reason_for_transfer}
+                          onChange={(e) => setNewStudentForm(prev => ({ ...prev, reason_for_transfer: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 4: PARENTS & GUARDIANS */}
+                  {enrollModalTab === 'guardians' && (
+                    <div className="space-y-3 animate-in fade-in">
+                      <div className="border-b border-slate-800 pb-2">
+                        <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-2">Primary Guardian / Sponsor (Main Account)</span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Title</label>
+                            <select
+                              value={newStudentForm.guardian_title}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_title: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            >
+                              <option>Mr</option>
+                              <option>Mrs</option>
+                              <option>Chief</option>
+                              <option>Dr</option>
+                              <option>Engr</option>
+                              <option>Barrister</option>
+                              <option>Pastor</option>
+                              <option>Alhaji</option>
+                            </select>
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="block text-slate-300 font-bold mb-1">Guardian Name *</label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Chief Jude Okonkwo"
+                              value={newStudentForm.guardian_name}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_name: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Guardian Phone (Login ID) *</label>
+                            <input
+                              type="tel"
+                              required
+                              placeholder="0803XXXXXXX"
+                              value={newStudentForm.guardian_phone}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_phone: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Alternate Phone</label>
+                            <input
+                              type="tel"
+                              placeholder="081XXXXXXXX"
+                              value={newStudentForm.guardian_alt_phone}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_alt_phone: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Guardian Email (Optional)</label>
+                            <input
+                              type="email"
+                              placeholder="parent@example.com"
+                              value={newStudentForm.guardian_email}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_email: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Occupation</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Civil Engineer / Merchant"
+                              value={newStudentForm.guardian_occupation}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, guardian_occupation: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-1">
+                        <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-2">Maternal Profile & Residential Address</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Mother's Full Name</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Mrs. Ngozi Okonkwo"
+                              value={newStudentForm.mother_name}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, mother_name: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Mother's Phone</label>
+                            <input
+                              type="tel"
+                              placeholder="080XXXXXXXX"
+                              value={newStudentForm.mother_phone}
+                              onChange={(e) => setNewStudentForm(prev => ({ ...prev, mother_phone: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-2">
+                          <label className="block text-slate-300 font-bold mb-1">Residential Address *</label>
+                          <textarea
+                            rows={2}
+                            required
+                            placeholder="e.g. Plot 12, Ngozika Housing Estate Phase 2, Awka, Anambra State"
+                            value={newStudentForm.address}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, address: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 5: LOGISTICS */}
+                  {enrollModalTab === 'logistics' && (
+                    <div className="space-y-3 animate-in fade-in">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Boarding Preference</label>
+                          <select
+                            value={newStudentForm.boarding_status}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, boarding_status: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option value="Day">Day Student</option>
+                            <option value="Full Boarding">Full Boarding Hostel</option>
+                            <option value="Weekly Boarding">Weekly Boarding</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Daily Transport Mode</label>
+                          <select
+                            value={newStudentForm.transport_mode}
+                            onChange={(e) => setNewStudentForm(prev => ({ ...prev, transport_mode: e.target.value }))}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option value="Parent Dropoff">Private Family Drop-off</option>
+                            <option value="School Bus">Eagle Power School Bus Shuttle</option>
+                            <option value="Walk">Walking / Bicycle</option>
+                            <option value="Public">Public Transit / Commercial</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-300 font-bold mb-1">School Bus Route (if applicable)</label>
+                        <select
+                          value={newStudentForm.bus_route}
+                          onChange={(e) => setNewStudentForm(prev => ({ ...prev, bus_route: e.target.value }))}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                        >
+                          <option value="None">None (Private / Boarding)</option>
+                          <option value="Route A - Awka South / Regina Caeli / Ziks Ave">Route A — Awka South / Regina Caeli / Zik Avenue</option>
+                          <option value="Route B - Amansea / UNIZIK Junction / Ifite">Route B — Amansea / UNIZIK Junction / Ifite</option>
+                          <option value="Route C - Ngozika Housing / Udoka Estate">Route C — Ngozika Housing / Udoka Estate</option>
+                          <option value="Route D - Amawbia / Governor's Lodge / Enugwu-Ukwu">Route D — Amawbia / Governor's Lodge / Enugwu-Ukwu</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Navigation / Action Bar */}
+                  <div className="pt-3 border-t border-slate-800 flex flex-wrap justify-between items-center gap-2">
+                    <div className="flex gap-2">
+                      {enrollModalTab !== 'biodata' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tabs = ['biodata', 'health', 'academics', 'guardians', 'logistics'];
+                            const idx = tabs.indexOf(enrollModalTab);
+                            if (idx > 0) setEnrollModalTab(tabs[idx - 1]);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-800 text-slate-300 hover:text-white font-bold text-xs"
+                        >
+                          &larr; Previous Tab
+                        </button>
+                      )}
+                      {enrollModalTab !== 'logistics' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tabs = ['biodata', 'health', 'academics', 'guardians', 'logistics'];
+                            const idx = tabs.indexOf(enrollModalTab);
+                            if (idx < tabs.length - 1) setEnrollModalTab(tabs[idx + 1]);
+                          }}
+                          className="px-3 py-2 rounded-xl bg-slate-800 text-amber-400 hover:bg-slate-700 font-bold text-xs"
+                        >
+                          Next Tab &rarr;
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEnrollStudentModalOpen(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isEnrollingStudent}
+                        className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow flex items-center gap-1.5"
+                      >
+                        {isEnrollingStudent ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <GraduationCap className="w-3.5 h-3.5" />}
+                        <span>Enroll Student & Provision Accounts</span>
+                      </button>
+                    </div>
                   </div>
                 </form>
               )}

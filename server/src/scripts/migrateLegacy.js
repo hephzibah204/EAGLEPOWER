@@ -7,24 +7,14 @@ console.log('🦅 Starting Eagle Power Schools (EduCore) Legacy Data Migration..
 
 // 1. Reset tables
 console.log('🔄 Cleaning existing tables...');
-db.exec(`
-  DELETE FROM audit_logs;
-  DELETE FROM payments;
-  DELETE FROM invoices;
-  DELETE FROM marks;
-  DELETE FROM admissions;
-  DELETE FROM frontdesk_visitors;
-  DELETE FROM frontdesk_enquiries;
-  DELETE FROM frontdesk_calls;
-  DELETE FROM frontdesk_dispatch;
-  DELETE FROM frontdesk_complaints;
-  DELETE FROM users;
-  DELETE FROM students;
-  DELETE FROM staff;
-  DELETE FROM subjects;
-  DELETE FROM sections;
-  DELETE FROM classes;
-`);
+db.exec('PRAGMA foreign_keys = OFF;');
+const userTables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
+for (const t of userTables) {
+  if (t.name !== 'system_settings') {
+    db.exec(`DELETE FROM "${t.name}";`);
+  }
+}
+db.exec('PRAGMA foreign_keys = ON;');
 
 // 2. Insert Classes
 console.log('🏫 Seeding Classes...');
@@ -256,7 +246,7 @@ console.log(`✅ Successfully migrated ${studentCount} real students into EduCor
 
 // 8. Seed Marks and Report Card Records for Students
 console.log('📝 Seeding Examination Marks & CA Scores...');
-const allStudents = db.prepare('SELECT id, admission_no, first_name, last_name, class_id FROM students LIMIT 25').all();
+const allStudents = db.prepare("SELECT id, admission_no, first_name, last_name, class_id FROM students WHERE UPPER(admission_no) = 'ESE2009012' OR id IN (SELECT id FROM students LIMIT 35)").all();
 const allSubjects = db.prepare('SELECT id, name, code FROM subjects').all();
 
 const insertMark = db.prepare(`

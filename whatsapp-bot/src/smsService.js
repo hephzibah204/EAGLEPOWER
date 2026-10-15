@@ -305,3 +305,256 @@ export function getStudentSummary(admissionNo) {
     balance: balance,
   };
 }
+
+/**
+ * 6. User Account Identification via users Table
+ */
+export function getUserByPhoneOrUsername(identifier) {
+  if (!identifier) return null;
+  const clean = identifier.replace(/\D/g, "");
+  const last10 = clean.slice(-10);
+
+  // 1. Check direct match by username or reference_id
+  const directUser = db
+    .prepare(`
+      SELECT * FROM users 
+      WHERE (UPPER(username) = ? OR UPPER(reference_id) = ?) AND is_active = 1
+    `)
+    .get(identifier.trim().toUpperCase(), identifier.trim().toUpperCase());
+  if (directUser) return directUser;
+
+  // 2. If identifier has phone digits, resolve via staff table
+  if (last10) {
+    const staffMember = db
+      .prepare(`
+        SELECT * FROM staff 
+        WHERE phone IS NOT NULL AND REPLACE(REPLACE(phone, '+', ''), ' ', '') LIKE ? AND is_active = 1
+      `)
+      .get(`%${last10}%`);
+
+    if (staffMember) {
+      const user = db
+        .prepare(`
+          SELECT * FROM users 
+          WHERE (UPPER(username) = ? OR UPPER(reference_id) = ? OR UPPER(username) = ?) AND is_active = 1
+        `)
+        .get(staffMember.staff_no.toUpperCase(), staffMember.staff_no.toUpperCase(), (staffMember.role || '').toLowerCase());
+      if (user) return user;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 7. Front Desk Operations
+ */
+export function issueVisitorPass({ visitorName, phone, purpose, personToSee, badgeNo }) {
+  const passNo = `VP-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+  const stmt = db.prepare(`
+    INSERT INTO frontdesk_visitors (pass_no, visitor_name, phone, purpose, person_to_see, badge_no, status, check_in_time)
+    VALUES (?, ?, ?, ?, ?, ?, 'In Campus', CURRENT_TIMESTAMP)
+  `);
+  stmt.run(passNo, visitorName, phone || 'Walk-in', purpose || 'Official Campus Visit', personToSee || 'Principal Desk', badgeNo || 'GATE-PASS');
+  return {
+    passNo,
+    visitorName,
+    personToSee: personToSee || 'Principal Desk',
+    badgeNo: badgeNo || 'GATE-PASS',
+    time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  };
+}
+
+export function checkoutVisitor(identifier) {
+  const clean = (identifier || '').trim();
+  const visitor = db.prepare(`
+    SELECT * FROM frontdesk_visitors 
+    WHERE (UPPER(pass_no) = ? OR UPPER(visitor_name) LIKE ? OR phone LIKE ?) AND status = 'In Campus'
+    ORDER BY id DESC LIMIT 1
+  `).get(clean.toUpperCase(), `%${clean.toUpperCase()}%`, `%${clean}%`);
+
+  if (!visitor) {
+    return { error: `No active campus visitor found matching "${identifier}".` };
+  }
+
+  db.prepare(`
+    UPDATE frontdesk_visitors 
+    SET status = 'Checked Out', check_out_time = CURRENT_TIMESTAMP 
+    WHERE id = ?
+  `).run(visitor.id);
+
+  return {
+    passNo: visitor.pass_no,
+    visitorName: visitor.visitor_name,
+    checkInTime: visitor.check_in_time,
+    checkOutTime: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+  };
+}
+
+export function getActiveVisitors() {
+  return db.prepare(`
+    SELECT pass_no, visitor_name, phone, person_to_see, check_in_time, badge_no
+    FROM frontdesk_visitors
+    WHERE status = 'In Campus'
+    ORDER BY id DESC
+  `).all();
+}
+
+export function logAdmissionEnquiry({ name, phone, classInterested, notes }) {
+  const enquiryNo = `ENQ-${Date.now().toString().slice(-5)}`;
+  const today = new Date().toISOString().split('T')[0];
+  db.prepare(`
+    INSERT INTO frontdesk_enquiries (enquiry_no, name, phone, class_interested, enquiry_date, notes, status)
+    VALUES (?, ?, ?, ?, ?, ?, 'Active')
+  `).run(enquiryNo, name, phone, classInterested || 'General', today, notes || 'Logged via WhatsApp');
+  return { enquiryNo, name, phone, classInterested: classInterested || 'General' };
+}
+
+export function logComplaint({ complainantName, phone, complaintType, description }) {
+  const complaintNo = `CMP-${Date.now().toString().slice(-5)}`;
+  db.prepare(`
+    INSERT INTO frontdesk_complaints (complaint_no, complainant_name, complainant_phone, complaint_type, description, status)
+    VALUES (?, ?, ?, ?, ?, 'Pending')
+  `).run(complaintNo, complainantName, phone || null, complaintType || 'General Feedback', description);
+  return { complaintNo, complainantName, complaintType: complaintType || 'General Feedback' };
+}
+
+/**
+ * 8. Bursary Financial Operations
+ */
+export function recordBursaryPayment({ invoiceNo, amount, method, reference, recordedBy }) {
+  const inv = db.prepare(`
+    SELECT i.*, s.first_name, s.last_name, s.admission_no, c.name as class_name 
+    FROM invoices i
+    JOIN students s ON i.student_id = s.id
+    LEFT JOIN classes c ON s.class_id = c.id
+    WHERE UPPER(i.invoice_no) = ? OR UPPER(s.admission_no) = ?
+    ORDER BY i.id DESC LIMIT 1
+  `).get(invoiceNo.trim().toUpperCase(), invoiceNo.trim().toUpperCase());
+
+  if (!inv) {
+    return { error: `Invoice or student record matching "${invoiceNo}" was not found.` };
+  }
+
+  const payAmt = Math.min(Number(amount) || 0, Math.max(0, inv.amount_due - inv.amount_paid));
+  if (payAmt <= 0) {
+    return { error: `Invoice ${inv.invoice_no} is already fully cleared (Balance: ₦0).` };
+  }
+
+  const newTotalPaid = inv.amount_paid + payAmt;
+  const newStatus = newTotalPaid >= inv.amount_due ? 'Paid' : 'Partial';
+  const receiptNo = `RCT-${inv.invoice_no}-${Date.now().toString().slice(-4)}`;
+
+  // Record payment row
+  db.prepare(`
+    INSERT INTO payments (invoice_id, receipt_no, amount, payment_method, reference, recorded_by)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(inv.id, receiptNo, payAmt, method || 'Bank Transfer', reference || 'WhatsApp Settlement', recordedBy || 'Bursar Bot');
+
+  // Update invoice
+  db.prepare(`
+    UPDATE invoices 
+    SET amount_paid = ?, status = ? 
+    WHERE id = ?
+  `).run(newTotalPaid, newStatus, inv.id);
+
+  return {
+    receiptNo,
+    invoiceNo: inv.invoice_no,
+    studentName: `${inv.first_name} ${inv.last_name}`,
+    admissionNo: inv.admission_no,
+    className: inv.class_name,
+    amountPaid: payAmt,
+    totalPaid: newTotalPaid,
+    totalDue: inv.amount_due,
+    balance: Math.max(0, inv.amount_due - newTotalPaid),
+    status: newStatus
+  };
+}
+
+export function getDebtorsByClass(className) {
+  let query = `
+    SELECT s.admission_no, s.first_name, s.last_name, c.name as class_name, 
+           s.guardian_name, s.guardian_phone,
+           (i.amount_due - i.amount_paid) as balance, i.invoice_no
+    FROM invoices i
+    JOIN students s ON i.student_id = s.id
+    LEFT JOIN classes c ON s.class_id = c.id
+    WHERE i.status != 'Paid' AND (i.amount_due - i.amount_paid) > 0
+  `;
+  const params = [];
+  if (className && className.toLowerCase() !== 'all') {
+    query += ` AND UPPER(c.name) LIKE ?`;
+    params.push(`%${className.trim().toUpperCase()}%`);
+  }
+  query += ` ORDER BY balance DESC LIMIT 25`;
+
+  return db.prepare(query).all(...params);
+}
+
+export function getTodayCollections() {
+  const today = new Date().toISOString().split('T')[0];
+  const stats = db.prepare(`
+    SELECT COUNT(*) as count, COALESCE(SUM(amount), 0) as total
+    FROM payments
+    WHERE date(payment_date) = date(?)
+  `).get(today);
+
+  return {
+    date: today,
+    count: stats?.count || 0,
+    total: stats?.total || 0
+  };
+}
+
+/**
+ * 9. SuperAdmin & System Governance Operations
+ */
+export function getSystemTelemetry() {
+  const pupilsCount = db.prepare(`SELECT COUNT(*) as total FROM students WHERE is_active = 1`).get()?.total || 0;
+  const staffCount = db.prepare(`SELECT COUNT(*) as total FROM staff WHERE is_active = 1`).get()?.total || 0;
+  const userCount = db.prepare(`SELECT COUNT(*) as total FROM users`).get()?.total || 0;
+  const lockedUsers = db.prepare(`SELECT COUNT(*) as total FROM users WHERE is_active = 0`).get()?.total || 0;
+  const settings = db.prepare(`SELECT * FROM system_settings WHERE id = 1`).get();
+
+  return {
+    pupilsCount,
+    staffCount,
+    userCount,
+    lockedUsers,
+    schoolName: settings?.school_name || 'Eagle Power Schools Awka',
+    session: settings?.current_session || '2024/2025',
+    term: settings?.current_term || 'Second Term',
+    isTermLocked: Boolean(settings?.term_locked)
+  };
+}
+
+export function triggerDbBackup() {
+  const backupDir = path.resolve(__dirname, "../../server/backups");
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupFileName = `eaglepower_backup_${timestamp}.db`;
+  const backupFilePath = path.join(backupDir, backupFileName);
+
+  // Trigger WAL checkpoint
+  try {
+    db.prepare("PRAGMA wal_checkpoint(TRUNCATE);").run();
+  } catch (_e) {}
+
+  // Source db path
+  const localDb = path.resolve(__dirname, "../../server/data/eaglepower.db");
+  const bundledDb = path.resolve(__dirname, "../server_src/data/eaglepower.db");
+  const srcDb = fs.existsSync(localDb) ? localDb : bundledDb;
+
+  fs.copyFileSync(srcDb, backupFilePath);
+  const stats = fs.statSync(backupFilePath);
+
+  return {
+    fileName: backupFileName,
+    sizeKb: Math.round(stats.size / 1024),
+    timestamp
+  };
+}

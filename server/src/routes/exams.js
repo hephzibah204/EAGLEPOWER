@@ -2,6 +2,7 @@ import express from 'express';
 import db from '../config/db.js';
 import { authenticate, requireRoles, requireStudentAccess } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
+import { generateReportCardComments } from '../services/inHouseAi.js';
 
 const router = express.Router();
 
@@ -211,18 +212,6 @@ router.get('/report-card/:admissionNo', authenticate, (req, res, next) => {
       return n + (s[(v - 20) % 10] || s[v] || s[0]);
     };
 
-    // Principal & Teacher remarks based on average
-    let principalRemark = 'An outstanding and disciplined scholar. Keep up the sterling academic tempo!';
-    let teacherRemark = 'Exceptional focus, brilliant classroom conduct, and commendable leadership.';
-
-    if (average < 50) {
-      principalRemark = 'Academic performance requires urgent intervention. Remedial assistance advised.';
-      teacherRemark = 'Needs to exhibit more consistency and focus during classes.';
-    } else if (average < 65) {
-      principalRemark = 'Good performance with room for noticeable improvement.';
-      teacherRemark = 'Attentive in class; needs more practice in numerical and technical subjects.';
-    }
-
     // Retrieve report_extras if any exists
     const extraRow = db.prepare(`
       SELECT * FROM report_extras WHERE student_id = ? AND session = ? AND term = ?
@@ -231,9 +220,6 @@ router.get('/report-card/:admissionNo', authenticate, (req, res, next) => {
     let parsedAttendance = { opened: 120, present: 116, absent: 4 };
     let parsedTraits = { politeness: 5, neatness: 5, punctuality: 4, attentiveness: 5, honesty: 5, initiative: 4, selfControl: 5, cooperation: 4 };
     let parsedPsychomotor = { handwriting: 4, fluency: 5, sports: 4, drawing: 4, tools: 4, club: 5 };
-    let customTeacherComment = teacherRemark;
-    let customPrincipalComment = principalRemark;
-    let promotionStatus = average >= 50 ? 'PROMOTED TO NEXT CLASS' : 'REPEAT CLASS';
     let nextTermResumption = '2025-04-28';
     let chosenTemplate = 'ELITE';
 
@@ -241,12 +227,28 @@ router.get('/report-card/:admissionNo', authenticate, (req, res, next) => {
       try { parsedAttendance = JSON.parse(extraRow.attendance); } catch {}
       try { parsedTraits = JSON.parse(extraRow.traits); } catch {}
       try { parsedPsychomotor = JSON.parse(extraRow.psychomotor); } catch {}
-      if (extraRow.teacher_comment) customTeacherComment = extraRow.teacher_comment;
-      if (extraRow.principal_comment) customPrincipalComment = extraRow.principal_comment;
-      if (extraRow.promotion_status) promotionStatus = extraRow.promotion_status;
       if (extraRow.next_term_resumption) nextTermResumption = extraRow.next_term_resumption;
       if (extraRow.template) chosenTemplate = extraRow.template;
     }
+
+    // Dynamic In-House AI Report Card Comment Generation
+    const aiComments = generateReportCardComments({
+      student,
+      marks,
+      average,
+      position,
+      classSize,
+      attendance: parsedAttendance,
+      traits: parsedTraits,
+      psychomotor: parsedPsychomotor,
+      division: student.division,
+      session,
+      term
+    });
+
+    const customTeacherComment = extraRow?.teacher_comment || aiComments.teacher_comment;
+    const customPrincipalComment = extraRow?.principal_comment || aiComments.principal_comment;
+    const promotionStatus = extraRow?.promotion_status || aiComments.promotion_status;
 
     // Build standard_report format (compatible with edureport-ng report sheet design templates)
     const scoresMap = {};
@@ -455,15 +457,18 @@ router.post('/marks/batch', authenticate, requireRoles('teacher', 'admin', 'supe
     `);
 
     let processed = 0;
-    for (const item of entries) {
-      const ca = Math.min(30, Math.max(0, parseFloat(item.ca_score || 0)));
-      const ex = Math.min(70, Math.max(0, parseFloat(item.exam_score || 0)));
-      const total = ca + ex;
-      const { grade, remark } = calculateGrade(total);
+    const processBatch = db.transaction(() => {
+      for (const item of entries) {
+        const ca = Math.min(30, Math.max(0, parseFloat(item.ca_score || 0)));
+        const ex = Math.min(70, Math.max(0, parseFloat(item.exam_score || 0)));
+        const total = ca + ex;
+        const { grade, remark } = calculateGrade(total);
 
-      stmt.run(item.student_id, subject_id, session, term, ca, ex, total, grade, remark);
-      processed++;
-    }
+        stmt.run(item.student_id, subject_id, session, term, ca, ex, total, grade, remark);
+        processed++;
+      }
+    });
+    processBatch();
 
     logAudit(req.user.id, 'BATCH_MARKS', 'MARKS', `Batch uploaded ${processed} marks for subject ${subject_id}`, req.ip);
 
@@ -707,9 +712,6 @@ router.get('/class-reports/:classId', authenticate, requireRoles('teacher', 'adm
       let parsedAttendance = { opened: 120, present: 116, absent: 4 };
       let parsedTraits = { politeness: 5, neatness: 5, punctuality: 4, attentiveness: 5, honesty: 5, initiative: 4, selfControl: 5, cooperation: 4 };
       let parsedPsychomotor = { handwriting: 4, fluency: 5, sports: 4, drawing: 4, tools: 4, club: 5 };
-      let teacherComment = average >= 65 ? 'Exceptional focus, brilliant classroom conduct, and commendable leadership.' : 'Needs more consistency and focus during classes.';
-      let principalComment = average >= 65 ? 'An outstanding and disciplined scholar. Keep up the sterling academic tempo!' : 'Good performance with room for noticeable improvement.';
-      let promotionStatus = average >= 50 ? 'PROMOTED TO NEXT CLASS' : 'REPEAT CLASS';
       let nextTermResumption = '2025-04-28';
       let template = 'ELITE';
 
@@ -717,12 +719,27 @@ router.get('/class-reports/:classId', authenticate, requireRoles('teacher', 'adm
         try { parsedAttendance = JSON.parse(extraRow.attendance); } catch {}
         try { parsedTraits = JSON.parse(extraRow.traits); } catch {}
         try { parsedPsychomotor = JSON.parse(extraRow.psychomotor); } catch {}
-        if (extraRow.teacher_comment) teacherComment = extraRow.teacher_comment;
-        if (extraRow.principal_comment) principalComment = extraRow.principal_comment;
-        if (extraRow.promotion_status) promotionStatus = extraRow.promotion_status;
         if (extraRow.next_term_resumption) nextTermResumption = extraRow.next_term_resumption;
         if (extraRow.template) template = extraRow.template;
       }
+
+      const aiComments = generateReportCardComments({
+        student,
+        marks,
+        average,
+        position,
+        classSize: classAverages.length || 1,
+        attendance: parsedAttendance,
+        traits: parsedTraits,
+        psychomotor: parsedPsychomotor,
+        division: student.division,
+        session,
+        term
+      });
+
+      const teacherComment = extraRow?.teacher_comment || aiComments.teacher_comment;
+      const principalComment = extraRow?.principal_comment || aiComments.principal_comment;
+      const promotionStatus = extraRow?.promotion_status || aiComments.promotion_status;
 
       const scoresMap = {};
       marks.forEach(m => {
@@ -864,6 +881,215 @@ router.post('/report-extras', authenticate, requireRoles('teacher', 'admin', 'su
     res.json({
       success: true,
       message: 'Student report extras saved successfully.'
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/exams/generate-ai-comments
+ * On-demand AI Report Card Comment Generation for a single student (Teacher / Admin)
+ */
+router.post('/generate-ai-comments', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
+  try {
+    const { student_id, admission_no, session = '2024/2025', term = 'Second Term' } = req.body;
+    let targetStudentId = student_id;
+    if (!targetStudentId && admission_no) {
+      const found = db.prepare(`SELECT id FROM students WHERE admission_no = ?`).get(admission_no);
+      if (found) targetStudentId = found.id;
+    }
+
+    if (!targetStudentId) {
+      return res.status(400).json({ success: false, message: 'student_id or admission_no is required' });
+    }
+
+    const student = db.prepare(`
+      SELECT s.*, c.name as class_name, c.division 
+      FROM students s 
+      LEFT JOIN classes c ON s.class_id = c.id 
+      WHERE s.id = ?
+    `).get(targetStudentId);
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    const marks = db.prepare(`
+      SELECT m.*, s.name as subject_name, s.code as subject_code
+      FROM marks m
+      JOIN subjects s ON m.subject_id = s.id
+      WHERE m.student_id = ? AND m.session = ? AND m.term = ?
+      ORDER BY s.name ASC
+    `).all(targetStudentId, session, term);
+
+    const totalObtained = marks.reduce((sum, m) => sum + (m.total_score || 0), 0);
+    const average = marks.length > 0 ? parseFloat((totalObtained / marks.length).toFixed(1)) : 0;
+
+    // Calculate position
+    const classAverages = db.prepare(`
+      SELECT m.student_id, AVG(m.total_score) as avg_score
+      FROM marks m
+      JOIN students s ON m.student_id = s.id
+      WHERE s.class_id = ? AND m.session = ? AND m.term = ?
+      GROUP BY m.student_id
+      ORDER BY avg_score DESC
+    `).all(student.class_id, session, term);
+
+    const rankIndex = classAverages.findIndex(row => row.student_id === student.id);
+    const position = rankIndex !== -1 ? rankIndex + 1 : 1;
+
+    // Fetch existing extras if any
+    const extraRow = db.prepare(`
+      SELECT * FROM report_extras WHERE student_id = ? AND session = ? AND term = ?
+    `).get(targetStudentId, session, term);
+
+    let parsedAttendance = { opened: 120, present: 116, absent: 4 };
+    let parsedTraits = { politeness: 5, neatness: 5, punctuality: 4, attentiveness: 5, honesty: 5, initiative: 4, selfControl: 5, cooperation: 4 };
+    let parsedPsychomotor = { handwriting: 4, fluency: 5, sports: 4, drawing: 4, tools: 4, club: 5 };
+
+    if (extraRow) {
+      try { parsedAttendance = JSON.parse(extraRow.attendance); } catch {}
+      try { parsedTraits = JSON.parse(extraRow.traits); } catch {}
+      try { parsedPsychomotor = JSON.parse(extraRow.psychomotor); } catch {}
+    }
+
+    const aiComments = generateReportCardComments({
+      student,
+      marks,
+      average,
+      position,
+      classSize: classAverages.length || 1,
+      attendance: parsedAttendance,
+      traits: parsedTraits,
+      psychomotor: parsedPsychomotor,
+      division: student.division,
+      session,
+      term
+    });
+
+    res.json({
+      success: true,
+      comments: aiComments,
+      data: aiComments
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/exams/batch-generate-ai-comments
+ * Auto-generate and persist In-House AI remarks for all students in a class (Teacher / Admin)
+ */
+router.post('/batch-generate-ai-comments', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
+  try {
+    const { class_id, session = '2024/2025', term = 'Second Term', overwrite = false } = req.body;
+    if (!class_id) {
+      return res.status(400).json({ success: false, message: 'class_id is required' });
+    }
+
+    const students = db.prepare(`
+      SELECT s.*, c.name as class_name, c.division 
+      FROM students s 
+      JOIN classes c ON s.class_id = c.id 
+      WHERE s.class_id = ? AND s.is_active = 1
+      ORDER BY s.last_name ASC, s.first_name ASC
+    `).all(parseInt(class_id));
+
+    if (students.length === 0) {
+      return res.status(404).json({ success: false, message: 'No active students found in this class' });
+    }
+
+    const classAverages = db.prepare(`
+      SELECT m.student_id, AVG(m.total_score) as avg_score
+      FROM marks m
+      JOIN students s ON m.student_id = s.id
+      WHERE s.class_id = ? AND m.session = ? AND m.term = ?
+      GROUP BY m.student_id
+      ORDER BY avg_score DESC
+    `).all(parseInt(class_id), session, term);
+
+    const upsertStmt = db.prepare(`
+      INSERT INTO report_extras (
+        student_id, session, term, attendance, traits, psychomotor,
+        teacher_comment, principal_comment, next_term_resumption,
+        promotion_status, template, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '2025-04-28', ?, 'ELITE', CURRENT_TIMESTAMP)
+      ON CONFLICT(student_id, session, term) DO UPDATE SET
+        teacher_comment = CASE WHEN ? = 1 OR teacher_comment IS NULL OR teacher_comment = '' THEN excluded.teacher_comment ELSE teacher_comment END,
+        principal_comment = CASE WHEN ? = 1 OR principal_comment IS NULL OR principal_comment = '' THEN excluded.principal_comment ELSE principal_comment END,
+        promotion_status = CASE WHEN ? = 1 OR promotion_status IS NULL OR promotion_status = '' THEN excluded.promotion_status ELSE promotion_status END,
+        updated_at = CURRENT_TIMESTAMP
+    `);
+
+    let generatedCount = 0;
+    const generatedList = [];
+
+    students.forEach(s => {
+      const marks = db.prepare(`
+        SELECT m.*, sub.name as subject_name, sub.code as subject_code
+        FROM marks m
+        JOIN subjects sub ON m.subject_id = sub.id
+        WHERE m.student_id = ? AND m.session = ? AND m.term = ?
+      `).all(s.id, session, term);
+
+      const totalObtained = marks.reduce((sum, m) => sum + (m.total_score || 0), 0);
+      const average = marks.length > 0 ? parseFloat((totalObtained / marks.length).toFixed(1)) : 0;
+      const rankIndex = classAverages.findIndex(row => row.student_id === s.id);
+      const position = rankIndex !== -1 ? rankIndex + 1 : 1;
+
+      const aiComments = generateReportCardComments({
+        student: s,
+        marks,
+        average,
+        position,
+        classSize: classAverages.length || 1,
+        division: s.division,
+        session,
+        term
+      });
+
+      const defaultAtt = JSON.stringify({ opened: 120, present: 116, absent: 4 });
+      const defaultTraits = JSON.stringify({ politeness: 5, neatness: 5, punctuality: 4, attentiveness: 5, honesty: 5, initiative: 4, selfControl: 5, cooperation: 4 });
+      const defaultPsych = JSON.stringify({ handwriting: 4, fluency: 5, sports: 4, drawing: 4, tools: 4, club: 5 });
+
+      upsertStmt.run(
+        s.id,
+        session,
+        term,
+        defaultAtt,
+        defaultTraits,
+        defaultPsych,
+        aiComments.teacher_comment,
+        aiComments.principal_comment,
+        aiComments.promotion_status,
+        overwrite ? 1 : 0,
+        overwrite ? 1 : 0,
+        overwrite ? 1 : 0
+      );
+
+      generatedCount++;
+      generatedList.push({
+        student_id: s.id,
+        admission_no: s.admission_no,
+        name: `${s.first_name} ${s.last_name}`,
+        average,
+        position,
+        teacher_comment: aiComments.teacher_comment,
+        principal_comment: aiComments.principal_comment
+      });
+    });
+
+    logAudit(req.user.id, 'BATCH_AI_REPORT_COMMENTS', 'REPORTS', `Auto-generated AI report card comments for class ID ${class_id} (${generatedCount} students)`, req.ip);
+
+    res.json({
+      success: true,
+      message: `Successfully generated and saved AI report card remarks for ${generatedCount} students in ${students[0]?.class_name}.`,
+      count: generatedCount,
+      generated_count: generatedCount,
+      skipped_count: 0,
+      data: generatedList
     });
   } catch (err) {
     next(err);

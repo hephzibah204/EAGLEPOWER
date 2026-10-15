@@ -6,7 +6,6 @@ import Hero from '../components/Hero';
 import AboutSection from '../components/AboutSection';
 import AcademicsSection from '../components/AcademicsSection';
 import WhyUsSection from '../components/WhyUsSection';
-import FeeEstimator from '../components/FeeEstimator';
 import CampusLifeSection from '../components/CampusLifeSection';
 import NewsSection from '../components/NewsSection';
 import TestimonialsSection from '../components/TestimonialsSection';
@@ -14,13 +13,11 @@ import FaqSection from '../components/FaqSection';
 import ContactSection from '../components/ContactSection';
 import Footer from '../components/Footer';
 import AdmissionModal from '../components/AdmissionModal';
-import PortalDashboard from '../components/PortalDashboard';
 import { MessageCircle, ArrowUp } from 'lucide-react';
 
 export default function Home() {
   const [isAdmissionOpen, setIsAdmissionOpen] = useState(false);
   const [admissionDivision, setAdmissionDivision] = useState('primary');
-  const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -45,7 +42,7 @@ export default function Home() {
       {/* Navigation */}
       <Navbar
         onOpenAdmission={() => handleOpenAdmission('primary')}
-        onOpenPortal={() => setIsPortalOpen(true)}
+        onOpenPortal={() => { window.location.href = '/portal/overview'; }}
       />
 
       {/* Main Content Sections */}
@@ -62,10 +59,6 @@ export default function Home() {
         
         <WhyUsSection />
         
-        <FeeEstimator 
-          onOpenAdmission={handleOpenAdmission} 
-        />
-        
         <CampusLifeSection />
         
         <NewsSection />
@@ -80,7 +73,7 @@ export default function Home() {
       {/* Footer */}
       <Footer
         onOpenAdmission={() => handleOpenAdmission('primary')}
-        onOpenPortal={() => setIsPortalOpen(true)}
+        onOpenPortal={() => { window.location.href = '/portal/overview'; }}
       />
 
       {/* Floating Action Buttons */}
@@ -114,11 +107,6 @@ export default function Home() {
         isOpen={isAdmissionOpen}
         onClose={() => setIsAdmissionOpen(false)}
         initialDivision={admissionDivision}
-      />
-
-      <PortalDashboard
-        isOpen={isPortalOpen}
-        onClose={() => setIsPortalOpen(false)}
       />
     </div>
   );

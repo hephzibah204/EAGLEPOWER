@@ -6,6 +6,7 @@ primary_region = "lhr"
 
 [env]
   AUTH_DIR = "/data/auth_info"
+  DB_PATH = "/data/eaglepower.db"
   LOG_LEVEL = "warn"
 
 [mounts]

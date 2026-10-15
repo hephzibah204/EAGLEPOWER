@@ -342,3 +342,112 @@ CREATE INDEX IF NOT EXISTS idx_sub_student ON homework_submissions(student_id);
 CREATE INDEX IF NOT EXISTS idx_profile_student ON student_learning_profiles(student_id);
 CREATE INDEX IF NOT EXISTS idx_recs_student ON ai_parent_recommendations(student_id);
 
+-- ========================================================
+-- PAYROLL MANAGEMENT & BULK SALARY DISBURSEMENT (PAYSTACK)
+-- ========================================================
+
+CREATE TABLE IF NOT EXISTS staff_salary_structures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  staff_id INTEGER UNIQUE NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  base_salary REAL NOT NULL DEFAULT 65000,
+  housing_allowance REAL DEFAULT 15000,
+  transport_allowance REAL DEFAULT 10000,
+  teaching_allowance REAL DEFAULT 10000,
+  tax_deduction REAL DEFAULT 5000,
+  pension_deduction REAL DEFAULT 3500,
+  other_deductions REAL DEFAULT 0,
+  net_salary REAL NOT NULL DEFAULT 91500,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_bank_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  staff_id INTEGER UNIQUE NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  bank_name TEXT NOT NULL,           -- e.g. 'Guaranty Trust Bank', 'Zenith Bank', 'First Bank'
+  bank_code TEXT NOT NULL,           -- NIBSS bank code, e.g. '058', '057', '011'
+  account_number TEXT NOT NULL,      -- 10-digit NUBAN
+  account_name TEXT NOT NULL,        -- Account name verified from NIBSS/Paystack
+  paystack_recipient_code TEXT,      -- Paystack transfer recipient code e.g. RCP_xxxxxx
+  is_verified INTEGER DEFAULT 1,     -- 1 if verified via NIBSS/Paystack resolve
+  verified_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payroll_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_code TEXT UNIQUE NOT NULL,   -- e.g. PAY-2026-10-OCT
+  month_year TEXT NOT NULL,          -- e.g. 'October 2026'
+  period_start TEXT,
+  period_end TEXT,
+  total_staff INTEGER DEFAULT 0,
+  total_gross REAL DEFAULT 0,
+  total_deductions REAL DEFAULT 0,
+  total_net_payout REAL DEFAULT 0,
+  status TEXT DEFAULT 'Draft' CHECK(status IN ('Draft', 'Approved', 'Processing', 'Disbursed', 'Partially_Failed', 'Cancelled')),
+  paystack_batch_code TEXT,          -- Paystack bulk transfer reference/batch code
+  created_by TEXT DEFAULT 'Bursar',
+  approved_by TEXT,
+  disbursed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payroll_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES payroll_batches(id) ON DELETE CASCADE,
+  staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  base_salary REAL NOT NULL,
+  total_allowances REAL DEFAULT 0,
+  total_deductions REAL DEFAULT 0,
+  net_amount REAL NOT NULL,
+  bank_name TEXT NOT NULL,
+  bank_code TEXT NOT NULL,
+  account_number TEXT NOT NULL,
+  account_name TEXT NOT NULL,
+  transfer_reference TEXT UNIQUE,    -- e.g. TRF-PAY-2026-10-STF01
+  paystack_transfer_code TEXT,       -- e.g. TRF_xxxxxxxx
+  status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Queued', 'Success', 'Failed', 'Reversed')),
+  failure_reason TEXT,
+  disbursed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_payroll_batch ON payroll_items(batch_id);
+CREATE INDEX IF NOT EXISTS idx_payroll_staff ON payroll_items(staff_id);
+CREATE INDEX IF NOT EXISTS idx_salary_staff ON staff_salary_structures(staff_id);
+CREATE INDEX IF NOT EXISTS idx_bank_staff ON staff_bank_accounts(staff_id);
+
+-- Institutional System Configuration Table
+CREATE TABLE IF NOT EXISTS system_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  school_name TEXT DEFAULT 'Eagle Power Schools Awka',
+  school_motto TEXT DEFAULT 'Love, Truth & Service',
+  current_session TEXT DEFAULT '2024/2025',
+  current_term TEXT DEFAULT 'Second Term',
+  next_resumption_date TEXT DEFAULT '2025-05-05',
+  active_report_template TEXT DEFAULT 'classic_british',
+  principal_name TEXT DEFAULT 'Adaeze Uzoefuna',
+  logo_url TEXT DEFAULT '/assets/official-logo.jpg',
+  contact_phone TEXT DEFAULT '+234 803 359 1058',
+  contact_email TEXT DEFAULT 'info@eaglepowerschools.com.ng',
+  address TEXT DEFAULT '2 & 9 Amikwo Road, Awka, Anambra State',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed initial configuration if not present
+INSERT OR IGNORE INTO system_settings (id, current_session, current_term, next_resumption_date)
+VALUES (1, '2024/2025', 'Second Term', '2025-05-05');
+
+-- WhatsApp Broadcast & Notification Log
+CREATE TABLE IF NOT EXISTS whatsapp_broadcast_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  broadcast_type TEXT NOT NULL DEFAULT 'ALL',
+  target_audience TEXT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  recipient_count INTEGER DEFAULT 0,
+  dispatched_by TEXT NOT NULL,
+  status TEXT DEFAULT 'SENT',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+

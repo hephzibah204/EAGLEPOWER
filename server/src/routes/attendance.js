@@ -75,18 +75,21 @@ router.post('/students/batch', authenticate, requireRoles('superadmin', 'admin',
     `);
 
     let updatedCount = 0;
-    for (const item of records) {
-      if (!item.student_id || !item.status) continue;
-      upsertStmt.run(
-        item.student_id,
-        parseInt(class_id),
-        date,
-        item.status,
-        item.remarks || null,
-        recorded_by
-      );
-      updatedCount++;
-    }
+    const recordBatch = db.transaction(() => {
+      for (const item of records) {
+        if (!item.student_id || !item.status) continue;
+        upsertStmt.run(
+          item.student_id,
+          parseInt(class_id),
+          date,
+          item.status,
+          item.remarks || null,
+          recorded_by
+        );
+        updatedCount++;
+      }
+    });
+    recordBatch();
 
     logAudit(req.user?.id || 'system', 'RECORD_STUDENT_ATTENDANCE', 'student_attendance', {
       class_id,

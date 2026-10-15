@@ -165,19 +165,19 @@ You can talk to me like a human! Try: _"Where is the school located?"_, _"How mu
         const staffNo = parts[1];
         const staff = getStaffByPhoneOrNumber(staffNo || senderPhone);
 
-        if (!staff && !staffNo) {
+        if (!staff) {
           await sock.sendMessage(
             senderJid,
             {
-              text: `⚠️ Your WhatsApp phone (*${senderPhone}*) is not linked to a staff profile.\nPlease type: *!clockin <STAFF_NO>* (e.g. \`!clockin EPS-STF-01\`)`,
+              text: `⚠️ *Clock-in Error:* No active staff profile found matching ${staffNo || senderPhone}. Please message from your registered phone number or provide your official staff ID (e.g. \`!clockin EPS-STF-01\`).`,
             },
             { quoted: msg }
           );
           continue;
         }
 
-        const staffId = staff ? staff.id : 1;
-        const name = staff ? staff.name : staffNo || senderName;
+        const staffId = staff.id;
+        const name = staff.name;
         const result = recordStaffClockIn(staffId, name);
 
         await sock.sendMessage(
@@ -195,8 +195,19 @@ You can talk to me like a human! Try: _"Where is the school located?"_, _"How mu
         const staffNo = parts[1];
         const staff = getStaffByPhoneOrNumber(staffNo || senderPhone);
 
-        const staffId = staff ? staff.id : 1;
-        const name = staff ? staff.name : staffNo || senderName;
+        if (!staff) {
+          await sock.sendMessage(
+            senderJid,
+            {
+              text: `⚠️ *Clock-out Error:* No active staff profile found matching ${staffNo || senderPhone}. Please message from your registered phone number.`,
+            },
+            { quoted: msg }
+          );
+          continue;
+        }
+
+        const staffId = staff.id;
+        const name = staff.name;
         const result = recordStaffClockOut(staffId);
 
         await sock.sendMessage(
@@ -206,6 +217,18 @@ You can talk to me like a human! Try: _"Where is the school located?"_, _"How mu
           },
           { quoted: msg }
         );
+      }
+
+      // Check Staff Permissions for Teacher Commands
+      else if (/^\s*!(mark|batch|score|scores|class|homework)\b/i.test(cleanText) && !getStaffByPhoneOrNumber(senderPhone)) {
+        await sock.sendMessage(
+          senderJid,
+          {
+            text: `⛔ *Access Restricted:*\nThis command is only authorized for registered Eagle Power teachers and administrators. Your phone number (+${senderPhone}) is not recognized in the school staff roster.`
+          },
+          { quoted: msg }
+        );
+        continue;
       }
 
       // 4. MARK STUDENT ATTENDANCE
@@ -433,6 +456,26 @@ Please contact the school office if you require clarification.`;
         if (summary.error) {
           await sock.sendMessage(senderJid, { text: `❌ ${summary.error}` }, { quoted: msg });
         } else {
+          // Verify identity: caller must be a staff member or the student's registered guardian
+          const staff = getStaffByPhoneOrNumber(senderPhone);
+          const cleanGuardianPhone = (summary.guardianPhone || '').replace(/\D/g, '');
+          const cleanSender = (senderPhone || '').replace(/\D/g, '');
+          const isGuardian = Boolean(
+            cleanGuardianPhone && cleanSender && 
+            (cleanGuardianPhone.includes(cleanSender.slice(-7)) || cleanSender.includes(cleanGuardianPhone.slice(-7)))
+          );
+
+          if (!staff && !isGuardian) {
+            await sock.sendMessage(
+              senderJid,
+              {
+                text: `🔒 *Access Restricted:*\nStudent academic profiles and financial summaries are private. Only verified teachers and registered guardians may access this information.`
+              },
+              { quoted: msg }
+            );
+            continue;
+          }
+
           const text = 
 `👤 *Student Profile: ${summary.name}*
 • Admission No: \`${summary.admissionNo}\`

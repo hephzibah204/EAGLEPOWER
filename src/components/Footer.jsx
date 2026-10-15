@@ -162,14 +162,14 @@ export default function Footer({ onOpenAdmission, onOpenPortal }) {
                 </button>
               </li>
               <li>
-                <a href="#tuition" onClick={() => scrollTo('#tuition')} className="hover:text-amber-400 transition-colors block">
-                  Tuition Estimator
+                <a href="#why-us" onClick={() => scrollTo('#why-us')} className="hover:text-amber-400 transition-colors block">
+                  Why Choose Us
                 </a>
               </li>
               <li>
-                <button onClick={onOpenPortal} className="hover:text-amber-400 transition-colors text-left">
+                <a href="/portal/overview" className="hover:text-amber-400 transition-colors block">
                   Parent / Student Portal
-                </button>
+                </a>
               </li>
               <li>
                 <a href="#campus" onClick={() => scrollTo('#campus')} className="hover:text-amber-400 transition-colors block">

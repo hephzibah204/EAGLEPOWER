@@ -5,6 +5,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
+RUN npm run build:vite
 RUN npm run build
 
 # Stage 2: Production Server Runtime
@@ -21,8 +22,9 @@ RUN npm ci --only=production --no-audit --no-fund
 COPY server/src ./src
 COPY server/ecosystem.config.cjs ./
 
-# Copy compiled frontend build from Stage 1 into /app/dist
+# Copy compiled frontend builds from Stage 1 into /app/dist and /app/out
 COPY --from=frontend-builder /app/dist /app/dist
+COPY --from=frontend-builder /app/out /app/out
 
 # Expose port
 EXPOSE 5050

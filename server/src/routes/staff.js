@@ -182,38 +182,49 @@ router.put('/:id', authenticate, requireRoles('admin', 'superadmin'), (req, res,
       return res.status(404).json({ success: false, message: 'Staff member not found.' });
     }
 
+    const newName = name !== undefined ? (name ? name.trim() : existing.name) : existing.name;
+    const newRole = role !== undefined ? (role ? role.trim() : existing.role) : existing.role;
+    const newEmail = email !== undefined ? (email ? email.trim() : null) : existing.email;
+    const newPhone = phone !== undefined ? (phone ? phone.trim() : null) : existing.phone;
+    const newQual = qualification !== undefined ? (qualification ? qualification.trim() : null) : existing.qualification;
+    const newAssignedClass = assigned_class !== undefined ? (assigned_class ? assigned_class.trim() : null) : existing.assigned_class;
+    const newIsActive = is_active !== undefined ? is_active : existing.is_active;
+
     const stmt = db.prepare(`
       UPDATE staff SET
-        name = COALESCE(?, name),
-        role = COALESCE(?, role),
-        email = COALESCE(?, email),
-        phone = COALESCE(?, phone),
-        qualification = COALESCE(?, qualification),
-        assigned_class = COALESCE(?, assigned_class),
-        is_active = COALESCE(?, is_active)
+        name = ?,
+        role = ?,
+        email = ?,
+        phone = ?,
+        qualification = ?,
+        assigned_class = ?,
+        is_active = ?
       WHERE id = ?
     `);
 
-    const cleanAssignedClass = assigned_class !== undefined ? (assigned_class ? assigned_class.trim() : null) : null;
-
     stmt.run(
-      name ? name.trim() : null,
-      role ? role.trim() : null,
-      email ? email.trim() : null,
-      phone ? phone.trim() : null,
-      qualification ? qualification.trim() : null,
-      cleanAssignedClass,
-      is_active !== undefined ? is_active : null,
+      newName,
+      newRole,
+      newEmail,
+      newPhone,
+      newQual,
+      newAssignedClass,
+      newIsActive,
       req.params.id
     );
 
-    // If assigned_class matches an existing class in classes table, link it
-    if (cleanAssignedClass) {
-      db.prepare(`
-        UPDATE classes 
-        SET class_teacher_id = ? 
-        WHERE name = ? OR name = ?
-      `).run(req.params.id, cleanAssignedClass, cleanAssignedClass.replace(/Junior College |Senior College |Nursery |Primary /i, ''));
+    // Sync classes table class_teacher_id
+    if (assigned_class !== undefined) {
+      if (newAssignedClass) {
+        db.prepare(`
+          UPDATE classes 
+          SET class_teacher_id = ? 
+          WHERE name = ? OR name = ?
+        `).run(req.params.id, newAssignedClass, newAssignedClass.replace(/Junior College |Senior College |Nursery |Primary /i, ''));
+      } else {
+        // Teacher unassigned from class
+        db.prepare(`UPDATE classes SET class_teacher_id = NULL WHERE class_teacher_id = ?`).run(req.params.id);
+      }
     }
 
     logAudit(req.user.id, 'UPDATE_STAFF', 'STAFF', `Updated staff record for ID ${req.params.id}`, req.ip);

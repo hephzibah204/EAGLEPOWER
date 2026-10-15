@@ -128,11 +128,11 @@ export default function AcademicsSection({ onOpenAdmission }) {
               </button>
               
               <a
-                href="#tuition"
+                href="#contact"
                 className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
               >
                 <FileText className="w-4 h-4 text-slate-600" />
-                <span>View Termly Fees</span>
+                <span>Admissions Inquiries</span>
               </a>
             </div>
 

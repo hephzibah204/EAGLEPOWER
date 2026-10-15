@@ -45,13 +45,28 @@ async function runTests() {
   // 2. Pre-seeded Logins for All Institutional Roles
   console.log('\n--- 1. Testing Pre-seeded Login Endpoints ---');
 
-  // 2a. SuperAdmin Login
-  const superLogin = await request('/auth/login', {
+  // 2a. SuperAdmin Dedicated Executive Login
+  const superExecLogin = await request('/auth/executive-login', {
     method: 'POST',
-    body: JSON.stringify({ username: 'superadmin', password: 'EagleSuperAdmin2025!' })
+    body: JSON.stringify({ username: 'superadmin', password: 'EagleSuperAdmin2025!', security_key: 'EP-ROOT-ALPHA-01' })
   });
-  assert(superLogin.ok && superLogin.data.user.role === 'superadmin', 'SuperAdmin Login (superadmin)');
-  const superToken = superLogin.data.token;
+  assert(superExecLogin.ok && superExecLogin.data.user.role === 'superadmin', 'SuperAdmin Dedicated Executive Login (/auth/executive-login)');
+  const superToken = superExecLogin.data.token;
+
+  // 2a-2. SuperAdmin Rejected from Public Portal Login
+  const superPublicBlocked = await request('/auth/login', {
+    method: 'POST',
+    headers: { 'x-portal-type': 'public' },
+    body: JSON.stringify({ username: 'superadmin', password: 'EagleSuperAdmin2025!', portal_source: 'public' })
+  });
+  assert(superPublicBlocked.status === 403 && superPublicBlocked.data.is_superadmin === true, 'SuperAdmin Blocked from Public Portal Login (403 Forbidden with Executive Guidance)');
+
+  // 2a-3. Non-SuperAdmin Rejected from Executive Console Login
+  const teacherExecBlocked = await request('/auth/executive-login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'teacher', password: 'Teacher2025!' })
+  });
+  assert(teacherExecBlocked.status === 403, 'Teacher Blocked from Executive Console (403 Forbidden)');
 
   // 2b. Principal / Admin Login
   const adminLogin = await request('/auth/login', {
@@ -67,6 +82,7 @@ async function runTests() {
     body: JSON.stringify({ username: 'teacher', password: 'Teacher2025!' })
   });
   assert(teacherLogin.ok && teacherLogin.data.user.role === 'teacher', 'Teacher Login (teacher)');
+  const teacherToken = teacherLogin.data.token;
 
   // 2d. Bursar Login
   const bursarLogin = await request('/auth/login', {
@@ -93,12 +109,13 @@ async function runTests() {
   const testParentUsername = `parent_test_${Date.now()}`;
   const parentReg = await request('/auth/register', {
     method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}` },
     body: JSON.stringify({
       username: testParentUsername,
       password: 'SecureParent2025!',
       full_name: 'Chief Emeka Nnamdi',
       email: `${testParentUsername}@gmail.com`,
-      phone: '08037098816',
+      phone: '07066397577', // Verified guardian phone for ESE2009012 in database
       role: 'parent',
       reference_id: 'ESE2009012' // Linked child admission number
     })
@@ -315,6 +332,7 @@ async function runTests() {
   // Duplicate registration
   const dupReg = await request('/auth/register', {
     method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}` },
     body: JSON.stringify({
       username: testParentUsername,
       password: 'AnotherPassword123!',
@@ -327,6 +345,7 @@ async function runTests() {
   // Registering parent with non-existent student admission number
   const fakeChild = await request('/auth/register', {
     method: 'POST',
+    headers: { Authorization: `Bearer ${adminToken}` },
     body: JSON.stringify({
       username: `parent_fake_${Date.now()}`,
       password: 'AnotherPassword123!',
@@ -336,6 +355,35 @@ async function runTests() {
     })
   });
   assert(fakeChild.status === 404, 'Rejection of parent registration for non-existent child (404 Not Found)');
+
+  // 7. Testing Dedicated Executive Security Console Endpoints
+  console.log('\n--- 7. Testing SuperAdmin Executive Security Console Endpoints ---');
+
+  // 7a. Executive Stats Matrix
+  const execStats = await request('/executive/stats', {
+    headers: { Authorization: `Bearer ${superToken}` }
+  });
+  assert(execStats.ok && execStats.data.system && execStats.data.database, 'SuperAdmin Master Stats Retrieval (/executive/stats)');
+  assert(execStats.data.ai_engine.curriculum_subjects_supported === 27, 'AI Engine 27 Curriculum Subjects Verified in Telemetry');
+
+  // 7b. Executive Audit Logs
+  const execAudit = await request('/executive/audit-logs?limit=10', {
+    headers: { Authorization: `Bearer ${superToken}` }
+  });
+  assert(execAudit.ok && Array.isArray(execAudit.data.logs), 'SuperAdmin Audit Trail Query (/executive/audit-logs)');
+
+  // 7c. Executive Atomic Database Snapshot Trigger
+  const execBackup = await request('/executive/backup', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${superToken}` }
+  });
+  assert(execBackup.ok && execBackup.data.backup && execBackup.data.backup.size_kb > 0, 'SuperAdmin Atomic Database Snapshot Trigger (/executive/backup)');
+
+  // 7d. Unauthorized Access to Executive Route by Non-SuperAdmin
+  const teacherBlockedExec = await request('/executive/stats', {
+    headers: { Authorization: `Bearer ${teacherToken}` }
+  });
+  assert(teacherBlockedExec.status === 403, 'Non-SuperAdmin Blocked from Executive Endpoints (403 Forbidden)');
 
   console.log('\n========================================');
   console.log(`📊 Test Results: ${testsPassed} Passed, ${testsFailed} Failed`);

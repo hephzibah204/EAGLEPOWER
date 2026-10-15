@@ -30,6 +30,10 @@ export default function ExecutiveReportingCockpit({ authToken }) {
   const [activeSection, setActiveSection] = useState('overview'); // 'overview', 'academics', 'finance', 'operations'
   const [divisionFilter, setDivisionFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isPrinting, setIsPrinting] = useState(false);
+
+  // Fallback token resolution for robustness
+  const effectiveToken = authToken || (typeof window !== 'undefined' ? (localStorage.getItem('eagle_token') || localStorage.getItem('token')) : '');
 
   // Loaded Reporting Data
   const [summaryData, setSummaryData] = useState(null);
@@ -44,7 +48,7 @@ export default function ExecutiveReportingCockpit({ authToken }) {
     setLoading(true);
     try {
       const apiBase = getApiBase();
-      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const headers = effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {};
       
       const [sumRes, acadRes, finRes, opsRes] = await Promise.all([
         fetch(`${apiBase}/reports/executive-summary?session=${encodeURIComponent(selectedSession)}&term=${encodeURIComponent(selectedTerm)}`, { headers }),
@@ -74,7 +78,7 @@ export default function ExecutiveReportingCockpit({ authToken }) {
     } finally {
       setLoading(false);
     }
-  }, [authToken, selectedSession, selectedTerm]);
+  }, [effectiveToken, selectedSession, selectedTerm]);
 
   useEffect(() => {
     fetchReports();
@@ -272,17 +276,17 @@ export default function ExecutiveReportingCockpit({ authToken }) {
           </div>
           <div className="my-2">
             <div className="text-3xl font-black text-white">
-              {enrollment.total || 96} <span className="text-xs font-normal text-slate-400">Pupils</span>
+              {enrollment.total ?? 0} <span className="text-xs font-normal text-slate-400">Pupils</span>
             </div>
             <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-1">
-              <span>👦 {enrollment.male || 52} Boys</span>
+              <span>👦 {enrollment.male ?? 0} Boys</span>
               <span>&bull;</span>
-              <span>👧 {enrollment.female || 44} Girls</span>
+              <span>👧 {enrollment.female ?? 0} Girls</span>
             </div>
           </div>
           <div className="pt-2 border-t border-slate-900 flex justify-between text-[10px] text-slate-400">
-            <span>Staff Ratio: <strong className="text-slate-200">{enrollment.teacher_student_ratio || '1:14'}</strong></span>
-            <span><strong className="text-slate-200">{enrollment.class_count || 16}</strong> Classes</span>
+            <span>Staff Ratio: <strong className="text-slate-200">{enrollment.teacher_student_ratio || '1:1'}</strong></span>
+            <span><strong className="text-slate-200">{enrollment.class_count ?? 0}</strong> Classes</span>
           </div>
         </div>
 
@@ -294,17 +298,17 @@ export default function ExecutiveReportingCockpit({ authToken }) {
           </div>
           <div className="my-2">
             <div className="text-3xl font-black text-emerald-400">
-              {academic.school_average || 68.2}% <span className="text-xs font-normal text-slate-400">GPA</span>
+              {academic.school_average ?? 0}% <span className="text-xs font-normal text-slate-400">GPA</span>
             </div>
             <div className="flex items-center gap-2 text-[11px] text-slate-400 mt-1">
-              <span className="text-emerald-400 font-bold">{academic.pass_rate || 85}% Pass Rate</span>
+              <span className="text-emerald-400 font-bold">{academic.pass_rate ?? 0}% Pass Rate</span>
               <span>&bull;</span>
-              <span className="text-amber-400 font-bold">{academic.distinction_rate || 35}% Dist.</span>
+              <span className="text-amber-400 font-bold">{academic.distinction_rate ?? 0}% Dist.</span>
             </div>
           </div>
           <div className="pt-2 border-t border-slate-900 flex justify-between text-[10px] text-slate-400">
-            <span>Grades Evaluated: <strong className="text-slate-200">{academic.total_marks_recorded || 200}</strong></span>
-            <span className="text-red-400">Failures: {academic.failure_rate || 15}%</span>
+            <span>Grades Evaluated: <strong className="text-slate-200">{academic.total_marks_recorded ?? 0}</strong></span>
+            <span className="text-red-400">Failures: {academic.failure_rate ?? 0}%</span>
           </div>
         </div>
 
@@ -316,15 +320,15 @@ export default function ExecutiveReportingCockpit({ authToken }) {
           </div>
           <div className="my-2">
             <div className="text-3xl font-black text-amber-400">
-              {financial.collection_rate || 63}% <span className="text-xs font-normal text-slate-400">Collected</span>
+              {financial.collection_rate ?? 0}% <span className="text-xs font-normal text-slate-400">Collected</span>
             </div>
             <div className="text-[11px] text-slate-400 mt-1 truncate">
-              Collected: <strong className="text-slate-200">₦{(financial.total_collected || 850000).toLocaleString()}</strong>
+              Collected: <strong className="text-slate-200">₦{Number(financial.total_collected ?? 0).toLocaleString()}</strong>
             </div>
           </div>
           <div className="pt-2 border-t border-slate-900 flex justify-between text-[10px] text-slate-400">
             <span>Outstanding Debt:</span>
-            <span className="text-red-400 font-bold">₦{(financial.outstanding_debt || 500000).toLocaleString()}</span>
+            <span className="text-red-400 font-bold">₦{Number(financial.outstanding_debt ?? 0).toLocaleString()}</span>
           </div>
         </div>
 

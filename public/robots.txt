@@ -1,0 +1,25 @@
+# Robots.txt for Eagle Power Schools (EduCore Portal & Main Site)
+# https://www.eaglepowerschools.com.ng
+
+User-agent: *
+Allow: /
+Allow: /#home
+Allow: /#about
+Allow: /#academics
+Allow: /#admissions
+Allow: /#campus-life
+Allow: /#news
+Allow: /#testimonials
+Allow: /#faq
+Allow: /#contact
+Allow: /assets/
+Allow: /favicon.svg
+Allow: /site.webmanifest
+
+# Disallow internal backend APIs and authenticated portal dashboards from public crawler indexing
+Disallow: /api/
+Disallow: /portal
+Disallow: /admin
+
+# Canonical XML Sitemap
+Sitemap: https://www.eaglepowerschools.com.ng/sitemap.xml

@@ -3,8 +3,10 @@ import db from '../config/db.js';
 
 export const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'eaglepower_secure_jwt_token_secret_key_2025_amikwo');
 
-if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
-  throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing in production environment.');
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET.includes('eaglepower_secure_jwt')) {
+    throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing, too short (< 32 characters), or using default development secret in production.');
+  }
 }
 
 /**

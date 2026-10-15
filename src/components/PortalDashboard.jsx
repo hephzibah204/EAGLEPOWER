@@ -1142,13 +1142,6 @@ export default function PortalDashboard({
     const u = customUser || loginUsername;
     const p = customPass || loginPassword;
 
-    // Client-side guard: Prevent SuperAdmin from using public portal login (unless on dedicated Executive Console)
-    if (!isExecutive && u.trim().toLowerCase() === 'superadmin') {
-      setLoginLoading(false);
-      setLoginError('SuperAdmin accounts are restricted from the public portal. Please access the dedicated Executive Security Console at /executive-console.');
-      return;
-    }
-
     try {
       const loginUrl = isExecutive 
         ? `${API_BASE}/auth/executive-login` 
@@ -1183,11 +1176,7 @@ export default function PortalDashboard({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.token) {
-        if (data.is_superadmin && !isExecutive) {
-          setLoginError('SuperAdmin accounts are restricted from the public portal. Please access the dedicated Executive Security Console at /executive-console.');
-        } else {
-          setLoginError(data.message || 'Login failed. Please verify credentials.');
-        }
+        setLoginError(data.message || 'Login failed. Please verify credentials.');
         return;
       }
 
@@ -1909,15 +1898,6 @@ export default function PortalDashboard({
                     <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
                     <span className="leading-relaxed">{loginError}</span>
                   </div>
-                  {!isExecutive && loginError.includes('/executive-console') && (
-                    <a
-                      href="/executive-console"
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-lg text-xs self-start transition-all shadow"
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Launch Dedicated Executive Console &rarr;</span>
-                    </a>
-                  )}
                 </div>
               )}
               <div>

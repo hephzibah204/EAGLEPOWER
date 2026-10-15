@@ -3,7 +3,9 @@ import db from '../config/db.js';
 import { authenticate, requireRoles } from '../middleware/auth.js';
 import { 
   analyzeStudentProgress, 
-  generateParentRecommendations 
+  generateParentRecommendations,
+  askSchoolAi,
+  generateAiReportComments
 } from '../services/inHouseAi.js';
 
 const router = express.Router();
@@ -140,6 +142,62 @@ router.get('/class/:classId/summary', authenticate, requireRoles('teacher', 'adm
       class_id: req.params.classId,
       student_count: summaries.length,
       data: summaries
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * 4. POST /api/progress/ask-ai
+ * In-House AI Academic Tutor & Universal School Inquiry Engine (Authenticated)
+ */
+router.post('/ask-ai', authenticate, (req, res, next) => {
+  try {
+    const { question, student_id } = req.body;
+    if (!question || typeof question !== 'string' || question.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Question prompt is required.'
+      });
+    }
+
+    const aiResponse = askSchoolAi(question.trim(), { user: req.user, studentId: student_id });
+    res.json({
+      success: true,
+      data: aiResponse
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * 5. POST /api/progress/report-comments
+ * Autonomous AI Report Card Comment Synthesis (Teacher/Admin/Superadmin)
+ */
+router.post('/report-comments', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (req, res, next) => {
+  try {
+    const { student_id, student: rawStudent, average, attendance, traits, psychomotor, position, class_size } = req.body;
+
+    let student = rawStudent;
+    if (!student && student_id) {
+      student = db.prepare('SELECT id, first_name, last_name, admission_no, division FROM students WHERE id = ?').get(parseInt(student_id));
+    }
+
+    const comments = generateAiReportComments({
+      student: student || { first_name: 'The student' },
+      average,
+      attendance,
+      traits,
+      psychomotor,
+      position,
+      classSize: class_size
+    });
+
+    res.json({
+      success: true,
+      data: comments
     });
   } catch (err) {
     next(err);

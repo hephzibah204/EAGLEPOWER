@@ -8,7 +8,8 @@ import {
   Share2, 
   ChevronLeft, 
   Loader2,
-  ArrowUpDown
+  ArrowUpDown,
+  Sparkles
 } from 'lucide-react';
 import { EliteModernTemplate } from './EliteModernTemplate';
 import { CherithClassicTemplate } from './CherithClassicTemplate';
@@ -19,7 +20,8 @@ import { NurseryColorfulTemplate } from './NurseryColorfulTemplate';
 import ShareReportModal from './ShareReportModal';
 import { getApiBase } from '../../config/api';
 
-export default function BroadsheetView({ _token, _userRole = 'admin' }) {
+export default function BroadsheetView({ token: propToken, _token, userRole = 'admin', _userRole }) {
+  const authToken = propToken || _token || (typeof window !== 'undefined' ? (localStorage.getItem('eagle_token') || localStorage.getItem('token') || '') : '');
   const [classes, setClasses] = useState([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [selectedSession, setSelectedSession] = useState('2024/2025');
@@ -45,10 +47,13 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
   const [bulkLoading, setBulkLoading] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [sharingStudent, setSharingStudent] = useState(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiSuccessMessage, setAiSuccessMessage] = useState('');
 
   // Load available classes
   useEffect(() => {
-    fetch(`${getApiBase()}/academics/classes`)
+    const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+    fetch(`${getApiBase()}/academics/classes`, { headers })
       .then(res => res.json())
       .then(data => {
         if (data.success && data.data.length > 0) {
@@ -57,14 +62,15 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
         }
       })
       .catch(_err => console.error('Failed to load classes:', _err));
-  }, []);
+  }, [authToken]);
 
   // Fetch broadsheet when class, session or term changes
   useEffect(() => {
     if (!selectedClassId) return;
     setLoading(true);
     setError('');
-    fetch(`${getApiBase()}/exams/class-broadsheet?class_id=${selectedClassId}&session=${encodeURIComponent(selectedSession)}&term=${encodeURIComponent(selectedTerm)}`)
+    const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+    fetch(`${getApiBase()}/exams/class-broadsheet?class_id=${selectedClassId}&session=${encodeURIComponent(selectedSession)}&term=${encodeURIComponent(selectedTerm)}`, { headers })
       .then(res => res.json())
       .then(data => {
         if (data.success) {
@@ -77,7 +83,7 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
         setError('Network error loading broadsheet.');
       })
       .finally(() => setLoading(false));
-  }, [selectedClassId, selectedSession, selectedTerm]);
+  }, [selectedClassId, selectedSession, selectedTerm, authToken]);
 
   // Auto-switch template if class is Nursery or Primary
   useEffect(() => {
@@ -177,7 +183,8 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
   const handleViewStudentReport = async (admissionNo) => {
     setLoading(true);
     try {
-      const res = await fetch(`${getApiBase()}/exams/report-card/${encodeURIComponent(admissionNo)}?session=${encodeURIComponent(selectedSession)}&term=${encodeURIComponent(selectedTerm)}`);
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${getApiBase()}/exams/report-card/${encodeURIComponent(admissionNo)}?session=${encodeURIComponent(selectedSession)}&term=${encodeURIComponent(selectedTerm)}`, { headers });
       const data = await res.json();
       if (data.success) {
         setSingleStudent(data.standard_report);
@@ -196,7 +203,8 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
     if (!selectedClassId) return;
     setBulkLoading(true);
     try {
-      const res = await fetch(`${getApiBase()}/exams/class-reports/${selectedClassId}?session=${encodeURIComponent(selectedSession)}&term=${encodeURIComponent(selectedTerm)}`);
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${getApiBase()}/exams/class-reports/${selectedClassId}?session=${encodeURIComponent(selectedSession)}&term=${encodeURIComponent(selectedTerm)}`, { headers });
       const data = await res.json();
       if (data.success && data.data.length > 0) {
         setBulkReports(data.data);
@@ -208,6 +216,43 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
       alert('Error loading bulk class reports.');
     } finally {
       setBulkLoading(false);
+    }
+  };
+
+  // Batch Generate AI Remarks for Class
+  const handleBatchGenerateAiRemarks = async (overwrite = false) => {
+    if (!selectedClassId) return;
+    if (overwrite && !window.confirm('Are you sure you want to overwrite existing teacher and principal remarks for all students in this class?')) {
+      return;
+    }
+    setAiGenerating(true);
+    setAiSuccessMessage('');
+    try {
+      const res = await fetch(`${getApiBase()}/exams/batch-generate-ai-comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+        },
+        body: JSON.stringify({
+          class_id: selectedClassId,
+          session: selectedSession,
+          term: selectedTerm,
+          overwrite
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAiSuccessMessage(`✨ Success! Generated remarks for ${data.generated_count} students (${data.skipped_count} skipped/already had remarks).`);
+        setTimeout(() => setAiSuccessMessage(''), 7000);
+      } else {
+        alert(data.message || 'Failed to auto-generate remarks.');
+      }
+    } catch (err) {
+      console.error('Batch AI comments error:', err);
+      alert('Network error while generating AI comments.');
+    } finally {
+      setAiGenerating(false);
     }
   };
 
@@ -454,7 +499,7 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
 
         {/* Action Buttons Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-4 pt-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={handleExportCSV}
               disabled={!broadsheet || filteredStudents.length === 0}
@@ -469,6 +514,16 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
             >
               <Printer className="w-4 h-4 text-slate-600" /> Print Table
             </button>
+
+            <button
+              onClick={() => handleBatchGenerateAiRemarks(false)}
+              disabled={aiGenerating || !broadsheet || filteredStudents.length === 0}
+              className="px-4 py-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 shadow-sm"
+              title="Auto-generate pedagogical teacher remarks, principal endorsements, and promotion recommendations based on exam performance, positions, and attendance."
+            >
+              {aiGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 text-amber-300" />}
+              <span>{aiGenerating ? 'AI Generating Remarks...' : '✨ Auto-Generate AI Remarks'}</span>
+            </button>
           </div>
 
           <button
@@ -480,6 +535,18 @@ export default function BroadsheetView({ _token, _userRole = 'admin' }) {
             <span>Bulk Print All Class Reports ({filteredStudents.length} Students)</span>
           </button>
         </div>
+
+        {aiSuccessMessage && (
+          <div className="mt-3 p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold flex items-center justify-between animate-fade-in">
+            <span>{aiSuccessMessage}</span>
+            <button 
+              onClick={() => setAiSuccessMessage('')}
+              className="text-emerald-600 hover:text-emerald-900 font-black text-xs ml-4"
+            >
+              ✕
+            </button>
+          </div>
+        )}
       </div>
 
       {/* KPI Stats Strip */}

@@ -2,7 +2,6 @@ import React from 'react';
 import { 
   Sparkles, 
   ArrowRight, 
-  Calculator, 
   CheckCircle2, 
   BookOpen, 
   Compass,
@@ -56,19 +55,11 @@ export default function Hero({ onOpenAdmission }) {
               </button>
 
               <button
-                onClick={() => scrollTo('#tuition')}
+                onClick={() => scrollTo('#academics')}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl backdrop-blur-sm transition-all"
               >
-                <Calculator className="w-4 h-4 text-amber-400" />
-                <span>Calculate Tuition</span>
-              </button>
-
-              <button
-                onClick={() => scrollTo('#academics')}
-                className="inline-flex items-center justify-center gap-2 px-5 py-3.5 text-sm font-semibold text-slate-300 hover:text-white transition-colors"
-              >
                 <Compass className="w-4 h-4 text-amber-400" />
-                <span>Explore Wings</span>
+                <span>Explore Academic Wings</span>
               </button>
             </div>
 

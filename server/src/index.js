@@ -13,8 +13,16 @@ const distPath = path.resolve(__dirname, '../../dist');
 const outPath = path.resolve(__dirname, '../../out');
 const staticPath = fs.existsSync(outPath) ? outPath : (fs.existsSync(distPath) ? distPath : null);
 
-// Load environment variables
-dotenv.config();
+// Load environment variables reliably from server/.env or root .env
+const serverEnv = path.resolve(__dirname, '../.env');
+const rootEnv = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(serverEnv)) {
+  dotenv.config({ path: serverEnv });
+} else if (fs.existsSync(rootEnv)) {
+  dotenv.config({ path: rootEnv });
+} else {
+  dotenv.config();
+}
 
 // Initialize database
 import db from './config/db.js';
@@ -33,6 +41,14 @@ import reportsRoutes from './routes/reports.js';
 import attendanceRoutes from './routes/attendance.js';
 import homeworkRoutes from './routes/homework.js';
 import progressRoutes from './routes/progress.js';
+import payrollRoutes from './routes/payroll.js';
+import executiveRoutes from './routes/executive.js';
+import systemRoutes from './routes/system.js';
+import usersRoutes from './routes/users.js';
+
+// Security Middlewares
+import { threatDefense } from './middleware/threatDefense.js';
+import { inputSanitizer } from './middleware/sanitizer.js';
 
 // Error Handler
 import { errorHandler } from './middleware/errorHandler.js';
@@ -40,12 +56,40 @@ import { errorHandler } from './middleware/errorHandler.js';
 const app = express();
 const PORT = process.env.PORT || 5050;
 
+// Obscure tech stack: disable X-Powered-By
+app.disable('x-powered-by');
+
+// Active Threat Defense Firewall: Blocks automated exploit scanners, null bytes & path traversal
+app.use(threatDefense);
+
 // Enable trust proxy for accurate rate-limiting behind reverse proxies (Nginx, Cloudflare)
 app.set('trust proxy', 1);
 
-// Security Middleware: Helmet HTTP Headers
+// Security Middleware: Fortified Helmet HTTP Headers & Content Security Policy
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' }
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      connectSrc: ["'self'", "http://localhost:*", "ws:", "wss:", "https://api.paystack.co"],
+      frameAncestors: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"]
+    }
+  },
+  frameguard: { action: 'deny' },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  },
+  noSniff: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
 
 // CORS Configuration - Restrict to authorized client origins
@@ -78,7 +122,7 @@ app.use(cors({
 // Strict Rate Limiting to prevent brute-force attacks and credential stuffing
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'test' ? 1000 : 25, // 25 attempts per 15 min window
+  max: process.env.NODE_ENV === 'production' ? 30 : 1000, // 30 in production, 1000 in dev/test
   message: {
     success: false,
     message: 'Too many authentication attempts from this IP address. Please try again after 15 minutes.'
@@ -99,6 +143,9 @@ const apiLimiter = rateLimit({
 // JSON Body Parser with strict limit
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Input Sanitization Middleware: Neutralizes XSS, null bytes & prototype pollution
+app.use(inputSanitizer);
 
 // Apply general rate limit
 app.use('/api', apiLimiter);
@@ -128,14 +175,40 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/homework', homeworkRoutes);
 app.use('/api/progress', progressRoutes);
+app.use('/api/payroll', payrollRoutes);
+app.use('/api/executive', executiveRoutes);
+app.use('/api/system', systemRoutes);
+app.use('/api/users', usersRoutes);
 
-// Production Static Client Serving & SPA Routing
+const publicPath = path.resolve(__dirname, '../../public');
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+}
+
+// Production Static Client Serving & SPA Routing with Path Traversal Protection
 if (staticPath) {
   app.use(express.static(staticPath));
 
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
+    }
+
+    // Strict Path Normalization & Traversal Guard
+    const safeRelPath = path.normalize(req.path).replace(/^(\.\.[\/\\])+/, '');
+    const targetBase = path.resolve(staticPath, '.' + safeRelPath);
+    if (!targetBase.startsWith(staticPath)) {
+      return res.status(403).json({ success: false, message: 'Forbidden: Path traversal violation.' });
+    }
+
+    // Check for route-specific static HTML file (e.g., /portal/broadsheet/index.html)
+    const specificHtml = path.join(targetBase, 'index.html');
+    if (specificHtml.startsWith(staticPath) && fs.existsSync(specificHtml)) {
+      return res.sendFile(specificHtml);
+    }
+    const directHtml = targetBase + '.html';
+    if (directHtml.startsWith(staticPath) && fs.existsSync(directHtml)) {
+      return res.sendFile(directHtml);
     }
     const indexHtml = path.join(staticPath, 'index.html');
     if (fs.existsSync(indexHtml)) {

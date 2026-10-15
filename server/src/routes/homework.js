@@ -159,9 +159,10 @@ router.post('/', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (
       const staffRecord = db.prepare('SELECT id FROM staff WHERE email = ? OR phone = ? OR id = ?').get(
         req.user.email || '',
         req.user.phone || '',
-        req.user.id || 1
+        req.user.id || 0
       );
-      teacherId = staffRecord ? staffRecord.id : 1;
+      const fallbackStaff = db.prepare('SELECT id FROM staff LIMIT 1').get();
+      teacherId = staffRecord ? staffRecord.id : (fallbackStaff ? fallbackStaff.id : 1);
     }
 
     const assignmentCode = `HW-${Date.now().toString().slice(-6)}`;

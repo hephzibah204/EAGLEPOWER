@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS classes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE NOT NULL,
   division TEXT NOT NULL CHECK(division IN ('Nursery', 'Primary', 'Junior College', 'Senior College')),
-  termly_tuition REAL DEFAULT 35000
+  termly_tuition REAL DEFAULT 35000,
+  class_teacher_id INTEGER REFERENCES staff(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS sections (
@@ -260,4 +261,193 @@ CREATE TABLE IF NOT EXISTS staff_attendance (
 
 CREATE INDEX IF NOT EXISTS idx_student_att_date ON student_attendance(date, class_id);
 CREATE INDEX IF NOT EXISTS idx_staff_att_date ON staff_attendance(date);
+
+-- ==========================================
+-- IN-HOUSE AI ACADEMIC & HOMEWORK TABLES
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS homework_assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  assignment_code TEXT UNIQUE NOT NULL, -- e.g. HW-MTH-PRI4-001
+  class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
+  subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  teacher_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  key_concepts TEXT, -- JSON array or comma-separated concepts/keywords
+  max_points INTEGER DEFAULT 10,
+  due_date TEXT NOT NULL, -- Format: YYYY-MM-DD
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  status TEXT DEFAULT 'Active' CHECK(status IN ('Active', 'Closed', 'Archived'))
+);
+
+CREATE TABLE IF NOT EXISTS homework_submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  submission_code TEXT UNIQUE NOT NULL, -- e.g. SUB-2025-001
+  assignment_id INTEGER NOT NULL REFERENCES homework_assignments(id) ON DELETE CASCADE,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  submitted_by_phone TEXT NOT NULL,
+  submission_channel TEXT DEFAULT 'WhatsApp' CHECK(submission_channel IN ('WhatsApp', 'Portal', 'Classroom')),
+  submission_text TEXT,
+  attachment_path TEXT,
+  ai_evaluated INTEGER DEFAULT 0,
+  ai_score REAL,
+  ai_feedback TEXT,
+  teacher_score REAL,
+  teacher_feedback TEXT,
+  status TEXT DEFAULT 'Submitted' CHECK(status IN ('Submitted', 'AI_Reviewed', 'Teacher_Approved', 'Returned')),
+  submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS student_learning_profiles (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  mastery_level TEXT DEFAULT 'Developing' CHECK(mastery_level IN ('Critical Support', 'Developing', 'Proficient', 'Exemplary')),
+  score_trend TEXT DEFAULT 'Stable' CHECK(score_trend IN ('Declining', 'Stable', 'Improving', 'Rapid Surge')),
+  weak_topics TEXT, -- JSON array of identified struggling areas
+  strong_topics TEXT, -- JSON array of mastered areas
+  last_analyzed DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(student_id, subject_id)
+);
+
+CREATE TABLE IF NOT EXISTS ai_parent_recommendations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  recommendation_code TEXT UNIQUE NOT NULL,
+  category TEXT NOT NULL CHECK(category IN ('Academic Support', 'Attendance Alert', 'Exam Readiness', 'Positive Praise', 'Homework Intervention')),
+  title TEXT NOT NULL,
+  detailed_advice TEXT NOT NULL,
+  actionable_steps TEXT NOT NULL, -- JSON array of steps parents can do at home
+  urgency TEXT DEFAULT 'Medium' CHECK(urgency IN ('Low', 'Medium', 'High', 'Urgent')),
+  is_delivered_whatsapp INTEGER DEFAULT 0,
+  delivered_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS curriculum_concept_bank (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+  class_level TEXT NOT NULL, -- Nursery, Primary, JSS, SSS
+  topic TEXT NOT NULL,
+  subtopic TEXT,
+  core_keywords TEXT NOT NULL,
+  typical_misconceptions TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_hw_class ON homework_assignments(class_id);
+CREATE INDEX IF NOT EXISTS idx_hw_subject ON homework_assignments(subject_id);
+CREATE INDEX IF NOT EXISTS idx_sub_assignment ON homework_submissions(assignment_id);
+CREATE INDEX IF NOT EXISTS idx_sub_student ON homework_submissions(student_id);
+CREATE INDEX IF NOT EXISTS idx_profile_student ON student_learning_profiles(student_id);
+CREATE INDEX IF NOT EXISTS idx_recs_student ON ai_parent_recommendations(student_id);
+
+-- ========================================================
+-- PAYROLL MANAGEMENT & BULK SALARY DISBURSEMENT (PAYSTACK)
+-- ========================================================
+
+CREATE TABLE IF NOT EXISTS staff_salary_structures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  staff_id INTEGER UNIQUE NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  base_salary REAL NOT NULL DEFAULT 65000,
+  housing_allowance REAL DEFAULT 15000,
+  transport_allowance REAL DEFAULT 10000,
+  teaching_allowance REAL DEFAULT 10000,
+  tax_deduction REAL DEFAULT 5000,
+  pension_deduction REAL DEFAULT 3500,
+  other_deductions REAL DEFAULT 0,
+  net_salary REAL NOT NULL DEFAULT 91500,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_bank_accounts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  staff_id INTEGER UNIQUE NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  bank_name TEXT NOT NULL,           -- e.g. 'Guaranty Trust Bank', 'Zenith Bank', 'First Bank'
+  bank_code TEXT NOT NULL,           -- NIBSS bank code, e.g. '058', '057', '011'
+  account_number TEXT NOT NULL,      -- 10-digit NUBAN
+  account_name TEXT NOT NULL,        -- Account name verified from NIBSS/Paystack
+  paystack_recipient_code TEXT,      -- Paystack transfer recipient code e.g. RCP_xxxxxx
+  is_verified INTEGER DEFAULT 1,     -- 1 if verified via NIBSS/Paystack resolve
+  verified_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payroll_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_code TEXT UNIQUE NOT NULL,   -- e.g. PAY-2026-10-OCT
+  month_year TEXT NOT NULL,          -- e.g. 'October 2026'
+  period_start TEXT,
+  period_end TEXT,
+  total_staff INTEGER DEFAULT 0,
+  total_gross REAL DEFAULT 0,
+  total_deductions REAL DEFAULT 0,
+  total_net_payout REAL DEFAULT 0,
+  status TEXT DEFAULT 'Draft' CHECK(status IN ('Draft', 'Approved', 'Processing', 'Disbursed', 'Partially_Failed', 'Cancelled')),
+  paystack_batch_code TEXT,          -- Paystack bulk transfer reference/batch code
+  created_by TEXT DEFAULT 'Bursar',
+  approved_by TEXT,
+  disbursed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payroll_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES payroll_batches(id) ON DELETE CASCADE,
+  staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+  base_salary REAL NOT NULL,
+  total_allowances REAL DEFAULT 0,
+  total_deductions REAL DEFAULT 0,
+  net_amount REAL NOT NULL,
+  bank_name TEXT NOT NULL,
+  bank_code TEXT NOT NULL,
+  account_number TEXT NOT NULL,
+  account_name TEXT NOT NULL,
+  transfer_reference TEXT UNIQUE,    -- e.g. TRF-PAY-2026-10-STF01
+  paystack_transfer_code TEXT,       -- e.g. TRF_xxxxxxxx
+  status TEXT DEFAULT 'Pending' CHECK(status IN ('Pending', 'Queued', 'Success', 'Failed', 'Reversed')),
+  failure_reason TEXT,
+  disbursed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_payroll_batch ON payroll_items(batch_id);
+CREATE INDEX IF NOT EXISTS idx_payroll_staff ON payroll_items(staff_id);
+CREATE INDEX IF NOT EXISTS idx_salary_staff ON staff_salary_structures(staff_id);
+CREATE INDEX IF NOT EXISTS idx_bank_staff ON staff_bank_accounts(staff_id);
+
+-- Institutional System Configuration Table
+CREATE TABLE IF NOT EXISTS system_settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  school_name TEXT DEFAULT 'Eagle Power Schools Awka',
+  school_motto TEXT DEFAULT 'Love, Truth & Service',
+  current_session TEXT DEFAULT '2024/2025',
+  current_term TEXT DEFAULT 'Second Term',
+  next_resumption_date TEXT DEFAULT '2025-05-05',
+  active_report_template TEXT DEFAULT 'classic_british',
+  principal_name TEXT DEFAULT 'Adaeze Uzoefuna',
+  logo_url TEXT DEFAULT '/assets/official-logo.jpg',
+  contact_phone TEXT DEFAULT '+234 803 359 1058',
+  contact_email TEXT DEFAULT 'info@eaglepowerschools.com.ng',
+  address TEXT DEFAULT '2 & 9 Amikwo Road, Awka, Anambra State',
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed initial configuration if not present
+INSERT OR IGNORE INTO system_settings (id, current_session, current_term, next_resumption_date)
+VALUES (1, '2024/2025', 'Second Term', '2025-05-05');
+
+-- WhatsApp Broadcast & Notification Log
+CREATE TABLE IF NOT EXISTS whatsapp_broadcast_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  broadcast_type TEXT NOT NULL DEFAULT 'ALL',
+  target_audience TEXT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  recipient_count INTEGER DEFAULT 0,
+  dispatched_by TEXT NOT NULL,
+  status TEXT DEFAULT 'SENT',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 

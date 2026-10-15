@@ -45,19 +45,19 @@ cd whatsapp-bot
 # 1. Launch / register the app name
 fly launch --no-deploy
 
-# 2. Create the persistent volume (1GB is within the free tier)
-fly volumes create bot_data --size 1 --region iad
+# 2. Create the persistent volume in London (lhr) (1GB is within the free tier)
+fly volumes create bot_data --size 1 --region lhr
 ```
 
 ### Step 3: Option A - Link via Pairing Code (Recommended for Cloud/Headless)
-Set your phone number with international country code (e.g. `+1234567890`):
+Set your school phone number with international country code (e.g. `2348037098816`):
 ```bash
-fly secrets set PHONE_NUMBER=1234567890
+fly secrets set PHONE_NUMBER=2348037098816
 ```
 
 ### Step 4: Deploy
 ```bash
-fly deploy
+fly deploy --remote-only
 ```
 
 ### Step 5: Check Logs & Link Device

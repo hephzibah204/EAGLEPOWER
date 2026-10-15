@@ -3,10 +3,45 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import db from '../config/db.js';
-import { authenticate, JWT_SECRET } from '../middleware/auth.js';
+import { authenticate, requireRoles, JWT_SECRET } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 
 const router = express.Router();
+
+// Constant-time dummy hash to neutralize user enumeration timing attacks
+const DUMMY_BCRYPT_HASH = '$2a$10$wN1rUvS49yJ8p2NqT4N67.a7PzD0f/3lH8xLzKjN3k6J0qGvN5qWy';
+
+// Track failed login attempts per account/IP: key -> { count: number, lockedUntil: number }
+export const failedLoginTracker = new Map();
+
+export function checkLockout(key) {
+  if (!key) return null;
+  const record = failedLoginTracker.get(key);
+  if (!record) return null;
+  const now = Date.now();
+  if (record.lockedUntil && record.lockedUntil > now) {
+    return Math.ceil((record.lockedUntil - now) / 60000);
+  }
+  if (record.lockedUntil && record.lockedUntil <= now) {
+    failedLoginTracker.delete(key);
+  }
+  return null;
+}
+
+export function recordFailure(key) {
+  if (!key) return;
+  const now = Date.now();
+  const record = failedLoginTracker.get(key) || { count: 0, lockedUntil: null };
+  record.count += 1;
+  if (record.count >= 5) {
+    record.lockedUntil = now + 15 * 60 * 1000; // 15-minute lockout
+  }
+  failedLoginTracker.set(key, record);
+}
+
+export function clearFailure(key) {
+  if (key) failedLoginTracker.delete(key);
+}
 
 const loginSchema = z.object({
   username: z.string().min(1, 'Username, phone or admission number is required'),
@@ -15,7 +50,10 @@ const loginSchema = z.object({
 
 const registerSchema = z.object({
   username: z.string().min(3, 'Username must be at least 3 characters'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters')
+    .refine(val => /[A-Za-z]/.test(val) && /\d/.test(val), {
+      message: 'Password must contain at least one letter and one number'
+    }),
   full_name: z.string().min(2, 'Full name is required'),
   email: z.string().email('Invalid email address').optional().or(z.literal('')),
   phone: z.string().optional().or(z.literal('')),
@@ -55,14 +93,11 @@ function getRoleProfileDetails(role, referenceId, username, email) {
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN sections sec ON s.section_id = sec.id
-      WHERE (s.guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(s.guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+      WHERE (? != '' AND UPPER(s.admission_no) = ?)
+         OR (s.guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(s.guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
          OR (s.guardian_email IS NOT NULL AND LOWER(s.guardian_email) = ?)
-         OR (UPPER(s.admission_no) = ? AND (
-             (s.guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(s.guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
-             OR (s.guardian_email IS NOT NULL AND LOWER(s.guardian_email) = ?)
-         ))
       ORDER BY s.id ASC
-    `).all(`%${last10}%`, cleanEmail, cleanRef, `%${last10}%`, cleanEmail);
+    `).all(cleanRef, cleanRef, `%${last10}%`, cleanEmail);
   }
 
   if (['teacher', 'bursar', 'admin'].includes(role) && referenceId) {
@@ -76,10 +111,10 @@ function getRoleProfileDetails(role, referenceId, username, email) {
 
 /**
  * POST /api/auth/register
- * Public & Admin Portal Registration
- * Allows Parents, Students, and Staff to create portal accounts.
+ * Institutional Account Provisioning
+ * Strictly restricted to School Administrators. Public self-registration is permanently disabled.
  */
-router.post('/register', (req, res, next) => {
+router.post('/register', authenticate, requireRoles('superadmin', 'admin'), (req, res, next) => {
   try {
     const parseResult = registerSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -106,14 +141,6 @@ router.post('/register', (req, res, next) => {
         message: existing.username.toLowerCase() === cleanUsername.toLowerCase()
           ? `Username '${cleanUsername}' is already taken.`
           : `Email '${cleanEmail}' is already registered.`
-      });
-    }
-
-    // Prevent unauthorized privilege escalation: public self-registration is strictly for parents and students
-    if (['admin', 'superadmin', 'bursar', 'teacher'].includes(role)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Registration for administrative and faculty roles cannot be done publicly. Please contact the Principal or IT administrator.'
       });
     }
 
@@ -233,6 +260,17 @@ router.post('/login', (req, res, next) => {
     const cleanLower = cleanUsername.toLowerCase();
     const cleanUpper = cleanUsername.toUpperCase();
 
+    // Check for active lockout against targeted account or client IP
+    const accountLockMinutes = checkLockout(cleanLower);
+    const ipLockMinutes = checkLockout(req.ip);
+    const activeLock = accountLockMinutes || ipLockMinutes;
+    if (activeLock) {
+      return res.status(429).json({
+        success: false,
+        message: `Too many failed login attempts. Access is temporarily locked for security. Please try again in ${activeLock} minute(s).`
+      });
+    }
+
     // Search user by username, email, or reference_id (admission_no / staff_no / phone)
     const user = db.prepare(`
       SELECT * FROM users
@@ -244,6 +282,10 @@ router.post('/login', (req, res, next) => {
     `).get(cleanUsername, cleanLower, cleanUpper, cleanUsername, cleanUsername, cleanUpper);
 
     if (!user) {
+      // Neutralize username enumeration via timing attacks by computing identical bcrypt cycles
+      bcrypt.compareSync(password, DUMMY_BCRYPT_HASH);
+      recordFailure(cleanLower);
+      recordFailure(req.ip);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials. Please verify your username, admission number, or phone and password.'
@@ -260,12 +302,18 @@ router.post('/login', (req, res, next) => {
     // Verify bcrypt hash
     const isValid = bcrypt.compareSync(password, user.password_hash);
     if (!isValid) {
+      recordFailure(cleanLower);
+      recordFailure(req.ip);
       logAudit(user.id, 'LOGIN_FAILED', 'AUTH', `Failed login attempt for ${cleanUsername} from IP ${req.ip}`, req.ip);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials. Please verify your password.'
       });
     }
+
+    // Reset failed attempt counters on successful authentication
+    clearFailure(cleanLower);
+    clearFailure(req.ip);
 
     // Update last login
     db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
@@ -312,6 +360,120 @@ router.post('/login', (req, res, next) => {
   }
 });
 
+const executiveLoginSchema = z.object({
+  username: z.string().min(1, 'Username is required'),
+  password: z.string().min(1, 'Password is required'),
+  security_key: z.string().optional()
+});
+
+/**
+ * POST /api/auth/executive-login
+ * Dedicated High-Security Authentication Endpoint for SuperAdmin
+ * Isolated from public portal authentication flows.
+ */
+router.post('/executive-login', (req, res, next) => {
+  try {
+    const parseResult = executiveLoginSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: parseResult.error.errors[0].message
+      });
+    }
+
+    const { username, password } = parseResult.data;
+    const cleanUsername = username.trim();
+    const cleanLower = cleanUsername.toLowerCase();
+
+    // Check for active lockout against executive account or IP
+    const accountLockMinutes = checkLockout(cleanLower);
+    const ipLockMinutes = checkLockout(req.ip);
+    const activeLock = accountLockMinutes || ipLockMinutes;
+    if (activeLock) {
+      return res.status(429).json({
+        success: false,
+        message: `Executive Console is temporarily locked due to excessive failed attempts. Please retry in ${activeLock} minute(s).`
+      });
+    }
+
+    const user = db.prepare(`
+      SELECT * FROM users
+      WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)
+    `).get(cleanUsername, cleanLower);
+
+    if (!user) {
+      bcrypt.compareSync(password, DUMMY_BCRYPT_HASH);
+      recordFailure(cleanLower);
+      recordFailure(req.ip);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid executive credentials.'
+      });
+    }
+
+    if (user.role !== 'superadmin') {
+      logAudit(user.id, 'UNAUTHORIZED_EXECUTIVE_ACCESS_ATTEMPT', 'SECURITY', `Unauthorized non-superadmin (${user.username}, role: ${user.role}) attempted executive login from ${req.ip}`, req.ip);
+      return res.status(403).json({
+        success: false,
+        message: 'Access Denied: The Executive Security Console is strictly reserved for SuperAdmin personnel.'
+      });
+    }
+
+    if (!user.is_active) {
+      return res.status(403).json({
+        success: false,
+        message: 'SuperAdmin account has been deactivated. Please contact root database administration.'
+      });
+    }
+
+    const isValid = bcrypt.compareSync(password, user.password_hash);
+    if (!isValid) {
+      recordFailure(cleanLower);
+      recordFailure(req.ip);
+      logAudit(user.id, 'EXECUTIVE_LOGIN_FAILED', 'SECURITY', `Failed executive login attempt for ${cleanUsername} from IP ${req.ip}`, req.ip);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid executive credentials.'
+      });
+    }
+
+    clearFailure(cleanLower);
+    clearFailure(req.ip);
+
+    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+
+    // Issue root executive JWT token with executive scope
+    const token = jwt.sign(
+      {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        scope: 'executive'
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    logAudit(user.id, 'EXECUTIVE_CONSOLE_LOGIN', 'AUTH', `SuperAdmin authenticated to Executive Console from IP ${req.ip}`, req.ip);
+
+    res.json({
+      success: true,
+      message: 'Executive Console root access granted.',
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        full_name: user.full_name,
+        reference_id: user.reference_id
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * GET /api/auth/me
  * Retrieve current authenticated session
@@ -346,10 +508,10 @@ router.get('/me', authenticate, (req, res) => {
 router.post('/change-password', authenticate, (req, res, next) => {
   try {
     const { old_password, new_password } = req.body;
-    if (!old_password || !new_password || new_password.length < 6) {
+    if (!old_password || !new_password || new_password.length < 8 || !/[A-Za-z]/.test(new_password) || !/\d/.test(new_password)) {
       return res.status(400).json({
         success: false,
-        message: 'New password must be at least 6 characters long.'
+        message: 'New password must be at least 8 characters long and contain both letters and numbers.'
       });
     }
 

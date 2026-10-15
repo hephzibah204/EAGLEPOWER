@@ -8,7 +8,7 @@ const router = express.Router();
  * 1. GET /api/reports/executive-summary
  * High-level Cockpit KPIs for School Head
  */
-router.get('/executive-summary', (req, res, next) => {
+router.get('/executive-summary', authenticate, requireRoles('superadmin', 'admin', 'bursar'), (req, res, next) => {
   try {
     const { session = '2024/2025', term = 'Second Term' } = req.query;
 
@@ -215,7 +215,7 @@ router.get('/executive-summary', (req, res, next) => {
  * 2. GET /api/reports/academic-analytics
  * Deep Academic Intelligence: Class Ranking, Subject Benchmarks, CA Drift
  */
-router.get('/academic-analytics', (req, res, next) => {
+router.get('/academic-analytics', authenticate, requireRoles('superadmin', 'admin', 'teacher'), (req, res, next) => {
   try {
     const { session = '2024/2025', term = 'Second Term' } = req.query;
 
@@ -356,7 +356,7 @@ router.get('/academic-analytics', (req, res, next) => {
  * 3. GET /api/reports/financial-analytics
  * Deep Bursary Intelligence: Debt Aging, Defaulters, Division Contributions
  */
-router.get('/financial-analytics', (req, res, next) => {
+router.get('/financial-analytics', authenticate, requireRoles('superadmin', 'admin', 'bursar'), (req, res, next) => {
   try {
     // A. Revenue & Debt by Division
     const divisionRevenue = db.prepare(`
@@ -433,7 +433,7 @@ router.get('/financial-analytics', (req, res, next) => {
  * 4. GET /api/reports/operations-safety
  * Campus Safety, Front Desk, Grievances & Audit Trail
  */
-router.get('/operations-safety', (req, res, next) => {
+router.get('/operations-safety', authenticate, requireRoles('superadmin', 'admin'), (req, res, next) => {
   try {
     // A. Visitor Summary
     const visitorStats = db.prepare(`
@@ -523,6 +523,44 @@ router.get('/operations-safety', (req, res, next) => {
         audit_trail: recentAudit,
         staff: staffList
       }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * 5. POST /api/reports/template
+ * Set default or student-specific active report card template
+ */
+router.post('/template', authenticate, (req, res, next) => {
+  try {
+    const { template, student_id, session = '2024/2025', term = 'Second Term' } = req.body;
+    if (!template) {
+      return res.status(400).json({ success: false, message: 'Template name is required.' });
+    }
+
+    if (student_id) {
+      db.prepare(`
+        INSERT INTO report_extras (student_id, session, term, template, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(student_id, session, term) DO UPDATE SET
+          template = excluded.template,
+          updated_at = CURRENT_TIMESTAMP
+      `).run(student_id, session, term, template);
+    } else {
+      // Update across all students for the session and term
+      db.prepare(`
+        UPDATE report_extras 
+        SET template = ?, updated_at = CURRENT_TIMESTAMP 
+        WHERE session = ? AND term = ?
+      `).run(template, session, term);
+    }
+
+    res.json({
+      success: true,
+      message: `Active report card template successfully set to '${template}'.`,
+      template
     });
   } catch (err) {
     next(err);

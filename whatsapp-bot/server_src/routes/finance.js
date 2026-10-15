@@ -7,9 +7,9 @@ const router = express.Router();
 
 /**
  * GET /api/finance/stats
- * Bursary financial analytics
+ * Bursary financial analytics (Restricted to Bursar, Admin, SuperAdmin)
  */
-router.get('/stats', (req, res, next) => {
+router.get('/stats', authenticate, requireRoles('bursar', 'admin', 'superadmin'), (req, res, next) => {
   try {
     const stats = db.prepare(`
       SELECT 
@@ -45,21 +45,57 @@ router.get('/stats', (req, res, next) => {
 
 /**
  * GET /api/finance/invoices
- * List invoices with filters
+ * List invoices with filters (Scoped by user role and ownership)
  */
-router.get('/invoices', (req, res, next) => {
+router.get('/invoices', authenticate, (req, res, next) => {
   try {
     const { status, student_id, session, limit = 50 } = req.query;
+    const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
     let conditions = [];
     const params = [];
+
+    // Role-based scoping
+    if (req.user.role === 'student') {
+      const student = db.prepare('SELECT id FROM students WHERE UPPER(admission_no) = ?').get((req.user.reference_id || req.user.username).toUpperCase());
+      if (!student) {
+        return res.json({ success: true, count: 0, data: [] });
+      }
+      conditions.push('i.student_id = ?');
+      params.push(student.id);
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const children = db.prepare(`
+        SELECT id FROM students 
+        WHERE (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+           OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+           OR UPPER(admission_no) = ?
+      `).all(`%${last10}%`, cleanEmail, cleanRef);
+
+      const childIds = children.map(c => c.id);
+      if (childIds.length === 0) {
+        return res.json({ success: true, count: 0, data: [] });
+      }
+      if (student_id && childIds.includes(parseInt(student_id))) {
+        conditions.push('i.student_id = ?');
+        params.push(parseInt(student_id));
+      } else {
+        conditions.push(`i.student_id IN (${childIds.map(() => '?').join(',')})`);
+        params.push(...childIds);
+      }
+    } else if (!['admin', 'superadmin', 'bursar'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Access denied to financial records.' });
+    } else if (student_id) {
+      conditions.push('i.student_id = ?');
+      params.push(parseInt(student_id));
+    }
 
     if (status) {
       conditions.push('i.status = ?');
       params.push(status);
-    }
-    if (student_id) {
-      conditions.push('i.student_id = ?');
-      params.push(parseInt(student_id));
     }
     if (session) {
       conditions.push('i.session = ?');
@@ -79,7 +115,7 @@ router.get('/invoices', (req, res, next) => {
       ${whereClause}
       ORDER BY i.id DESC
       LIMIT ?
-    `).all(...params, parseInt(limit));
+    `).all(...params, safeLimit);
 
     res.json({
       success: true,
@@ -93,9 +129,9 @@ router.get('/invoices', (req, res, next) => {
 
 /**
  * GET /api/finance/invoices/:id
- * Single invoice details with payments
+ * Single invoice details with payments (Ownership verified)
  */
-router.get('/invoices/:id', (req, res, next) => {
+router.get('/invoices/:id', authenticate, (req, res, next) => {
   try {
     const invoice = db.prepare(`
       SELECT 
@@ -110,6 +146,34 @@ router.get('/invoices/:id', (req, res, next) => {
 
     if (!invoice) {
       return res.status(404).json({ success: false, message: 'Invoice not found.' });
+    }
+
+    // Role-based ownership check
+    if (req.user.role === 'student') {
+      const student = db.prepare('SELECT id FROM students WHERE UPPER(admission_no) = ?').get((req.user.reference_id || req.user.username).toUpperCase());
+      if (!student || student.id !== invoice.student_id) {
+        return res.status(403).json({ success: false, message: 'Access denied to this invoice.' });
+      }
+    } else if (req.user.role === 'parent') {
+      const cleanUser = (req.user.username || '').replace(/\D/g, '');
+      const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
+      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
+
+      const child = db.prepare(`
+        SELECT id FROM students 
+        WHERE id = ? AND (
+          (guardian_phone IS NOT NULL AND REPLACE(REPLACE(REPLACE(guardian_phone, '+', ''), ' ', ''), '-', '') LIKE ?)
+          OR (guardian_email IS NOT NULL AND LOWER(guardian_email) = ?)
+          OR UPPER(admission_no) = ?
+        )
+      `).get(invoice.student_id, `%${last10}%`, cleanEmail, cleanRef);
+
+      if (!child) {
+        return res.status(403).json({ success: false, message: 'Access denied to this student invoice.' });
+      }
+    } else if (!['admin', 'superadmin', 'bursar'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, message: 'Access denied to invoice.' });
     }
 
     const payments = db.prepare(`
@@ -190,29 +254,32 @@ router.post('/payments', authenticate, requireRoles('bursar', 'admin', 'superadm
     const payAmount = parseFloat(amount);
     const newPaid = invoice.amount_paid + payAmount;
     const newStatus = newPaid >= invoice.amount_due ? 'Paid' : 'Partial';
-
-    // Update invoice
-    db.prepare(`
-      UPDATE invoices
-      SET amount_paid = ?, status = ?
-      WHERE id = ?
-    `).run(newPaid, newStatus, invoice_id);
-
-    // Record payment receipt
     const receiptNo = `RCT-${Date.now().toString().slice(-6)}`;
-    const payStmt = db.prepare(`
-      INSERT INTO payments (invoice_id, receipt_no, amount, payment_method, reference, recorded_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
 
-    payStmt.run(
-      invoice_id,
-      receiptNo,
-      payAmount,
-      payment_method,
-      reference || `MANUAL-${Date.now()}`,
-      req.user.full_name || 'Bursar'
-    );
+    // Wrap financial update in an atomic transaction to prevent partial execution
+    const processPayment = db.transaction(() => {
+      // 1. Update invoice balance and status
+      db.prepare(`
+        UPDATE invoices
+        SET amount_paid = ?, status = ?
+        WHERE id = ?
+      `).run(newPaid, newStatus, invoice_id);
+
+      // 2. Record payment receipt ledger
+      db.prepare(`
+        INSERT INTO payments (invoice_id, receipt_no, amount, payment_method, reference, recorded_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+        invoice_id,
+        receiptNo,
+        payAmount,
+        payment_method,
+        reference || `MANUAL-${Date.now()}`,
+        req.user.full_name || 'Bursar'
+      );
+    });
+
+    processPayment();
 
     logAudit(req.user.id, 'RECORD_PAYMENT', 'FINANCE', `Recorded payment ${receiptNo} of ₦${payAmount} on invoice ${invoice.invoice_no}`, req.ip);
 

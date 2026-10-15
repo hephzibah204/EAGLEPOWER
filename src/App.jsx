@@ -4,7 +4,6 @@ import Hero from './components/Hero';
 import AboutSection from './components/AboutSection';
 import AcademicsSection from './components/AcademicsSection';
 import WhyUsSection from './components/WhyUsSection';
-import FeeEstimator from './components/FeeEstimator';
 import CampusLifeSection from './components/CampusLifeSection';
 import NewsSection from './components/NewsSection';
 import TestimonialsSection from './components/TestimonialsSection';
@@ -16,10 +15,21 @@ import PortalDashboard from './components/PortalDashboard';
 import { MessageCircle, ArrowUp } from 'lucide-react';
 
 export default function App() {
+  const [currentPath, setCurrentPath] = useState(() => {
+    if (typeof window !== 'undefined') return window.location.pathname;
+    return '/';
+  });
   const [isAdmissionOpen, setIsAdmissionOpen] = useState(false);
   const [admissionDivision, setAdmissionDivision] = useState('primary');
-  const [isPortalOpen, setIsPortalOpen] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   React.useEffect(() => {
     const checkScroll = () => {
@@ -38,12 +48,34 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Dedicated SuperAdmin Executive Master Control Console
+  if (currentPath.startsWith('/executive-console')) {
+    return <PortalDashboard isModal={false} initialRole="superadmin" initialTab="overview" />;
+  }
+
+  // If visiting /portal or any /portal/* subroute, render full-screen ERP
+  if (currentPath.startsWith('/portal')) {
+    const pathParts = currentPath.split('/').filter(Boolean);
+    const tab = pathParts[1] ? pathParts[1].replace(/-/g, '_') : 'overview';
+    return (
+      <PortalDashboard
+        isOpen={true}
+        isModal={false}
+        initialTab={tab}
+        onClose={() => {
+          window.location.href = '/';
+        }}
+      />
+    );
+  }
+
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800 font-sans selection:bg-amber-400 selection:text-slate-900">
       {/* Navigation */}
       <Navbar
         onOpenAdmission={() => handleOpenAdmission('primary')}
-        onOpenPortal={() => setIsPortalOpen(true)}
+        onOpenPortal={() => { window.location.href = '/portal/overview'; }}
       />
 
       {/* Main Content Sections */}
@@ -59,10 +91,6 @@ export default function App() {
         />
         
         <WhyUsSection />
-        
-        <FeeEstimator 
-          onOpenAdmission={handleOpenAdmission} 
-        />
         
         <CampusLifeSection />
         
@@ -112,11 +140,6 @@ export default function App() {
         isOpen={isAdmissionOpen}
         onClose={() => setIsAdmissionOpen(false)}
         initialDivision={admissionDivision}
-      />
-
-      <PortalDashboard
-        isOpen={isPortalOpen}
-        onClose={() => setIsPortalOpen(false)}
       />
     </div>
   );

@@ -6,6 +6,12 @@ import { logAudit } from '../middleware/audit.js';
 
 const router = express.Router();
 
+try {
+  db.exec('ALTER TABLE students ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;');
+} catch {
+  // Column already exists
+}
+
 /**
  * GET /api/students
  * List or search students (Restricted to Faculty and Admin)
@@ -42,8 +48,7 @@ router.get('/', authenticate, requireRoles('superadmin', 'admin', 'teacher', 'bu
 
     const dataStmt = db.prepare(`
       SELECT 
-        s.id, s.admission_no, s.first_name, s.last_name, s.gender, s.dob,
-        s.guardian_name, s.guardian_phone, s.guardian_email, s.address,
+        s.*,
         c.name as class_name, c.division, sec.name as section_name
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
@@ -217,9 +222,17 @@ router.get('/:id', authenticate, requireStudentAccess('id', 'id'), (req, res, ne
 router.post('/', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
   try {
     const {
-      admission_no, first_name, last_name, gender, dob,
-      class_id, section_id, guardian_name, guardian_phone,
-      guardian_email, address, student_password, parent_password
+      admission_no, first_name, middle_name, last_name, gender, dob,
+      class_id, section_id, entry_mode, enrolled_session, enrolled_term, admission_date,
+      religion, nationality, state_of_origin, lga_of_origin, mother_tongue,
+      blood_group, genotype, allergies, medical_conditions, special_needs,
+      emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+      previous_school, last_class_passed, reason_for_transfer,
+      guardian_title, guardian_name, guardian_relationship, guardian_phone,
+      guardian_alt_phone, guardian_email, guardian_occupation, guardian_office_address, address,
+      mother_name, mother_phone, mother_email, mother_occupation,
+      boarding_status, transport_mode, bus_route, passport_photo,
+      student_password, parent_password
     } = req.body;
 
     if (!admission_no || !first_name || !last_name) {
@@ -242,24 +255,76 @@ router.post('/', authenticate, requireRoles('admin', 'superadmin'), (req, res, n
 
     const stmt = db.prepare(`
       INSERT INTO students (
-        admission_no, first_name, last_name, gender, dob,
-        class_id, section_id, guardian_name, guardian_phone,
-        guardian_email, address
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        admission_no, first_name, middle_name, last_name, gender, dob,
+        class_id, section_id, entry_mode, enrolled_session, enrolled_term, admission_date,
+        religion, nationality, state_of_origin, lga_of_origin, mother_tongue,
+        blood_group, genotype, allergies, medical_conditions, special_needs,
+        emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+        previous_school, last_class_passed, reason_for_transfer,
+        guardian_title, guardian_name, guardian_relationship, guardian_phone,
+        guardian_alt_phone, guardian_email, guardian_occupation, guardian_office_address, address,
+        mother_name, mother_phone, mother_email, mother_occupation,
+        boarding_status, transport_mode, bus_route, passport_photo
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?
+      )
     `);
 
     const result = stmt.run(
       cleanAdmNo,
       first_name.trim(),
+      middle_name ? middle_name.trim() : null,
       last_name.trim(),
       gender || 'Male',
       dob || null,
       class_id ? parseInt(class_id) : null,
       section_id ? parseInt(section_id) : null,
+      entry_mode || 'Fresh Admission',
+      enrolled_session || '2024/2025',
+      enrolled_term || 'Second Term',
+      admission_date || new Date().toISOString().split('T')[0],
+      religion || 'Christianity',
+      nationality || 'Nigerian',
+      state_of_origin ? state_of_origin.trim() : 'Anambra State',
+      lga_of_origin ? lga_of_origin.trim() : 'Awka South',
+      mother_tongue || 'Igbo / English',
+      blood_group || null,
+      genotype || null,
+      allergies ? allergies.trim() : 'None Reported',
+      medical_conditions ? medical_conditions.trim() : 'None Reported',
+      special_needs ? special_needs.trim() : 'None',
+      emergency_contact_name ? emergency_contact_name.trim() : (guardian_name ? guardian_name.trim() : null),
+      emergency_contact_phone ? emergency_contact_phone.trim() : (guardian_phone ? guardian_phone.trim() : null),
+      emergency_contact_relationship ? emergency_contact_relationship.trim() : 'Parent/Guardian',
+      previous_school ? previous_school.trim() : null,
+      last_class_passed ? last_class_passed.trim() : null,
+      reason_for_transfer ? reason_for_transfer.trim() : null,
+      guardian_title ? guardian_title.trim() : 'Mr/Mrs',
       guardian_name ? guardian_name.trim() : null,
+      guardian_relationship || 'Father',
       guardian_phone ? guardian_phone.trim() : null,
+      guardian_alt_phone ? guardian_alt_phone.trim() : null,
       guardian_email ? guardian_email.trim().toLowerCase() : null,
-      address ? address.trim() : null
+      guardian_occupation ? guardian_occupation.trim() : null,
+      guardian_office_address ? guardian_office_address.trim() : null,
+      address ? address.trim() : 'Awka, Anambra State',
+      mother_name ? mother_name.trim() : null,
+      mother_phone ? mother_phone.trim() : null,
+      mother_email ? mother_email.trim().toLowerCase() : null,
+      mother_occupation ? mother_occupation.trim() : null,
+      boarding_status || 'Day Student',
+      transport_mode || 'Private Pick-up',
+      bus_route ? bus_route.trim() : null,
+      passport_photo ? passport_photo.trim() : null
     );
 
     const studentId = result.lastInsertRowid;
@@ -337,6 +402,234 @@ router.post('/', authenticate, requireRoles('admin', 'superadmin'), (req, res, n
         role: 'student'
       },
       parent_credentials: parentAccount
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/students/:id
+ * Update student biodata, guardian contact, and active status (Admin / SuperAdmin)
+ */
+router.put('/:id', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+  try {
+    const studentId = parseInt(req.params.id);
+    const existing = db.prepare('SELECT * FROM students WHERE id = ?').get(studentId);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Student record not found.' });
+    }
+
+    const {
+      first_name, middle_name, last_name, gender, dob, address,
+      class_id, section_id, entry_mode, enrolled_session, enrolled_term, admission_date,
+      religion, nationality, state_of_origin, lga_of_origin, mother_tongue,
+      blood_group, genotype, allergies, medical_conditions, special_needs,
+      emergency_contact_name, emergency_contact_phone, emergency_contact_relationship,
+      previous_school, last_class_passed, reason_for_transfer,
+      guardian_title, guardian_name, guardian_relationship, guardian_phone,
+      guardian_alt_phone, guardian_email, guardian_occupation, guardian_office_address,
+      mother_name, mother_phone, mother_email, mother_occupation,
+      boarding_status, transport_mode, bus_route, passport_photo,
+      is_active
+    } = req.body;
+
+    const val = (newVal, oldVal) => newVal !== undefined ? (typeof newVal === 'string' ? newVal.trim() : newVal) : oldVal;
+
+    const newFirstName = val(first_name, existing.first_name);
+    const newLastName = val(last_name, existing.last_name);
+    const newClassId = class_id !== undefined ? (class_id ? parseInt(class_id) : null) : existing.class_id;
+    const newIsActive = is_active !== undefined ? (is_active ? 1 : 0) : existing.is_active;
+
+    db.prepare(`
+      UPDATE students SET
+        first_name = ?, middle_name = ?, last_name = ?, gender = ?, dob = ?, address = ?,
+        class_id = ?, section_id = ?, entry_mode = ?, enrolled_session = ?, enrolled_term = ?, admission_date = ?,
+        religion = ?, nationality = ?, state_of_origin = ?, lga_of_origin = ?, mother_tongue = ?,
+        blood_group = ?, genotype = ?, allergies = ?, medical_conditions = ?, special_needs = ?,
+        emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relationship = ?,
+        previous_school = ?, last_class_passed = ?, reason_for_transfer = ?,
+        guardian_title = ?, guardian_name = ?, guardian_relationship = ?, guardian_phone = ?,
+        guardian_alt_phone = ?, guardian_email = ?, guardian_occupation = ?, guardian_office_address = ?,
+        mother_name = ?, mother_phone = ?, mother_email = ?, mother_occupation = ?,
+        boarding_status = ?, transport_mode = ?, bus_route = ?, passport_photo = ?,
+        is_active = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      newFirstName,
+      val(middle_name, existing.middle_name),
+      newLastName,
+      val(gender, existing.gender),
+      val(dob, existing.dob),
+      val(address, existing.address),
+      newClassId,
+      section_id !== undefined ? (section_id ? parseInt(section_id) : null) : existing.section_id,
+      val(entry_mode, existing.entry_mode),
+      val(enrolled_session, existing.enrolled_session),
+      val(enrolled_term, existing.enrolled_term),
+      val(admission_date, existing.admission_date),
+      val(religion, existing.religion),
+      val(nationality, existing.nationality),
+      val(state_of_origin, existing.state_of_origin),
+      val(lga_of_origin, existing.lga_of_origin),
+      val(mother_tongue, existing.mother_tongue),
+      val(blood_group, existing.blood_group),
+      val(genotype, existing.genotype),
+      val(allergies, existing.allergies),
+      val(medical_conditions, existing.medical_conditions),
+      val(special_needs, existing.special_needs),
+      val(emergency_contact_name, existing.emergency_contact_name),
+      val(emergency_contact_phone, existing.emergency_contact_phone),
+      val(emergency_contact_relationship, existing.emergency_contact_relationship),
+      val(previous_school, existing.previous_school),
+      val(last_class_passed, existing.last_class_passed),
+      val(reason_for_transfer, existing.reason_for_transfer),
+      val(guardian_title, existing.guardian_title),
+      val(guardian_name, existing.guardian_name),
+      val(guardian_relationship, existing.guardian_relationship),
+      val(guardian_phone, existing.guardian_phone),
+      val(guardian_alt_phone, existing.guardian_alt_phone),
+      val(guardian_email, existing.guardian_email),
+      val(guardian_occupation, existing.guardian_occupation),
+      val(guardian_office_address, existing.guardian_office_address),
+      val(mother_name, existing.mother_name),
+      val(mother_phone, existing.mother_phone),
+      val(mother_email, existing.mother_email),
+      val(mother_occupation, existing.mother_occupation),
+      val(boarding_status, existing.boarding_status),
+      val(transport_mode, existing.transport_mode),
+      val(bus_route, existing.bus_route),
+      val(passport_photo, existing.passport_photo),
+      newIsActive,
+      studentId
+    );
+
+    // Sync student full name in users table if changed
+    if (newFirstName !== existing.first_name || newLastName !== existing.last_name) {
+      db.prepare(`
+        UPDATE users SET full_name = ? WHERE reference_id = ? AND role = 'student'
+      `).run(`${newFirstName} ${newLastName}`, existing.admission_no);
+    }
+
+    // Sync active status in users table
+    if (newIsActive !== existing.is_active) {
+      db.prepare(`
+        UPDATE users SET is_active = ? WHERE reference_id = ? AND role = 'student'
+      `).run(newIsActive, existing.admission_no);
+    }
+
+    logAudit(req.user.id, 'UPDATE_STUDENT', 'STUDENTS', `Updated record for student ${existing.admission_no} (${newFirstName} ${newLastName})`, req.ip);
+
+    res.json({
+      success: true,
+      message: 'Student record updated successfully.',
+      student: {
+        id: studentId,
+        admission_no: existing.admission_no,
+        first_name: newFirstName,
+        last_name: newLastName,
+        class_id: newClassId,
+        is_active: newIsActive
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/students/:id/transfer
+ * Quick class transfer with audit log (Admin / SuperAdmin)
+ */
+router.post('/:id/transfer', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+  try {
+    const studentId = parseInt(req.params.id);
+    const { target_class_id, reason } = req.body;
+
+    if (!target_class_id) {
+      return res.status(400).json({ success: false, message: 'Target class ID is required.' });
+    }
+
+    const student = db.prepare(`
+      SELECT s.*, c.name as current_class_name 
+      FROM students s 
+      LEFT JOIN classes c ON s.class_id = c.id 
+      WHERE s.id = ?
+    `).get(studentId);
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student record not found.' });
+    }
+
+    const targetClass = db.prepare('SELECT id, name FROM classes WHERE id = ?').get(parseInt(target_class_id));
+    if (!targetClass) {
+      return res.status(404).json({ success: false, message: 'Target class not found.' });
+    }
+
+    db.prepare('UPDATE students SET class_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(targetClass.id, studentId);
+
+    logAudit(
+      req.user.id,
+      'TRANSFER_STUDENT',
+      'STUDENTS',
+      `Transferred student ${student.admission_no} from ${student.current_class_name || 'Unassigned'} to ${targetClass.name}. Reason: ${reason || 'Administrative transfer'}`,
+      req.ip
+    );
+
+    res.json({
+      success: true,
+      message: `Student successfully transferred to ${targetClass.name}.`,
+      student_id: studentId,
+      previous_class: student.current_class_name,
+      new_class: targetClass.name
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/students/bulk-promote
+ * Batch promote students to target class (SuperAdmin only)
+ */
+router.post('/bulk-promote', authenticate, requireRoles('superadmin'), (req, res, next) => {
+  try {
+    const { student_ids, target_class_id, academic_session } = req.body;
+
+    if (!Array.isArray(student_ids) || student_ids.length === 0 || !target_class_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'student_ids (array) and target_class_id are required.'
+      });
+    }
+
+    const targetClass = db.prepare('SELECT id, name FROM classes WHERE id = ?').get(parseInt(target_class_id));
+    if (!targetClass) {
+      return res.status(404).json({ success: false, message: 'Target class not found.' });
+    }
+
+    const updateStmt = db.prepare('UPDATE students SET class_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    let promotedCount = 0;
+
+    for (const sid of student_ids) {
+      const res = updateStmt.run(targetClass.id, parseInt(sid));
+      if (res.changes > 0) promotedCount++;
+    }
+
+    logAudit(
+      req.user.id,
+      'BULK_PROMOTE_STUDENTS',
+      'STUDENTS',
+      `Bulk promoted ${promotedCount} students to ${targetClass.name} for session ${academic_session || '2025/2026'}`,
+      req.ip
+    );
+
+    res.json({
+      success: true,
+      message: `Successfully promoted ${promotedCount} students to ${targetClass.name}.`,
+      promoted_count: promotedCount,
+      target_class: targetClass.name
     });
   } catch (err) {
     next(err);

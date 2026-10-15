@@ -32,9 +32,9 @@ router.get('/logs', authenticate, requireRoles('superadmin', 'admin'), (req, res
 
 /**
  * GET /api/audit/security-status
- * System Security & Hardening Diagnostics
+ * System Security & Hardening Diagnostics (Admin only)
  */
-router.get('/security-status', (req, res) => {
+router.get('/security-status', authenticate, requireRoles('superadmin', 'admin'), (req, res) => {
   res.json({
     success: true,
     diagnostics: {

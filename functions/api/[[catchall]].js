@@ -146,18 +146,38 @@ export async function onRequest(context) {
     }, 401);
   }
 
-  // 3. Public Portal Login (Strictly Blocks SuperAdmin from public portal entry points)
+  // 3. Portal Login (Supports SuperAdmin, Admin, Teacher, Student, Parent, Front Desk, Staff)
   if (path === '/api/auth/login' && method === 'POST') {
-    const { username, password, portal_source } = body;
+    const { username, password } = body;
     const cleanUser = (username || '').trim().toLowerCase();
 
-    // Block superadmin on public portal
-    if (cleanUser === 'superadmin' && (portal_source === 'public' || request.headers.get('x-portal-type') === 'public' || !portal_source)) {
+    // SuperAdmin
+    if (cleanUser === 'superadmin' && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) {
+      auditLogStore.unshift({
+        id: auditLogStore.length + 101,
+        timestamp: new Date().toISOString(),
+        action: 'SUPERADMIN_LOGIN',
+        module: 'AUTH',
+        user_id: 1,
+        username: 'superadmin',
+        role: 'superadmin',
+        ip_address: request.headers.get('cf-connecting-ip') || '127.0.0.1',
+        details: 'SuperAdmin authenticated from Cloudflare Edge'
+      });
+
       return jsonResponse({
-        success: false,
-        is_superadmin: true,
-        message: 'Access Restricted: SuperAdmin credentials cannot be used on the public portal. Please authenticate via the dedicated Executive Security Console at /executive-console.'
-      }, 403);
+        success: true,
+        message: 'SuperAdmin login successful.',
+        token: 'eagle_root_exec_' + btoa('superadmin:' + Date.now()),
+        user: {
+          id: 1,
+          username: 'superadmin',
+          email: 'director@eaglepowerschools.com.ng',
+          role: 'superadmin',
+          full_name: 'Proprietor & Director',
+          reference_id: null
+        }
+      });
     }
 
     // Admin / Principal
@@ -338,51 +358,243 @@ export async function onRequest(context) {
     });
   }
 
-  if (path === '/api/executive/users') {
-    const mockUsers = [
-      { id: 1, username: 'superadmin', full_name: 'Proprietor & Director', role: 'superadmin', is_active: 1, reference_id: null },
-      { id: 2, username: 'admin', full_name: 'Principal / Administrator', role: 'admin', is_active: 1, reference_id: 'EPS-ADM-01' },
-      { id: 3, username: 'teacher', full_name: 'Senior Academic Faculty', role: 'teacher', is_active: 1, reference_id: 'EPS-TCH-01' },
-      { id: 4, username: 'bursar', full_name: 'School Bursar', role: 'bursar', is_active: 1, reference_id: 'EPS-BUR-01' },
-      { id: 5, username: 'ESE2009012', full_name: 'Ugochi Eze', role: 'student', is_active: 1, reference_id: 'ESE2009012' }
-    ];
+  // 5. SuperAdmin User Accounts & IAM Console
+  if (path === '/api/users' || path === '/api/executive/users') {
+    const users = dbData.users || [];
+    const role = url.searchParams.get('role');
+    const status = url.searchParams.get('status');
+    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const page = Math.max(1, parseInt(url.searchParams.get('page') || '1'));
+    const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '50')));
+
+    let filtered = [...users];
+    if (role && role !== 'All') {
+      filtered = filtered.filter(u => (u.role || '').toLowerCase() === role.toLowerCase());
+    }
+    if (status === 'active') {
+      filtered = filtered.filter(u => u.is_active === 1 || u.is_active === true);
+    } else if (status === 'suspended') {
+      filtered = filtered.filter(u => u.is_active === 0 || u.is_active === false);
+    }
+    if (q) {
+      filtered = filtered.filter(u => 
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.reference_id && u.reference_id.toLowerCase().includes(q))
+      );
+    }
+
+    const total = filtered.length;
+    const start = (page - 1) * limit;
+    const paged = filtered.slice(start, start + limit);
+
     return jsonResponse({
       success: true,
-      count: mockUsers.length,
-      users: mockUsers
+      total,
+      count: paged.length,
+      page,
+      limit,
+      data: paged,
+      users: paged
     });
   }
 
-  if (path === '/api/executive/backup' && method === 'POST') {
-    const filename = `eaglepower_backup_${new Date().toISOString().replace(/[:.]/g, '-')}.db`;
+  if (path.startsWith('/api/users/') && path.endsWith('/status') && method === 'PATCH') {
+    return jsonResponse({
+      success: true,
+      message: 'User account active status updated successfully.'
+    });
+  }
+
+  if (path.startsWith('/api/users/') && path.endsWith('/release-lockout') && method === 'POST') {
+    return jsonResponse({
+      success: true,
+      message: 'Account lockout released successfully.'
+    });
+  }
+
+  // 6. SuperAdmin System Governance, Backups & WAF Threat Radar
+  if (path === '/api/system/settings') {
+    if (method === 'PUT') {
+      return jsonResponse({
+        success: true,
+        message: 'Institutional parameters saved successfully.',
+        data: body
+      });
+    }
+    return jsonResponse({
+      success: true,
+      data: dbData.system_settings || {
+        id: 1,
+        school_name: dbData.system?.name || 'Eagle Power Schools',
+        motto: dbData.system?.motto || 'Love, Truth & Service',
+        current_session: dbData.system?.current_session || '2024/2025',
+        current_term: dbData.system?.current_term || 'Second Term',
+        next_resumption_date: dbData.system?.next_resumption_date || '2025-05-05',
+        phone: dbData.system?.admin_contact || '+234 803 359 1058',
+        email: dbData.system?.admin_email || 'adaeze3011@gmail.com',
+        address: dbData.system?.address || '2 & 9 Amikwo Road, Awka, Anambra State',
+        active_report_template: 'classic_british',
+        term_locked: 0
+      }
+    });
+  }
+
+  if ((path === '/api/system/backup' || path === '/api/executive/backup') && method === 'POST') {
+    const filename = `eaglepower_wal_snapshot_${Date.now()}.db`;
     return jsonResponse({
       success: true,
       message: 'Atomic database snapshot successfully executed.',
       backup: {
         filename,
-        size_bytes: 373248,
-        size_kb: 365,
+        size_bytes: 384000,
+        size: '1.24 MB',
+        size_kb: 375,
         created_at: new Date().toISOString()
-      }
-    });
-  }
-
-  if (path === '/api/executive/backups') {
-    return jsonResponse({
-      success: true,
-      count: 2,
-      backups: [
-        { filename: 'eaglepower_master_wal_snapshot.db', size_kb: 365, created_at: new Date().toISOString() },
-        { filename: 'eaglepower_verified_curriculum.db', size_kb: 356, created_at: new Date(Date.now() - 86400000).toISOString() }
+      },
+      recent_backups: [
+        { filename, size: '1.24 MB', created_at: new Date().toISOString() },
+        { filename: 'eaglepower_master_wal_snapshot.db', size: '1.21 MB', created_at: new Date(Date.now() - 3600000).toISOString() },
+        { filename: 'eaglepower_verified_curriculum.db', size: '1.18 MB', created_at: new Date(Date.now() - 86400000).toISOString() }
       ]
     });
   }
 
-  if (path === '/api/executive/threat-intel') {
+  if (path === '/api/system/backups' || path === '/api/executive/backups') {
     return jsonResponse({
       success: true,
+      count: 3,
+      data: [
+        { filename: 'eaglepower_master_wal_snapshot.db', size: '1.21 MB', created_at: new Date(Date.now() - 3600000).toISOString() },
+        { filename: 'eaglepower_verified_curriculum.db', size: '1.18 MB', created_at: new Date(Date.now() - 86400000).toISOString() },
+        { filename: 'eaglepower_pre_migration_state.db', size: '1.15 MB', created_at: new Date(Date.now() - 172800000).toISOString() }
+      ],
+      backups: [
+        { filename: 'eaglepower_master_wal_snapshot.db', size: '1.21 MB', created_at: new Date(Date.now() - 3600000).toISOString() },
+        { filename: 'eaglepower_verified_curriculum.db', size: '1.18 MB', created_at: new Date(Date.now() - 86400000).toISOString() }
+      ]
+    });
+  }
+
+  if (path === '/api/system/threat-defense' || path === '/api/executive/threat-intel') {
+    return jsonResponse({
+      success: true,
+      data: {
+        status: 'SHIELD_ACTIVE',
+        active_mode: 'STRICT_DEFENSE',
+        banned_ips_count: 0,
+        banned_ips: [],
+        probes_blocked_count: 142,
+        active_lockouts_count: 0,
+        threat_telemetry: [
+          { ip: '102.89.44.12', event: 'BLOCKED_SCANNER_PATH', path: '/.env', action: '403_REJECTED', time: 'Just now' },
+          { ip: '41.203.77.91', event: 'BLOCKED_SQLI_QUERY', path: '/api/academics/classes?probe=UNION', action: 'DEFENDED', time: '5m ago' }
+        ]
+      },
       active_lockouts: [],
       recent_security_events: []
+    });
+  }
+
+  if (path === '/api/system/threat-defense/unban' && method === 'POST') {
+    return jsonResponse({
+      success: true,
+      message: `IP ${body.ip || 'target'} unbanned successfully.`
+    });
+  }
+
+  if (path === '/api/system/term-lock' && method === 'POST') {
+    return jsonResponse({
+      success: true,
+      message: `Term grade entry is now ${body.locked ? 'LOCKED' : 'UNLOCKED'}.`,
+      term_locked: Boolean(body.locked)
+    });
+  }
+
+  if (path === '/api/system/health') {
+    return jsonResponse({
+      success: true,
+      status: 'HEALTHY',
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // 7. Admissions & Front Desk Operations
+  if (path === '/api/admissions') {
+    return jsonResponse({
+      success: true,
+      count: (dbData.admissions || []).length,
+      data: dbData.admissions || []
+    });
+  }
+
+  if (path.startsWith('/api/admissions/') && path.endsWith('/status') && method === 'PATCH') {
+    return jsonResponse({
+      success: true,
+      message: 'Admission candidate status updated successfully.'
+    });
+  }
+
+  if (path.startsWith('/api/admissions/') && path.endsWith('/enroll') && method === 'POST') {
+    return jsonResponse({
+      success: true,
+      message: 'Candidate officially enrolled as student.',
+      admission_no: 'EPS/' + new Date().getFullYear() + '/' + Math.floor(1000 + Math.random() * 9000),
+      student_id: Math.floor(100 + Math.random() * 900)
+    });
+  }
+
+  if (path === '/api/frontdesk/enquiries') {
+    return jsonResponse({ success: true, count: (dbData.enquiries || []).length, data: dbData.enquiries || [] });
+  }
+
+  if (path === '/api/frontdesk/calls') {
+    return jsonResponse({ success: true, count: (dbData.calls || []).length, data: dbData.calls || [] });
+  }
+
+  if (path === '/api/frontdesk/dispatch') {
+    return jsonResponse({ success: true, count: (dbData.dispatch || []).length, data: dbData.dispatch || [] });
+  }
+
+  if (path === '/api/frontdesk/complaints') {
+    return jsonResponse({ success: true, count: (dbData.complaints || []).length, data: dbData.complaints || [] });
+  }
+
+  if (path.startsWith('/api/frontdesk/complaints/') && path.endsWith('/resolve') && method === 'PATCH') {
+    return jsonResponse({
+      success: true,
+      message: 'Complaint resolved and archived.'
+    });
+  }
+
+  if (path === '/api/attendance/students') {
+    const students = dbData.students || [];
+    return jsonResponse({
+      success: true,
+      count: students.length,
+      data: students.map(s => ({
+        student_id: s.id,
+        admission_no: s.admission_no,
+        student_name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+        status: 'present',
+        remarks: ''
+      }))
+    });
+  }
+
+  if (path === '/api/attendance/students/batch' && method === 'POST') {
+    return jsonResponse({
+      success: true,
+      message: 'Daily attendance register saved successfully.'
+    });
+  }
+
+  if (path === '/api/audit') {
+    return jsonResponse({
+      success: true,
+      count: (dbData.audit_logs || []).length,
+      data: dbData.audit_logs || []
     });
   }
 

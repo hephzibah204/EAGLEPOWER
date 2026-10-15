@@ -20,6 +20,9 @@ dist-ssr/
 auth_info/
 *.sqlite
 *.sqlite3
+server/backups/
+*.db-shm
+*.db-wal
 
 # Cloudflare
 .wrangler/

@@ -3,7 +3,7 @@ import { X, Mail, MessageCircle, Link, Check, Smartphone } from 'lucide-react';
 
 export default function ShareReportModal({ isOpen, onClose, studentName, reportLink }) {
   const [copied, setCopied] = useState(false);
-  const finalLink = reportLink || window.location.href;
+  const finalLink = reportLink || (typeof window !== 'undefined' ? window.location.href : 'https://www.eaglepowerschools.com.ng');
 
   if (!isOpen) return null;
 

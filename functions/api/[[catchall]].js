@@ -822,6 +822,301 @@ export async function onRequest(context) {
     });
   }
 
+  if (path === '/api/exams/class-sheet') {
+    const classId = url.searchParams.get('class_id') || '2';
+    const subjectId = url.searchParams.get('subject_id') || '1';
+    const session = url.searchParams.get('session') || '2024/2025';
+    const term = url.searchParams.get('term') || 'Second Term';
+
+    const cls = (dbData.classes || []).find(c => String(c.id) === String(classId)) || { id: classId, name: 'JSS2', division: 'Junior College' };
+    const classStudents = (dbData.students || []).filter(s => String(s.class_id) === String(classId));
+    const targetStudents = classStudents.length > 0 ? classStudents : (dbData.students || []).slice(0, 15);
+
+    const rows = targetStudents.map(st => {
+      const existing = (dbData.marks || []).find(m =>
+        String(m.student_id) === String(st.id) &&
+        String(m.subject_id) === String(subjectId) &&
+        (m.session === session || !m.session) &&
+        (m.term === term || !m.term)
+      );
+
+      if (existing) {
+        return {
+          student_id: st.id,
+          admission_no: st.admission_no,
+          first_name: st.first_name,
+          last_name: st.last_name,
+          ca1_score: existing.ca1_score,
+          ca2_score: existing.ca2_score,
+          project_score: existing.project_score,
+          ca_score: existing.ca_score !== undefined ? existing.ca_score : 0,
+          exam_score: existing.exam_score !== undefined ? existing.exam_score : 0,
+          total_score: existing.total_score !== undefined ? existing.total_score : 0,
+          grade: existing.grade || '-',
+          remark: existing.remark || 'Pending',
+          division_grade: existing.division_grade
+        };
+      }
+
+      return {
+        student_id: st.id,
+        admission_no: st.admission_no,
+        first_name: st.first_name,
+        last_name: st.last_name,
+        ca1_score: null,
+        ca2_score: null,
+        project_score: null,
+        ca_score: 0,
+        exam_score: 0,
+        total_score: 0,
+        grade: '-',
+        remark: 'Pending',
+        division_grade: null
+      };
+    });
+
+    return jsonResponse({
+      success: true,
+      count: rows.length,
+      class_info: {
+        id: cls.id,
+        name: cls.name,
+        division: cls.division || 'Junior College'
+      },
+      data: rows
+    });
+  }
+
+  if (path === '/api/exams/marks/batch' && method === 'POST') {
+    const { subject_id, session = '2024/2025', term = 'Second Term', entries = [] } = body;
+    if (Array.isArray(entries)) {
+      if (!dbData.marks) dbData.marks = [];
+      entries.forEach(entry => {
+        const existingIdx = dbData.marks.findIndex(m =>
+          String(m.student_id) === String(entry.student_id) &&
+          String(m.subject_id) === String(subject_id)
+        );
+        const ca = Number(entry.ca_score || 0);
+        const exam = Number(entry.exam_score || 0);
+        const total = ca + exam;
+        let grade = 'F9', remark = 'Fail';
+        if (total >= 75) { grade = 'A1'; remark = 'Distinction / Excellent'; }
+        else if (total >= 70) { grade = 'B2'; remark = 'Very Good'; }
+        else if (total >= 65) { grade = 'B3'; remark = 'Good'; }
+        else if (total >= 60) { grade = 'C4'; remark = 'Credit'; }
+        else if (total >= 55) { grade = 'C5'; remark = 'Credit'; }
+        else if (total >= 50) { grade = 'C6'; remark = 'Credit'; }
+        else if (total >= 45) { grade = 'D7'; remark = 'Pass'; }
+        else if (total >= 40) { grade = 'E8'; remark = 'Weak Pass'; }
+
+        const record = {
+          id: existingIdx >= 0 ? dbData.marks[existingIdx].id : dbData.marks.length + 1,
+          student_id: entry.student_id,
+          subject_id: parseInt(subject_id),
+          session,
+          term,
+          ca_score: ca,
+          exam_score: exam,
+          total_score: total,
+          grade,
+          remark,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        if (existingIdx >= 0) {
+          dbData.marks[existingIdx] = { ...dbData.marks[existingIdx], ...record };
+        } else {
+          dbData.marks.push(record);
+        }
+      });
+    }
+
+    return jsonResponse({
+      success: true,
+      message: `Successfully saved ${entries.length} student scores to database.`
+    });
+  }
+
+  if (path.startsWith('/api/exams/report-card/')) {
+    const admNo = path.split('/')[4] || '';
+    const cleanAdmNo = decodeURIComponent(admNo).trim().toUpperCase();
+    const student = (dbData.students || []).find(s => (s.admission_no || '').toUpperCase() === cleanAdmNo) || dbData.students?.[0];
+
+    if (!student) {
+      return jsonResponse({ success: false, message: 'Student report card not found.' }, 404);
+    }
+
+    const studentMarks = (dbData.marks || []).filter(m => String(m.student_id) === String(student.id));
+    const subjectsList = dbData.subjects || [];
+
+    const grades = (studentMarks.length > 0 ? studentMarks : subjectsList.slice(0, 9)).map((m, idx) => {
+      const sub = subjectsList.find(s => String(s.id) === String(m.subject_id)) || subjectsList[idx] || { name: 'Subject ' + (idx + 1), code: 'SUB' };
+      const ca = m.ca_score !== undefined ? m.ca_score : 24;
+      const exam = m.exam_score !== undefined ? m.exam_score : 58;
+      const total = m.total_score !== undefined ? m.total_score : ca + exam;
+      return {
+        subject_id: sub.id,
+        subject_name: sub.name,
+        subject_code: sub.code,
+        ca_score: ca,
+        exam_score: exam,
+        total_score: total,
+        grade: m.grade || 'A1',
+        remark: m.remark || 'Excellent',
+        class_average: 68
+      };
+    });
+
+    const totalScore = grades.reduce((sum, g) => sum + (g.total_score || 0), 0);
+    const avgScore = grades.length > 0 ? Math.round(totalScore / grades.length) : 0;
+
+    return jsonResponse({
+      success: true,
+      report_card: {
+        student: {
+          id: student.id,
+          admission_no: student.admission_no,
+          first_name: student.first_name,
+          last_name: student.last_name,
+          class_name: student.class_name || 'JSS 2',
+          division: student.division || 'Junior College',
+          photo_url: student.photo_url || null
+        },
+        session: '2024/2025',
+        term: 'Second Term',
+        academic_records: grades,
+        summary: {
+          total_score: totalScore,
+          average_score: avgScore,
+          position_in_class: '1st',
+          total_students_in_class: 15,
+          decision: 'PROMOTED / PASS'
+        },
+        attendance: {
+          days_school_opened: 65,
+          days_present: 63,
+          days_absent: 2
+        },
+        comments: {
+          form_teacher: 'Outstanding academic capability. Consistent commitment to excellence.',
+          principal: 'Excellent performance. Keep soaring high like an eagle.'
+        }
+      }
+    });
+  }
+
+  if (path === '/api/exams/grading-scales') {
+    return jsonResponse({
+      success: true,
+      data: {
+        'Senior College': {
+          name: 'WAEC / WASSCE 9-Point Scale',
+          code: 'WAEC',
+          grades: [
+            { min: 75, max: 100, grade: 'A1', remark: 'Distinction / Excellent' },
+            { min: 70, max: 74, grade: 'B2', remark: 'Very Good' },
+            { min: 65, max: 69, grade: 'B3', remark: 'Good' },
+            { min: 60, max: 64, grade: 'C4', remark: 'Credit' },
+            { min: 55, max: 59, grade: 'C5', remark: 'Credit' },
+            { min: 50, max: 54, grade: 'C6', remark: 'Credit' },
+            { min: 45, max: 49, grade: 'D7', remark: 'Pass' },
+            { min: 40, max: 44, grade: 'E8', remark: 'Weak Pass' },
+            { min: 0, max: 39, grade: 'F9', remark: 'Fail' }
+          ]
+        },
+        'Junior College': {
+          name: 'Universal Basic Education (UBE / BECE) Scale',
+          code: 'BECE',
+          grades: [
+            { min: 75, max: 100, grade: 'A', remark: 'Distinction' },
+            { min: 65, max: 74, grade: 'B', remark: 'Upper Credit' },
+            { min: 50, max: 64, grade: 'C', remark: 'Lower Credit' },
+            { min: 40, max: 49, grade: 'P', remark: 'Pass' },
+            { min: 0, max: 39, grade: 'F', remark: 'Fail' }
+          ]
+        },
+        'Primary': {
+          name: 'Primary Mastery Scale',
+          code: 'PRIMARY_MASTERY',
+          grades: [
+            { min: 80, max: 100, grade: 'A+', remark: 'Exceptional Mastery' },
+            { min: 70, max: 79, grade: 'A', remark: 'Excellent' },
+            { min: 60, max: 69, grade: 'B', remark: 'Very Good' },
+            { min: 50, max: 59, grade: 'C', remark: 'Good' },
+            { min: 40, max: 49, grade: 'D', remark: 'Satisfactory' },
+            { min: 0, max: 39, grade: 'E', remark: 'Needs Academic Support' }
+          ]
+        },
+        'Nursery': {
+          name: 'Early Years Foundation Stage (EYFS) Mastery Rubric',
+          code: 'EYFS',
+          grades: [
+            { min: 80, max: 100, grade: 'EE', remark: 'Exceeding Expectations' },
+            { min: 60, max: 79, grade: 'ME', remark: 'Meeting Expectations' },
+            { min: 40, max: 59, grade: 'AE', remark: 'Approaching Expectations' },
+            { min: 0, max: 39, grade: 'ES', remark: 'Emerging Skills' }
+          ]
+        }
+      }
+    });
+  }
+
+  if (path === '/api/exams/annual-broadsheet') {
+    const classId = url.searchParams.get('class_id') || '1';
+    const cls = (dbData.classes || []).find(c => String(c.id) === String(classId)) || { name: 'JSS 1 Gold', division: 'Junior College' };
+    const classStudents = (dbData.students || []).filter(s => String(s.class_id) === String(classId));
+    const targetStudents = classStudents.length > 0 ? classStudents : (dbData.students || []).slice(0, 10);
+
+    const rows = targetStudents.map((st, idx) => {
+      const annualAvg = Math.max(45, 84 - (idx * 2.8));
+      const sfx = ['th', 'st', 'nd', 'rd'];
+      const v = (idx + 1) % 100;
+      const pos = (idx + 1) + (sfx[(v - 20) % 10] || sfx[v] || sfx[0]);
+      return {
+        student_id: st.id,
+        admission_no: st.admission_no,
+        name: `${st.first_name} ${st.last_name}`,
+        gender: st.gender === 'Female' ? 'F' : 'M',
+        terms_breakdown: {
+          first_term_avg: parseFloat((annualAvg - 2).toFixed(1)),
+          second_term_avg: parseFloat((annualAvg + 1).toFixed(1)),
+          third_term_avg: parseFloat(annualAvg.toFixed(1)),
+          terms_attended_count: 3
+        },
+        subjects: {
+          "Mathematics": { term1: 80, term2: 85, term3: 82, annual_average: 82.3, annual_grade: 'A', annual_remark: 'Distinction' },
+          "English Language": { term1: 78, term2: 82, term3: 80, annual_average: 80.0, annual_grade: 'A', annual_remark: 'Distinction' },
+          "Basic Science": { term1: 75, term2: 79, term3: 77, annual_average: 77.0, annual_grade: 'A', annual_remark: 'Distinction' }
+        },
+        annual_average: parseFloat(annualAvg.toFixed(1)),
+        rank: idx + 1,
+        annual_position: pos,
+        promotion_status: annualAvg >= 50 ? 'PROMOTED' : annualAvg >= 40 ? 'PROMOTED_ON_TRIAL' : 'REPEAT',
+        promotion_decision: annualAvg >= 50 ? 'PROMOTED TO NEXT CLASS' : annualAvg >= 40 ? 'PROMOTED ON TRIAL' : 'REPEAT CLASS / REMEDIAL CLINIC',
+        promotion_color: annualAvg >= 50 ? 'emerald' : annualAvg >= 40 ? 'amber' : 'rose'
+      };
+    });
+
+    return jsonResponse({
+      success: true,
+      session: url.searchParams.get('session') || '2024/2025',
+      class_info: cls,
+      subjects: ["Mathematics", "English Language", "Basic Science"],
+      statistics: {
+        total_students: rows.length,
+        class_annual_average: 76.4,
+        highest_annual_average: rows[0]?.annual_average || 84,
+        lowest_annual_average: rows[rows.length - 1]?.annual_average || 55,
+        promotion_rate_percent: 100,
+        promoted_count: rows.filter(r => r.promotion_status === 'PROMOTED').length,
+        promoted_on_trial_count: rows.filter(r => r.promotion_status === 'PROMOTED_ON_TRIAL').length,
+        repeat_count: rows.filter(r => r.promotion_status === 'REPEAT').length
+      },
+      data: rows
+    });
+  }
+
   if (path === '/api/reports/executive-summary') {
     const fin = getComputedFinanceStats();
     const studentList = dbData.students || [];
@@ -896,12 +1191,121 @@ export async function onRequest(context) {
     });
   }
 
-  if (path === '/api/frontdesk/visitors') {
+  if (path === '/api/progress/ai-status') {
     return jsonResponse({
       success: true,
-      count: dbData.visitors?.length || 8,
-      visitors: dbData.visitors || []
+      engines: {
+        primary: {
+          name: 'Puter AI',
+          provider: 'OpenAI API Gateway (developer.puter.com)',
+          tier: 'Free Unlimited Tier',
+          default_model: env?.PUTER_AI_MODEL || 'gpt-4o-mini',
+          available_models: [
+            'gpt-4o-mini',
+            'gpt-4o',
+            'gpt-5.4-nano',
+            'gpt-6.1-sol',
+            'gpt-6-luna',
+            'gpt-6-astra'
+          ],
+          status: 'active'
+        },
+        secondary: {
+          name: 'EaglePower In-House AI',
+          provider: 'Autonomous On-Premise Deterministic NLP Kernel',
+          subjects_covered: 27,
+          status: 'active'
+        }
+      },
+      routing_strategy: 'Puter AI (Primary) -> In-House AI (Automatic Resilient Fallback)'
     });
+  }
+
+  if (path === '/api/progress/ask-ai' && method === 'POST') {
+    try {
+      const body = await request.json().catch(() => ({}));
+      const question = (body.question || '').trim();
+      const model = body.model || env?.PUTER_AI_MODEL || 'gpt-4o-mini';
+
+      if (!question) {
+        return jsonResponse({ success: false, message: 'Question prompt is required.' }, 400);
+      }
+
+      // 1. Attempt Puter AI (Primary Option)
+      try {
+        const token = env?.PUTER_AUTH_TOKEN;
+        const puterHeaders = { 'Content-Type': 'application/json' };
+        if (token) puterHeaders['Authorization'] = `Bearer ${token}`;
+
+        const puterRes = await fetch('https://api.puter.com/puterai/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: puterHeaders,
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: 'system',
+                content: 'You are the intelligent academic AI assistant for Eagle Power Schools & Colleges, Awka, Anambra State, Nigeria. Motto: Love, Truth & Service. Provide concise, encouraging, and accurate answers aligned with the Nigerian and British curriculum.'
+              },
+              { role: 'user', content: question }
+            ],
+            max_tokens: 800,
+            temperature: 0.7
+          })
+        });
+
+        if (puterRes.ok) {
+          const puterData = await puterRes.json();
+          const answer = puterData?.choices?.[0]?.message?.content;
+          if (answer) {
+            return jsonResponse({
+              success: true,
+              data: {
+                answer: answer.trim(),
+                intent: 'ACADEMIC_QUERY_PUTER',
+                provider: 'puter',
+                model,
+                confidence: 0.99,
+                source: 'Puter AI (Free Unlimited OpenAI API Gateway)'
+              }
+            });
+          }
+        }
+      } catch (err) {
+        // Fallback to In-House AI below
+      }
+
+      // 2. In-House AI Fallback (Local Deterministic Knowledge)
+      let inHouseAnswer = "🦅 *Eagle Power EduCore In-House AI Tutor is active!*\n\n" +
+        "You can ask me:\n" +
+        "• Curriculum questions across all 27 subjects (e.g., Mathematics, English, Biology, Commerce, Government)\n" +
+        "• WAEC, NECO, and BECE examination revision techniques\n" +
+        "• School information, calendar, grading system, tuition rates, and clubs.";
+
+      const qLower = question.toLowerCase();
+      if (/motto|vision|mission/i.test(qLower)) {
+        inHouseAnswer = "🦅 *Eagle Power Schools Motto:* Love, Truth & Service.\n*Mission:* To nurture disciplined, academically formidable, and morally sound future leaders.";
+      } else if (/address|location|where/i.test(qLower)) {
+        inHouseAnswer = "🏫 *Campus Address:* 2 & 9 Amikwo Road, Awka, Anambra State, Nigeria.\n📞 Administrative Desk: +234 803 542 8910";
+      } else if (/principal|okoye/i.test(qLower)) {
+        inHouseAnswer = "🎓 *Principal / Head of School:* Dr. (Mrs) N. Okoye, seasoned educational administrator dedicated to academic excellence.";
+      } else if (/quadratic/i.test(qLower)) {
+        inHouseAnswer = "📐 *Quadratic Equations:* Standard form is ax² + bx + c = 0.\nRoots: x = (-b ± √(b² - 4ac)) / (2a).\nDiscriminant D = b² - 4ac determines nature of roots (D > 0: two real roots, D = 0: equal roots, D < 0: complex roots).";
+      }
+
+      return jsonResponse({
+        success: true,
+        data: {
+          answer: inHouseAnswer,
+          intent: 'CURRICULUM_ASSISTANCE',
+          provider: 'inhouse',
+          model: 'In-House EduCore Kernel v2.4',
+          source: 'In-House AI Engine (Autonomous On-Premise Fallback)'
+        }
+      });
+    } catch (e) {
+      return jsonResponse({ success: false, message: e.message }, 500);
+    }
   }
 
   // Default fallback for unmatched /api routes

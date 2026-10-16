@@ -58,6 +58,13 @@ const calls = db.prepare('SELECT * FROM frontdesk_calls ORDER BY id DESC').all()
 const dispatch = db.prepare('SELECT * FROM frontdesk_dispatch ORDER BY id DESC').all();
 const complaints = db.prepare('SELECT * FROM frontdesk_complaints ORDER BY id DESC').all();
 const admissions = db.prepare('SELECT * FROM admissions ORDER BY id DESC').all();
+const marks = db.prepare(`
+  SELECT m.*, s.admission_no, s.first_name, s.last_name, s.class_id, sub.name as subject_name, sub.code as subject_code
+  FROM marks m
+  JOIN students s ON m.student_id = s.id
+  JOIN subjects sub ON m.subject_id = sub.id
+  ORDER BY m.id ASC
+`).all();
 const users = db.prepare('SELECT id, username, email, role, reference_id, full_name, is_active, last_login, created_at FROM users ORDER BY id ASC').all();
 const audit_logs = db.prepare('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100').all();
 const system_settings = db.prepare('SELECT * FROM system_settings WHERE id = 1').get() || {};
@@ -89,6 +96,7 @@ const exportData = {
   dispatch,
   complaints,
   admissions,
+  marks,
   users,
   audit_logs,
   system_settings

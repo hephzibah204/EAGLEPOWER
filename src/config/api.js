@@ -86,14 +86,9 @@ export async function apiFetch(input, options = {}) {
 }
 
 export async function restoreSession(options = {}) {
-  try {
-    const response = await apiFetch(`${getApiBase()}/auth/me`, { cache: 'no-store', ...options });
-    if (!response || response.status === 401 || response.status === 403 || response.status === 404 || response.status === 503) return null;
-    if (!response.ok) return null;
-    const data = await response.json().catch(() => null);
-    if (!data || !data.success || !data.user?.id) return null;
-    return data.user;
-  } catch {
-    return null;
-  }
+  const response = await apiFetch(`${getApiBase()}/auth/me`, { cache: 'no-store', ...options });
+  if (response.status === 401) return null;
+  const data = await response.json();
+  if (!response.ok || !data.success || !data.user?.id) throw new Error('Unable to restore your session. Please try again.');
+  return data.user;
 }

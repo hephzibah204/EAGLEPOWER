@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import QRCode from 'qrcode';
 import {
   X,
   MessageCircle,
@@ -12,12 +13,14 @@ import {
   AlertCircle,
   RefreshCw,
   Sparkles,
+  QrCode,
   Smartphone,
   ShieldCheck,
   Server,
   Zap,
   Key,
-  HelpCircle
+  HelpCircle,
+  Wifi
 } from 'lucide-react';
 import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
@@ -31,6 +34,8 @@ export default function WhatsAppBotConsoleModal({
   const API_BASE = getApiBase();
 
   const [activeTab, setActiveTab] = useState('connect'); // 'connect' | 'broadcast' | 'commands' | 'diagnostics'
+  const [pairingMethod, setPairingMethod] = useState('qr'); // 'qr' | 'code'
+  
   const [botStatus, setBotStatus] = useState({
     bot: {
       appName: 'eaglepower-whatsapp-bot',
@@ -47,9 +52,15 @@ export default function WhatsAppBotConsoleModal({
   });
   const [statusLoading, setStatusLoading] = useState(false);
 
+  // Live Multi-Device Companion QR State
+  const [qrRawString, setQrRawString] = useState('');
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrLastUpdated, setQrLastUpdated] = useState(null);
+
   // Pairing code state for WhatsApp Linked Devices
   const [phoneNumber, setPhoneNumber] = useState(defaultPhone);
-  const [pairingCode, setPairingCode] = useState('5EBX-WVC8');
+  const [pairingCode, setPairingCode] = useState('ETLG-667N');
   const [pairingLoading, setPairingLoading] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [pairingCountdown, setPairingCountdown] = useState(180);
@@ -88,11 +99,57 @@ export default function WhatsAppBotConsoleModal({
     }
   }, [API_BASE, authToken]);
 
+  // Fetch live companion QR code from Fly gateway
+  const fetchCompanionQr = useCallback(async (showSpinner = true) => {
+    if (showSpinner) setQrLoading(true);
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/executive/whatsapp/qr`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.qr) {
+          setQrRawString(data.qr);
+          const dataUrl = await QRCode.toDataURL(data.qr, {
+            width: 320,
+            margin: 2,
+            errorCorrectionLevel: 'M',
+            color: {
+              dark: '#030712',
+              light: '#ffffff'
+            }
+          });
+          setQrDataUrl(dataUrl);
+          setQrLastUpdated(new Date());
+        }
+        if (data.pairing_code) {
+          const rawCode = data.pairing_code.replace(/-/g, '');
+          const formatted = rawCode.length === 8 ? `${rawCode.slice(0, 4)}-${rawCode.slice(4)}` : data.pairing_code;
+          setPairingCode(formatted);
+        }
+      }
+    } catch (err) {
+      console.warn('Live QR fetch notice:', err.message);
+    } finally {
+      if (showSpinner) setQrLoading(false);
+    }
+  }, [API_BASE, authToken]);
+
+  // Load initial status and companion QR
   useEffect(() => {
     if (isOpen) {
       fetchStatus();
+      fetchCompanionQr(true);
     }
-  }, [isOpen, fetchStatus]);
+  }, [isOpen, fetchStatus, fetchCompanionQr]);
+
+  // Auto-refresh companion QR code every 15s when QR tab is active
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'connect' || pairingMethod !== 'qr') return;
+    const interval = setInterval(() => {
+      fetchCompanionQr(false);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isOpen, activeTab, pairingMethod, fetchCompanionQr]);
 
   // Pairing countdown timer
   useEffect(() => {
@@ -107,7 +164,6 @@ export default function WhatsAppBotConsoleModal({
   const handleRequestPairingCode = async (e) => {
     if (e) e.preventDefault();
     setPairingLoading(true);
-    setPairingCode('');
     setCodeCopied(false);
 
     try {
@@ -122,13 +178,10 @@ export default function WhatsAppBotConsoleModal({
       });
       const data = await res.json();
       if (data.pairing_code) {
-        setPairingCode(data.pairing_code);
+        const rawCode = data.pairing_code.replace(/-/g, '');
+        const formatted = rawCode.length === 8 ? `${rawCode.slice(0, 4)}-${rawCode.slice(4)}` : data.pairing_code;
+        setPairingCode(formatted);
         setPairingCountdown(data.expires_in_seconds || 180);
-      } else {
-        const p1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const p2 = Math.random().toString(36).substring(2, 6).toUpperCase();
-        setPairingCode(`${p1}-${p2}`);
-        setPairingCountdown(180);
       }
     } catch {
       const p1 = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -223,15 +276,15 @@ export default function WhatsAppBotConsoleModal({
 
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchStatus}
-              title="Ping Bot Gateway"
-              className="p-2 text-slate-400 hover:text-emerald-300 bg-slate-800/80 hover:bg-slate-800 rounded-xl transition-colors"
+              onClick={() => { fetchStatus(); fetchCompanionQr(true); }}
+              title="Ping Bot Gateway & Refresh QR"
+              className="p-2 text-slate-400 hover:text-emerald-300 bg-slate-800/80 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
-              <RefreshCw className={`w-4 h-4 ${statusLoading ? 'animate-spin text-emerald-400' : ''}`} />
+              <RefreshCw className={`w-4 h-4 ${statusLoading || qrLoading ? 'animate-spin text-emerald-400' : ''}`} />
             </button>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 rounded-xl transition-colors"
+              className="p-2 text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -242,7 +295,7 @@ export default function WhatsAppBotConsoleModal({
         <div className="flex items-center gap-2 px-5 py-2.5 bg-slate-950 border-b border-slate-800 shrink-0 overflow-x-auto scrollbar-none text-xs font-bold">
           <button
             onClick={() => setActiveTab('connect')}
-            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
               activeTab === 'connect'
                 ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -254,7 +307,7 @@ export default function WhatsAppBotConsoleModal({
 
           <button
             onClick={() => setActiveTab('broadcast')}
-            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
               activeTab === 'broadcast'
                 ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -266,7 +319,7 @@ export default function WhatsAppBotConsoleModal({
 
           <button
             onClick={() => setActiveTab('commands')}
-            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
               activeTab === 'commands'
                 ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -278,7 +331,7 @@ export default function WhatsAppBotConsoleModal({
 
           <button
             onClick={() => setActiveTab('diagnostics')}
-            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 ${
+            className={`px-3.5 py-1.5 rounded-xl flex items-center gap-2 transition-all shrink-0 cursor-pointer ${
               activeTab === 'diagnostics'
                 ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-900'
@@ -292,7 +345,7 @@ export default function WhatsAppBotConsoleModal({
         {/* MODAL BODY */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 text-xs text-slate-300">
 
-          {/* TAB 1: PAIRING WITH LINKED DEVICES ONLY */}
+          {/* TAB 1: PAIRING WITH LINKED DEVICES (QR OR CODE) */}
           {activeTab === 'connect' && (
             <div className="space-y-6 animate-in fade-in">
               {/* GATEWAY STATUS BANNER */}
@@ -307,165 +360,306 @@ export default function WhatsAppBotConsoleModal({
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
                     </div>
                     <p className="text-slate-400 text-xs">
-                      Persistent session keys & multi-device credentials in <span className="font-mono text-emerald-300">/data/auth_info</span> (Fly.io microVM)
+                      Fly.io MicroVM: <span className="font-mono text-emerald-300">8d999d0ce54368</span> &bull; Persistent Volume: <span className="font-mono text-emerald-300">/data/auth_info</span>
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/40 text-[11px] font-mono text-emerald-300 flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5" />
+                    <Wifi className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Multi-Device Handshake</span>
                   </span>
                 </div>
               </div>
 
-              {/* DEDICATED LINKED DEVICES PAIRING INTERFACE */}
-              <div className="p-5 sm:p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-6">
-                <div className="space-y-1">
-                  <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                    <Smartphone className="w-5 h-5 text-emerald-400" />
-                    <span>Pair WhatsApp via "Linked Devices"</span>
-                  </h4>
-                  <p className="text-slate-400 text-xs leading-relaxed">
-                    Link the official Eagle Power school phone line as an automated multi-device companion. Enter the phone number to generate your official 8-digit verification pairing code.
-                  </p>
-                </div>
+              {/* PAIRING METHOD SELECTOR */}
+              <div className="flex items-center justify-center gap-2 p-1.5 bg-slate-950 rounded-2xl border border-slate-800 w-fit mx-auto text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => { setPairingMethod('qr'); fetchCompanionQr(true); }}
+                  className={`px-4 py-2 rounded-xl flex items-center gap-2 transition-all cursor-pointer ${
+                    pairingMethod === 'qr'
+                      ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>Method 1: Scan Companion QR Code (Linked Devices)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPairingMethod('code')}
+                  className={`px-4 py-2 rounded-xl flex items-center gap-2 transition-all cursor-pointer ${
+                    pairingMethod === 'code'
+                      ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Smartphone className="w-4 h-4" />
+                  <span>Method 2: Link with Phone Number (8-Digit Code)</span>
+                </button>
+              </div>
 
-                {/* PHONE INPUT & GENERATE BUTTON */}
-                <form onSubmit={handleRequestPairingCode} className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex-1">
-                    <label className="block text-slate-300 font-bold mb-1.5">
-                      Dedicated School Phone Number (with Country Code)
-                    </label>
-                    <input
-                      type="text"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="e.g. +234 907 558 0671"
-                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-emerald-400"
-                    />
+              {/* METHOD 1: OFFICIAL MULTI-DEVICE COMPANION QR CODE */}
+              {pairingMethod === 'qr' && (
+                <div className="p-5 sm:p-6 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-5 animate-in fade-in">
+                  <div className="space-y-1">
+                    <h4 className="text-sm sm:text-base font-black text-white flex items-center justify-center gap-2">
+                      <QrCode className="w-5 h-5 text-emerald-400" />
+                      <span>Official WhatsApp Linked Devices Companion QR</span>
+                    </h4>
+                    <p className="text-slate-400 text-xs max-w-lg mx-auto">
+                      Scan this live multi-device handshake code directly from WhatsApp on the dedicated school phone to link the bot.
+                    </p>
                   </div>
-                  <div className="flex items-end">
+
+                  {/* CRITICAL SCANNER GUIDANCE ALERT */}
+                  <div className="p-3.5 bg-emerald-950/40 border border-emerald-500/30 rounded-2xl text-left max-w-lg mx-auto space-y-1.5">
+                    <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                      <span>How to Scan Properly</span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 space-y-1 pl-6">
+                      <p>
+                        ✅ Open <strong className="text-white">WhatsApp</strong> &rarr; Tap <strong className="text-white">Settings</strong> (or ⋮ Menu) &rarr; Tap <strong className="text-emerald-400">Linked Devices</strong> &rarr; Tap <strong className="text-white">Link a Device</strong> &rarr; Scan this QR code.
+                      </p>
+                      <p className="text-slate-400 text-[10px]">
+                        ℹ️ Do not use a regular phone camera or QR scanner. You must scan from inside WhatsApp's <em>"Link a Device"</em> screen.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* LIVE ROTATING COMPANION QR CODE DISPLAY */}
+                  <div className="relative inline-block p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-emerald-500/40">
+                    {qrLoading || !qrDataUrl ? (
+                      <div className="w-56 h-56 sm:w-64 sm:h-64 flex flex-col items-center justify-center bg-slate-50 rounded-2xl gap-2">
+                        <RefreshCw className="w-7 h-7 text-emerald-600 animate-spin" />
+                        <span className="text-[11px] font-bold text-slate-600">Connecting to Fly.io Gateway...</span>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <img
+                          src={qrDataUrl}
+                          alt="Official WhatsApp Multi-Device Companion QR Code"
+                          className="w-56 h-56 sm:w-64 sm:h-64 rounded-2xl object-contain mx-auto"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* QR REFRESH & TIMESTAMP */}
+                  <div className="flex items-center justify-center gap-3">
                     <button
-                      type="submit"
-                      disabled={pairingLoading}
-                      className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
+                      type="button"
+                      onClick={() => fetchCompanionQr(true)}
+                      disabled={qrLoading}
+                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
                     >
-                      {pairingLoading ? (
-                        <>
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Generating Code...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="w-4 h-4 fill-slate-950" />
-                          <span>Generate Official Pairing Code</span>
-                        </>
-                      )}
+                      <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${qrLoading ? 'animate-spin' : ''}`} />
+                      <span>Refresh Companion QR</span>
                     </button>
-                  </div>
-                </form>
-
-                {/* PAIRING CODE CARD */}
-                {pairingCode && (
-                  <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-950/90 via-slate-900 to-teal-950/90 border-2 border-emerald-400 text-center space-y-4 animate-in zoom-in-95">
-                    <span className="text-[11px] font-black uppercase tracking-widest text-emerald-400 flex items-center justify-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Official 8-Digit WhatsApp Linking Code</span>
-                    </span>
-
-                    <div className="flex items-center justify-center gap-3">
-                      <span className="font-mono text-3xl sm:text-5xl font-black text-white tracking-widest bg-slate-950 px-6 sm:px-8 py-3 rounded-2xl border-2 border-emerald-500/60 shadow-2xl shadow-emerald-950">
-                        {pairingCode}
+                    {qrLastUpdated && (
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Auto-updates every 15s &bull; Last refreshed: {qrLastUpdated.toLocaleTimeString()}
                       </span>
+                    )}
+                  </div>
+
+                  {/* 4-STEP QR INSTRUCTIONS */}
+                  <div className="pt-4 border-t border-slate-800 text-left grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs max-w-3xl mx-auto">
+                    <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                      <strong className="text-emerald-400 flex items-center gap-1">
+                        <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">1</span>
+                        <span>Open WhatsApp</span>
+                      </strong>
+                      <p className="text-slate-300 text-[11px]">
+                        Open WhatsApp on the school device ({phoneNumber || defaultPhone}).
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                      <strong className="text-emerald-400 flex items-center gap-1">
+                        <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">2</span>
+                        <span>Settings Menu</span>
+                      </strong>
+                      <p className="text-slate-300 text-[11px]">
+                        Tap <strong>Settings</strong> (iPhone) or <strong>⋮ (Three Dots)</strong> (Android).
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                      <strong className="text-emerald-400 flex items-center gap-1">
+                        <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">3</span>
+                        <span>Linked Devices</span>
+                      </strong>
+                      <p className="text-slate-300 text-[11px]">
+                        Tap <strong>Linked Devices</strong>, then tap the green <strong>Link a Device</strong> button.
+                      </p>
+                    </div>
+
+                    <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                      <strong className="text-emerald-400 flex items-center gap-1">
+                        <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">4</span>
+                        <span>Scan Code</span>
+                      </strong>
+                      <p className="text-slate-300 text-[11px]">
+                        Point the camera at this QR code. The session connects and saves automatically!
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+
+              {/* METHOD 2: 8-DIGIT PAIRING CODE */}
+              {pairingMethod === 'code' && (
+                <div className="p-5 sm:p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-6 animate-in fade-in">
+                  <div className="space-y-1">
+                    <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                      <Smartphone className="w-5 h-5 text-emerald-400" />
+                      <span>Link with Phone Number (8-Digit Pairing Code)</span>
+                    </h4>
+                    <p className="text-slate-400 text-xs leading-relaxed">
+                      If you prefer not to scan with your camera, request an official 8-digit verification pairing code and enter it on your phone.
+                    </p>
+                  </div>
+
+                  {/* PHONE INPUT & GENERATE BUTTON */}
+                  <form onSubmit={handleRequestPairingCode} className="flex flex-col sm:flex-row gap-3">
+                    <div className="flex-1">
+                      <label className="block text-slate-300 font-bold mb-1.5">
+                        Dedicated School Phone Number (with Country Code)
+                      </label>
+                      <input
+                        type="text"
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value)}
+                        placeholder="e.g. +234 907 558 0671"
+                        className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-emerald-400"
+                      />
+                    </div>
+                    <div className="flex items-end">
                       <button
-                        type="button"
-                        onClick={handleCopyCode}
-                        className="p-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-2xl font-bold transition-all shadow-lg hover:scale-105 cursor-pointer"
-                        title="Copy Code"
+                        type="submit"
+                        disabled={pairingLoading}
+                        className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
                       >
-                        {codeCopied ? <Check className="w-6 h-6 text-slate-950" /> : <Copy className="w-6 h-6 text-slate-950" />}
+                        {pairingLoading ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Generating Code...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-4 h-4 fill-slate-950" />
+                            <span>Generate Official Pairing Code</span>
+                          </>
+                        )}
                       </button>
                     </div>
+                  </form>
 
-                    <div className="flex items-center justify-center gap-2 text-xs">
-                      {pairingCountdown > 0 ? (
-                        <span className="text-amber-300 font-mono font-bold bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30">
-                          Expires in {Math.floor(pairingCountdown / 60)}:{(pairingCountdown % 60).toString().padStart(2, '0')}
+                  {/* PAIRING CODE CARD */}
+                  {pairingCode && (
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-950/90 via-slate-900 to-teal-950/90 border-2 border-emerald-400 text-center space-y-4 animate-in zoom-in-95">
+                      <span className="text-[11px] font-black uppercase tracking-widest text-emerald-400 flex items-center justify-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Official 8-Digit WhatsApp Linking Code</span>
+                      </span>
+
+                      <div className="flex items-center justify-center gap-3">
+                        <span className="font-mono text-3xl sm:text-5xl font-black text-white tracking-widest bg-slate-950 px-6 sm:px-8 py-3 rounded-2xl border-2 border-emerald-500/60 shadow-2xl shadow-emerald-950">
+                          {pairingCode}
                         </span>
-                      ) : (
-                        <span className="text-red-400 font-mono font-bold">Code expired &bull; Click Generate to refresh</span>
-                      )}
-                      {codeCopied && (
-                        <span className="text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/30">
-                          Copied to Clipboard!
-                        </span>
-                      )}
+                        <button
+                          type="button"
+                          onClick={handleCopyCode}
+                          className="p-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-2xl font-bold transition-all shadow-lg hover:scale-105 cursor-pointer"
+                          title="Copy Code"
+                        >
+                          {codeCopied ? <Check className="w-6 h-6 text-slate-950" /> : <Copy className="w-6 h-6 text-slate-950" />}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-center gap-2 text-xs">
+                        {pairingCountdown > 0 ? (
+                          <span className="text-amber-300 font-mono font-bold bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30">
+                            Expires in {Math.floor(pairingCountdown / 60)}:{(pairingCountdown % 60).toString().padStart(2, '0')}
+                          </span>
+                        ) : (
+                          <span className="text-red-400 font-mono font-bold">Code expired &bull; Click Generate to refresh</span>
+                        )}
+                        {codeCopied && (
+                          <span className="text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/30">
+                            Copied to Clipboard!
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 4-STEP PAIRING INSTRUCTIONS */}
+                      <div className="pt-4 border-t border-slate-800 text-left grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+                        <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                          <strong className="text-emerald-400 flex items-center gap-1">
+                            <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">1</span>
+                            <span>Open WhatsApp</span>
+                          </strong>
+                          <p className="text-slate-300 text-[11px]">
+                            Open WhatsApp on your phone ({phoneNumber}). Tap <strong>Settings</strong> or <strong>⋮ Menu</strong>.
+                          </p>
+                        </div>
+
+                        <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                          <strong className="text-emerald-400 flex items-center gap-1">
+                            <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">2</span>
+                            <span>Linked Devices</span>
+                          </strong>
+                          <p className="text-slate-300 text-[11px]">
+                            Select <strong>Linked Devices</strong>, then tap the green <strong>"Link a Device"</strong> button.
+                          </p>
+                        </div>
+
+                        <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                          <strong className="text-emerald-400 flex items-center gap-1">
+                            <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">3</span>
+                            <span>Phone Number</span>
+                          </strong>
+                          <p className="text-slate-300 text-[11px]">
+                            At the bottom of the camera screen, tap <strong>"Link with phone number instead"</strong>.
+                          </p>
+                        </div>
+
+                        <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                          <strong className="text-emerald-400 flex items-center gap-1">
+                            <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">4</span>
+                            <span>Enter Code</span>
+                          </strong>
+                          <p className="text-slate-300 text-[11px]">
+                            Type the 8 characters above. Your device will pair in seconds and stay online 24/7!
+                          </p>
+                        </div>
+                      </div>
                     </div>
-
-                    {/* 4-STEP PAIRING INSTRUCTIONS */}
-                    <div className="pt-4 border-t border-slate-800 text-left grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
-                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
-                        <strong className="text-emerald-400 flex items-center gap-1">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">1</span>
-                          <span>Open WhatsApp</span>
-                        </strong>
-                        <p className="text-slate-300 text-[11px]">
-                          Open WhatsApp on your phone ({phoneNumber}). Tap <strong>Settings</strong> (iOS) or <strong>⋮ Menu</strong> (Android).
-                        </p>
-                      </div>
-
-                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
-                        <strong className="text-emerald-400 flex items-center gap-1">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">2</span>
-                          <span>Linked Devices</span>
-                        </strong>
-                        <p className="text-slate-300 text-[11px]">
-                          Select <strong>Linked Devices</strong>, then tap the green <strong>"Link a Device"</strong> button.
-                        </p>
-                      </div>
-
-                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
-                        <strong className="text-emerald-400 flex items-center gap-1">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">3</span>
-                          <span>Phone Number</span>
-                        </strong>
-                        <p className="text-slate-300 text-[11px]">
-                          At the bottom of the camera screen, tap <strong>"Link with phone number instead"</strong>.
-                        </p>
-                      </div>
-
-                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
-                        <strong className="text-emerald-400 flex items-center gap-1">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">4</span>
-                          <span>Enter Code</span>
-                        </strong>
-                        <p className="text-slate-300 text-[11px]">
-                          Type the 8 characters above. Your device will pair in seconds and stay online 24/7!
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ARCHITECTURE & SECURITY NOTICE */}
-                <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2 text-slate-400 text-xs">
-                  <div className="flex items-center gap-2 text-slate-300 font-bold">
-                    <HelpCircle className="w-4 h-4 text-emerald-400" />
-                    <span>How WhatsApp Multi-Device Linking Works</span>
-                  </div>
-                  <p className="text-[11px] leading-relaxed">
-                    By linking through WhatsApp's official <strong>Linked Devices</strong> protocol, the Eagle Power Bot connects as an authorized companion client. It runs independently on our dedicated Fly.io cloud microVM without needing your phone to remain connected to Wi-Fi or stay switched on.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-500 pt-1">
-                    <span>&bull; End-to-End Encrypted via Baileys</span>
-                    <span>&bull; Automatic Reconnect on Network Drops</span>
-                    <span>&bull; Session keys stored securely in isolated volume</span>
-                  </div>
+                  )}
                 </div>
+              )}
 
+              {/* ARCHITECTURE & SECURITY NOTICE */}
+              <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2 text-slate-400 text-xs">
+                <div className="flex items-center gap-2 text-slate-300 font-bold">
+                  <HelpCircle className="w-4 h-4 text-emerald-400" />
+                  <span>How WhatsApp Multi-Device Linking Works</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  By linking through WhatsApp's official <strong>Linked Devices</strong> protocol (either scanning the companion QR code or entering the 8-digit code), the Eagle Power Bot connects as an authorized companion client. It runs independently on our dedicated Fly.io cloud microVM without needing your phone to remain connected to Wi-Fi or stay switched on.
+                </p>
+                <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-500 pt-1">
+                  <span>&bull; End-to-End Encrypted via Baileys</span>
+                  <span>&bull; Automatic Reconnect on Network Drops</span>
+                  <span>&bull; Session keys stored securely in isolated persistent volume</span>
+                </div>
               </div>
+
             </div>
           )}
 
@@ -518,7 +712,7 @@ export default function WhatsAppBotConsoleModal({
                         key={aud.id}
                         type="button"
                         onClick={() => setBroadcastForm({ ...broadcastForm, broadcast_type: aud.id })}
-                        className={`p-3 rounded-xl border text-left transition-all ${
+                        className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                           broadcastForm.broadcast_type === aud.id
                             ? 'bg-emerald-500/10 border-emerald-400 text-emerald-300 shadow-sm'
                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'

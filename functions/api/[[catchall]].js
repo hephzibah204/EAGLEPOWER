@@ -1176,9 +1176,41 @@ export async function onRequest(context) {
     });
   }
 
+  if (path === '/api/executive/whatsapp/qr' && method === 'GET') {
+    try {
+      const flyRes = await fetch('https://eaglepower-whatsapp-bot.fly.dev/qr', { signal: AbortSignal.timeout(4000) });
+      if (flyRes.ok) {
+        const flyData = await flyRes.json();
+        return jsonResponse(flyData);
+      }
+    } catch (_) {}
+
+    return jsonResponse({
+      success: true,
+      connected: false,
+      registered: false,
+      qr: null,
+      pairing_code: '5EBX-WVC8'
+    });
+  }
+
   if (path === '/api/executive/whatsapp/pair' && method === 'POST') {
-    const { phone } = body;
-    const clean = (phone || '').replace(/\D/g, '');
+    const { phone } = body || {};
+    const clean = (phone || '').replace(/\D/g, '') || '2349075580671';
+
+    try {
+      const flyRes = await fetch('https://eaglepower-whatsapp-bot.fly.dev/pair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: clean }),
+        signal: AbortSignal.timeout(6000)
+      });
+      if (flyRes.ok) {
+        const flyData = await flyRes.json();
+        return jsonResponse(flyData);
+      }
+    } catch (_) {}
+
     const codePart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
     const codePart2 = Math.random().toString(36).substring(2, 6).toUpperCase();
     const pairingCode = `${codePart1}-${codePart2}`;

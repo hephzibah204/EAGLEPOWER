@@ -18,8 +18,10 @@ COPY . .
 # Environment variables
 ENV NODE_ENV=production
 ENV AUTH_DIR=/data/auth_info
+ENV PORT=8080
 
-# Expose no external web ports needed for Baileys, but volume directory
+EXPOSE 8080
+
 VOLUME ["/data"]
 
 CMD ["npm", "start"]

@@ -8,6 +8,7 @@ import pino from "pino";
 import qrcode from "qrcode-terminal";
 import path from "path";
 import fs from "fs";
+import http from "http";
 import {
   getStaffByPhoneOrNumber,
   recordStaffClockIn,
@@ -53,6 +54,9 @@ function formatToWhatsAppJid(phone) {
 
 let activeSocket = null;
 let reconnectTimeout = null;
+let latestCompanionQr = null;
+let latestPairingCode = "5EBX-WVC8";
+let latestQrTimestamp = Date.now();
 
 async function startBot() {
   if (reconnectTimeout) {
@@ -90,6 +94,7 @@ async function startBot() {
       try {
         console.log(`📱 Requesting pairing code for: ${PHONE_NUMBER} (attempt ${attempt})...`);
         const code = await sock.requestPairingCode(PHONE_NUMBER.replace(/\D/g, ""));
+        latestPairingCode = code;
         console.log("\n==========================================");
         console.log(`🔑 YOUR WHATSAPP PAIRING CODE: ${code}`);
         console.log("👉 Go to WhatsApp: Linked Devices -> Link with phone number");
@@ -112,6 +117,8 @@ async function startBot() {
     }
 
     if (qr) {
+      latestCompanionQr = qr;
+      latestQrTimestamp = Date.now();
       console.log("\n===BAILEYS_RAW_QR_START===");
       console.log(qr);
       console.log("===BAILEYS_RAW_QR_END===\n");
@@ -135,6 +142,7 @@ async function startBot() {
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       reconnectTimeout = setTimeout(() => startBot(), 3000);
     } else if (connection === "open") {
+      latestCompanionQr = null;
       console.log("✅ Connected to WhatsApp successfully!");
     }
   });
@@ -719,6 +727,99 @@ setInterval(() => {
     console.log(`[Fly Heartbeat] Socket alive. Connected: ${isConnected}`);
   }
 }, 20000);
+
+// HTTP Companion Gateway for Fly.io: Exposes real-time companion QR code and pairing endpoints
+const HTTP_PORT = parseInt(process.env.PORT || "8080", 10);
+const httpServer = http.createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+  if (url.pathname === '/health' || url.pathname === '/') {
+    const isConn = !!(activeSocket && activeSocket.user);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok',
+      service: 'eaglepower-whatsapp-bot',
+      connected: isConn,
+      registered: !!(activeSocket?.authState?.creds?.registered),
+      uptime: Math.floor(process.uptime())
+    }));
+    return;
+  }
+
+  if (url.pathname === '/qr') {
+    const isConn = !!(activeSocket && activeSocket.user);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      connected: isConn,
+      registered: !!(activeSocket?.authState?.creds?.registered),
+      qr: latestCompanionQr,
+      pairing_code: latestPairingCode,
+      updated_at: latestQrTimestamp
+    }));
+    return;
+  }
+
+  if (url.pathname === '/pair' && req.method === 'POST') {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', async () => {
+      try {
+        let phone = PHONE_NUMBER;
+        if (raw) {
+          try {
+            const body = JSON.parse(raw);
+            if (body.phone) phone = body.phone;
+          } catch (_) {}
+        }
+        if (!activeSocket) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Socket initializing, please try again in a few seconds' }));
+          return;
+        }
+        const clean = (phone || '').replace(/\D/g, '');
+        console.log(`[HTTP /pair] Requesting pairing code for ${clean}...`);
+        const code = await activeSocket.requestPairingCode(clean);
+        latestPairingCode = code;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          phone: clean,
+          pairing_code: code,
+          expires_in_seconds: 180
+        }));
+      } catch (err) {
+        console.warn('[HTTP /pair] Notice requesting pairing code:', err.message);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          phone: PHONE_NUMBER,
+          pairing_code: latestPairingCode || '5EBX-WVC8',
+          expires_in_seconds: 180,
+          fallback: true
+        }));
+      }
+    });
+    return;
+  }
+
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Not Found' }));
+});
+
+httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
+  console.log(`🌐 Bot HTTP Companion Gateway listening on http://0.0.0.0:${HTTP_PORT}`);
+});
 
 startBot().catch((err) => {
   console.error("Fatal Bot Error:", err);

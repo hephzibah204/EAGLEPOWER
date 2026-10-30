@@ -57,6 +57,10 @@ export default function WhatsAppBotConsoleModal({
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [qrLoading, setQrLoading] = useState(false);
   const [qrLastUpdated, setQrLastUpdated] = useState(null);
+  const qrRawRef = useRef('');
+  const [rotationCount, setRotationCount] = useState(1);
+  const [qrRotationCountdown, setQrRotationCountdown] = useState(20);
+  const [justRotated, setJustRotated] = useState(false);
 
   // Pairing code state for WhatsApp Linked Devices
   const [phoneNumber, setPhoneNumber] = useState(defaultPhone);
@@ -82,7 +86,7 @@ export default function WhatsAppBotConsoleModal({
     setStatusLoading(true);
     try {
       const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-      const res = await fetch(`${API_BASE}/executive/whatsapp/status`, { headers });
+      const res = await fetch(`${API_BASE}/executive/whatsapp/status?_t=${Date.now()}`, { headers, cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         if (data.bot) {
@@ -99,27 +103,44 @@ export default function WhatsAppBotConsoleModal({
     }
   }, [API_BASE, authToken]);
 
-  // Fetch live companion QR code from Fly gateway
-  const fetchCompanionQr = useCallback(async (showSpinner = true) => {
+  // Fetch live companion QR code from Fly gateway with cache busting
+  const fetchCompanionQr = useCallback(async (showSpinner = false) => {
     if (showSpinner) setQrLoading(true);
     try {
-      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-      const res = await fetch(`${API_BASE}/executive/whatsapp/qr`, { headers });
+      const headers = authToken
+        ? { Authorization: `Bearer ${authToken}`, 'Cache-Control': 'no-cache' }
+        : { 'Cache-Control': 'no-cache' };
+
+      const res = await fetch(`${API_BASE}/executive/whatsapp/qr?_t=${Date.now()}`, {
+        headers,
+        cache: 'no-store'
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.qr) {
-          setQrRawString(data.qr);
-          const dataUrl = await QRCode.toDataURL(data.qr, {
-            width: 320,
-            margin: 2,
-            errorCorrectionLevel: 'M',
-            color: {
-              dark: '#030712',
-              light: '#ffffff'
+          const isNew = data.qr !== qrRawRef.current;
+          if (isNew || !qrDataUrl) {
+            qrRawRef.current = data.qr;
+            setQrRawString(data.qr);
+            if (isNew) {
+              setRotationCount(c => c + 1);
+              setQrRotationCountdown(20);
+              setJustRotated(true);
+              setTimeout(() => setJustRotated(false), 2500);
             }
-          });
-          setQrDataUrl(dataUrl);
-          setQrLastUpdated(new Date());
+
+            const dataUrl = await QRCode.toDataURL(data.qr, {
+              width: 320,
+              margin: 2,
+              errorCorrectionLevel: 'M',
+              color: {
+                dark: '#030712',
+                light: '#ffffff'
+              }
+            });
+            setQrDataUrl(dataUrl);
+            setQrLastUpdated(new Date());
+          }
         }
         if (data.pairing_code) {
           const rawCode = data.pairing_code.replace(/-/g, '');
@@ -132,7 +153,7 @@ export default function WhatsAppBotConsoleModal({
     } finally {
       if (showSpinner) setQrLoading(false);
     }
-  }, [API_BASE, authToken]);
+  }, [API_BASE, authToken, qrDataUrl]);
 
   // Load initial status and companion QR
   useEffect(() => {
@@ -142,14 +163,23 @@ export default function WhatsAppBotConsoleModal({
     }
   }, [isOpen, fetchStatus, fetchCompanionQr]);
 
-  // Auto-refresh companion QR code every 15s when QR tab is active
+  // Fast 3-second polling to capture dynamic Baileys rotations immediately
   useEffect(() => {
     if (!isOpen || activeTab !== 'connect' || pairingMethod !== 'qr') return;
     const interval = setInterval(() => {
       fetchCompanionQr(false);
-    }, 15000);
+    }, 3000);
     return () => clearInterval(interval);
   }, [isOpen, activeTab, pairingMethod, fetchCompanionQr]);
+
+  // 1-second countdown ticker for visual rotation progress
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'connect' || pairingMethod !== 'qr') return;
+    const ticker = setInterval(() => {
+      setQrRotationCountdown(prev => (prev > 1 ? prev - 1 : 20));
+    }, 1000);
+    return () => clearInterval(ticker);
+  }, [isOpen, activeTab, pairingMethod]);
 
   // Pairing countdown timer
   useEffect(() => {
@@ -430,15 +460,54 @@ export default function WhatsAppBotConsoleModal({
                     </div>
                   </div>
 
+                  {/* DYNAMIC ROTATION LIVE STATUS BAR */}
+                  <div className="max-w-md mx-auto p-3 bg-slate-900/90 rounded-2xl border border-slate-800 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="font-bold text-white flex items-center gap-1.5">
+                          <span>Live Rotating Handshake</span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono border border-emerald-500/30">
+                            Cycle #{rotationCount}
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 font-mono text-[11px] text-amber-300">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                        <span>Rotation in {qrRotationCountdown}s</span>
+                      </div>
+                    </div>
+
+                    {/* DYNAMIC PROGRESS BAR */}
+                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 h-full transition-all duration-1000 ease-linear rounded-full"
+                        style={{ width: `${((20 - qrRotationCountdown) / 20) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* ROTATION NOTIFICATION PILL */}
+                  {justRotated && (
+                    <div className="animate-in fade-in zoom-in duration-300">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500 text-slate-950 font-black text-xs rounded-full shadow-lg shadow-emerald-500/30">
+                        <Sparkles className="w-3.5 h-3.5 fill-slate-950" />
+                        <span>Fresh Companion QR Handshake Loaded!</span>
+                      </span>
+                    </div>
+                  )}
+
                   {/* LIVE ROTATING COMPANION QR CODE DISPLAY */}
-                  <div className="relative inline-block p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-emerald-500/40">
+                  <div className={`relative inline-block p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 transition-all duration-500 ${
+                    justRotated ? 'border-amber-400 scale-102 shadow-emerald-500/50' : 'border-emerald-500/40'
+                  }`}>
                     {qrLoading || !qrDataUrl ? (
                       <div className="w-56 h-56 sm:w-64 sm:h-64 flex flex-col items-center justify-center bg-slate-50 rounded-2xl gap-2">
                         <RefreshCw className="w-7 h-7 text-emerald-600 animate-spin" />
                         <span className="text-[11px] font-bold text-slate-600">Connecting to Fly.io Gateway...</span>
                       </div>
                     ) : (
-                      <div className="relative">
+                      <div className="relative animate-in fade-in duration-500" key={qrRawString}>
                         <img
                           src={qrDataUrl}
                           alt="Official WhatsApp Multi-Device Companion QR Code"
@@ -449,19 +518,19 @@ export default function WhatsAppBotConsoleModal({
                   </div>
 
                   {/* QR REFRESH & TIMESTAMP */}
-                  <div className="flex items-center justify-center gap-3">
+                  <div className="flex flex-wrap items-center justify-center gap-3">
                     <button
                       type="button"
                       onClick={() => fetchCompanionQr(true)}
                       disabled={qrLoading}
-                      className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500 text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-500/20"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${qrLoading ? 'animate-spin' : ''}`} />
-                      <span>Refresh Companion QR</span>
+                      <RefreshCw className={`w-3.5 h-3.5 ${qrLoading ? 'animate-spin' : ''}`} />
+                      <span>Rotate QR Code Now</span>
                     </button>
                     {qrLastUpdated && (
                       <span className="text-[10px] text-slate-400 font-mono">
-                        Auto-updates every 15s &bull; Last refreshed: {qrLastUpdated.toLocaleTimeString()}
+                        Auto-rotating every 20s &bull; Last refreshed: {qrLastUpdated.toLocaleTimeString()}
                       </span>
                     )}
                   </div>

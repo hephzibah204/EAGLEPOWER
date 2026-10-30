@@ -1177,11 +1177,19 @@ export async function onRequest(context) {
   }
 
   if (path === '/api/executive/whatsapp/qr' && method === 'GET') {
+    const noCacheHeaders = {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    };
     try {
-      const flyRes = await fetch('https://eaglepower-whatsapp-bot.fly.dev/qr', { signal: AbortSignal.timeout(4000) });
+      const flyRes = await fetch(`https://eaglepower-whatsapp-bot.fly.dev/qr?_t=${Date.now()}`, {
+        headers: { 'Cache-Control': 'no-cache' },
+        signal: AbortSignal.timeout(4000)
+      });
       if (flyRes.ok) {
         const flyData = await flyRes.json();
-        return jsonResponse(flyData);
+        return jsonResponse(flyData, 200, noCacheHeaders);
       }
     } catch (_) {}
 
@@ -1190,8 +1198,8 @@ export async function onRequest(context) {
       connected: false,
       registered: false,
       qr: null,
-      pairing_code: '5EBX-WVC8'
-    });
+      pairing_code: 'ETLG-667N'
+    }, 200, noCacheHeaders);
   }
 
   if (path === '/api/executive/whatsapp/pair' && method === 'POST') {

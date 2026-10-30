@@ -1,3 +1,4 @@
+import WhatsAppConnectionCard from './WhatsAppConnectionCard';
 import { getDashboardRole, canAccessTab, defaultTab, canLoadDashboardResource } from '../utils/portalPermissions';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -172,13 +173,18 @@ export default function PortalDashboard({
         setSessionToken(user ? COOKIE_SESSION : '');
         setAuthToken(user ? COOKIE_SESSION : '');
         setCurrentUser(user);
+        if (!user && sessionRetry > 0) {
+          setLoginError('No active session found. Please enter your credentials to log in.');
+        }
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         setSessionToken('');
         setAuthToken('');
         setCurrentUser(null);
-        setLoginError('Unable to restore your session. Please check your connection and try again.');
+        if (sessionRetry > 0) {
+          setLoginError('Unable to restore your session. Please check your connection and try again.');
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setSessionChecking(false);
@@ -3767,6 +3773,10 @@ export default function PortalDashboard({
             {/* Main Panel Content */}
             <main className="grow p-4 sm:p-6 overflow-y-auto bg-slate-900/50">
               
+              {activeRole === 'superadmin' && (activeTab === 'overview' || activeTab === 'executive_cockpit') && (
+                <WhatsAppConnectionCard />
+              )}
+
               {/* EXECUTIVE SCHOOL HEAD DECISION COCKPIT */}
               {activeTab === 'executive_cockpit' && (
                 <ExecutiveReportingCockpit authToken={authToken} />

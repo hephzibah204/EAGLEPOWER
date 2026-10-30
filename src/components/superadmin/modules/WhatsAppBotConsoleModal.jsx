@@ -496,8 +496,27 @@ export default function WhatsAppBotConsoleModal({
                       <span>Official WhatsApp Scannable QR Code</span>
                     </h4>
                     <p className="text-slate-400 text-xs max-w-lg mx-auto">
-                      Scan with any smartphone camera or WhatsApp scanner to immediately launch the Eagle Power School AI Bot chat, or download the high-res badge for school publications.
+                      Scan with your smartphone camera to immediately chat with the Eagle Power School AI Bot, or download the badge for school flyers.
                     </p>
+                  </div>
+
+                  {/* CRITICAL SCANNER GUIDANCE ALERT */}
+                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left max-w-lg mx-auto space-y-2">
+                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <span>Important: Which camera to use</span>
+                    </div>
+                    <div className="text-[11px] text-slate-300 space-y-1.5 pl-6">
+                      <p>
+                        ✅ <strong className="text-white">Use your phone's normal Camera app</strong> (or Google Lens / iPhone Camera) &rarr; Point at QR &rarr; Tap link to open chat.
+                      </p>
+                      <p className="text-amber-200">
+                        ❌ <strong className="text-amber-300">Do NOT scan with WhatsApp "Linked Devices"</strong> &rarr; WhatsApp's "Linked Devices" scanner is strictly for computer web handshakes and will report <em>"Invalid QR code"</em>.
+                      </p>
+                      <p className="text-slate-400 text-[10px]">
+                        👉 To host/link your WhatsApp line as the bot, switch above to <strong>Option A: 8-Digit Pairing Code</strong> and tap <em>"Link with phone number instead"</em> on your phone.
+                      </p>
+                    </div>
                   </div>
 
                   {/* QR Mode Switcher */}
@@ -586,8 +605,8 @@ export default function WhatsAppBotConsoleModal({
                     <p>
                       Linked Line: <strong className="text-white font-mono">{phoneNumber || defaultPhone}</strong>
                     </p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">
-                      Works with both standard camera apps and in-app WhatsApp camera scanner.
+                    <p className="text-[10px] text-emerald-400/90 mt-0.5">
+                      Scan with your phone's default Camera app to start chatting immediately.
                     </p>
                   </div>
                 </div>

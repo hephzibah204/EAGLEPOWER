@@ -2,6 +2,7 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  Browsers,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
@@ -74,49 +75,67 @@ async function startBot() {
   const sock = makeWASocket({
     version,
     logger,
-    printQRInTerminal: !PHONE_NUMBER,
+    printQRInTerminal: true,
     auth: state,
-    browser: ["EaglePower Bot", "Chrome", "1.0.0"],
+    browser: Browsers.ubuntu("Chrome"),
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
   });
   activeSocket = sock;
 
-  // Pairing Code Support
-  if (PHONE_NUMBER && !sock.authState.creds.registered) {
-    console.log(`📱 Requesting pairing code for: ${PHONE_NUMBER}`);
-    setTimeout(async () => {
+  // Pairing Code Support with robust retry
+  const usePairingCode = PHONE_NUMBER && process.env.PAIRING_MODE !== 'qr' && !sock.authState.creds.registered;
+  if (usePairingCode) {
+    const tryPairing = async (attempt = 1) => {
       try {
+        console.log(`📱 Requesting pairing code for: ${PHONE_NUMBER} (attempt ${attempt})...`);
         const code = await sock.requestPairingCode(PHONE_NUMBER.replace(/\D/g, ""));
         console.log("\n==========================================");
         console.log(`🔑 YOUR WHATSAPP PAIRING CODE: ${code}`);
         console.log("👉 Go to WhatsApp: Linked Devices -> Link with phone number");
         console.log("==========================================\n");
       } catch (err) {
-        console.error("Failed to request pairing code:", err);
+        console.warn(`Pairing code request attempt ${attempt} delayed:`, err.message);
+        if (attempt < 6) {
+          setTimeout(() => tryPairing(attempt + 1), 5000);
+        }
       }
-    }, 3000);
+    };
+    setTimeout(() => tryPairing(1), 6000);
   }
 
   // Connection handling
   sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
+    if (connection) {
+      console.log(`[WhatsApp Socket] State: ${connection}`);
+    }
 
-    if (qr && !PHONE_NUMBER) {
-      console.log("\nScan QR code using WhatsApp (Linked Devices):");
+    if (qr) {
+      console.log("\n===BAILEYS_RAW_QR_START===");
+      console.log(qr);
+      console.log("===BAILEYS_RAW_QR_END===\n");
+      console.log("Scan QR code using WhatsApp (Linked Devices):");
       qrcode.generate(qr, { small: true });
     }
 
     if (connection === "close") {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        console.log("🔄 WhatsApp connection closed. Reconnecting in 5s...");
-        if (reconnectTimeout) clearTimeout(reconnectTimeout);
-        reconnectTimeout = setTimeout(() => startBot(), 5000);
+      const isLoggedOut = statusCode === DisconnectReason.loggedOut;
+      const isRegistered = sock.authState?.creds?.registered;
+      console.log(`[WhatsApp Socket] Closed with status ${statusCode}. Registered: ${isRegistered}`);
+
+      if (isLoggedOut && !isRegistered) {
+        try {
+          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+          fs.mkdirSync(AUTH_DIR, { recursive: true });
+        } catch (_) {}
       }
+
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      reconnectTimeout = setTimeout(() => startBot(), 3000);
     } else if (connection === "open") {
-      console.log(" Connected to WhatsApp successfully!");
+      console.log("✅ Connected to WhatsApp successfully!");
     }
   });
 
@@ -693,6 +712,16 @@ _For salary adjustments or account changes, contact the Bursar._`
   });
 }
 
+// Keep-Alive Heartbeat: Prevents Node.js event loop from exiting on Fly.io during idle pairing
+setInterval(() => {
+  const isConnected = !!(activeSocket && activeSocket.user);
+  if (process.env.LOG_LEVEL === 'debug') {
+    console.log(`[Fly Heartbeat] Socket alive. Connected: ${isConnected}`);
+  }
+}, 20000);
+
 startBot().catch((err) => {
   console.error("Fatal Bot Error:", err);
+  // Auto-restart after fatal error
+  setTimeout(() => startBot(), 5000);
 });

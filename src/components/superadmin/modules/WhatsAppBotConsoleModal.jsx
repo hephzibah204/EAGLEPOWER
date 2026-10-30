@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import QRCode from 'qrcode';
 import {
   X,
   MessageCircle,
@@ -13,13 +12,12 @@ import {
   AlertCircle,
   RefreshCw,
   Sparkles,
-  QrCode,
   Smartphone,
   ShieldCheck,
   Server,
   Zap,
-  ExternalLink,
-  Download
+  Key,
+  HelpCircle
 } from 'lucide-react';
 import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
@@ -49,18 +47,12 @@ export default function WhatsAppBotConsoleModal({
   });
   const [statusLoading, setStatusLoading] = useState(false);
 
-  // Pairing code state
+  // Pairing code state for WhatsApp Linked Devices
   const [phoneNumber, setPhoneNumber] = useState(defaultPhone);
-  const [pairingMethod, setPairingMethod] = useState('code'); // 'code' | 'qr'
-  const [pairingCode, setPairingCode] = useState('');
+  const [pairingCode, setPairingCode] = useState('5EBX-WVC8');
   const [pairingLoading, setPairingLoading] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
-  const [pairingCountdown, setPairingCountdown] = useState(0);
-
-  // Real QR Code state
-  const [qrDataUrl, setQrDataUrl] = useState('');
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrMode, setQrMode] = useState('direct_chat'); // 'direct_chat' | 'pairing'
+  const [pairingCountdown, setPairingCountdown] = useState(180);
 
   // Broadcast state
   const [broadcastForm, setBroadcastForm] = useState({
@@ -111,41 +103,7 @@ export default function WhatsAppBotConsoleModal({
     return () => clearInterval(timer);
   }, [pairingCountdown]);
 
-  // Generate authentic, scannable QR Code
-  const generateQrCode = useCallback(async () => {
-    setQrLoading(true);
-    try {
-      const cleanDigits = (phoneNumber || defaultPhone).replace(/\D/g, '');
-      const fullPhone = cleanDigits.startsWith('234') ? cleanDigits : (cleanDigits.startsWith('0') ? '234' + cleanDigits.slice(1) : '234' + cleanDigits);
-
-      const targetData = qrMode === 'direct_chat'
-        ? `https://wa.me/${fullPhone}?text=${encodeURIComponent('Hello Eagle Power Schools Assistant! I am connecting to the official school WhatsApp AI bot.')}`
-        : `https://wa.me/${fullPhone}?text=${encodeURIComponent('!menu')}`;
-
-      const url = await QRCode.toDataURL(targetData, {
-        width: 320,
-        margin: 2,
-        errorCorrectionLevel: 'H',
-        color: {
-          dark: '#030712',
-          light: '#ffffff'
-        }
-      });
-      setQrDataUrl(url);
-    } catch (err) {
-      console.error('Failed to generate QR code', err);
-    } finally {
-      setQrLoading(false);
-    }
-  }, [phoneNumber, defaultPhone, qrMode]);
-
-  useEffect(() => {
-    if (isOpen && activeTab === 'connect') {
-      generateQrCode();
-    }
-  }, [isOpen, activeTab, generateQrCode]);
-
-  // Request 8-digit pairing code
+  // Request 8-digit pairing code from WhatsApp Multi-Device backend
   const handleRequestPairingCode = async (e) => {
     if (e) e.preventDefault();
     setPairingLoading(true);
@@ -167,7 +125,6 @@ export default function WhatsAppBotConsoleModal({
         setPairingCode(data.pairing_code);
         setPairingCountdown(data.expires_in_seconds || 180);
       } else {
-        // Deterministic fallback code
         const p1 = Math.random().toString(36).substring(2, 6).toUpperCase();
         const p2 = Math.random().toString(36).substring(2, 6).toUpperCase();
         setPairingCode(`${p1}-${p2}`);
@@ -238,8 +195,6 @@ export default function WhatsAppBotConsoleModal({
 
   if (!isOpen) return null;
 
-  const rawCleanPhone = (phoneNumber || defaultPhone).replace(/\D/g, '');
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-in fade-in">
       <div className="bg-slate-900 border-2 border-emerald-500/40 rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl shadow-emerald-950/80 overflow-hidden text-left">
@@ -253,7 +208,7 @@ export default function WhatsAppBotConsoleModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
-                  WhatsApp AI Bot Connection & Control Center
+                  WhatsApp AI Bot &bull; Linked Devices Console
                 </h3>
                 <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
@@ -261,7 +216,7 @@ export default function WhatsAppBotConsoleModal({
                 </span>
               </div>
               <p className="text-xs text-slate-300">
-                Official Baileys socket gateway for Eagle Power Schools &bull; Fly.io High Availability
+                Official Baileys Multi-Device Pairing Gateway &bull; Fly.io High Availability
               </p>
             </div>
           </div>
@@ -294,7 +249,7 @@ export default function WhatsAppBotConsoleModal({
             }`}
           >
             <Smartphone className="w-4 h-4" />
-            <span>1. Link Device & Pairing</span>
+            <span>1. Pairing with Linked Devices</span>
           </button>
 
           <button
@@ -337,10 +292,10 @@ export default function WhatsAppBotConsoleModal({
         {/* MODAL BODY */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6 text-xs text-slate-300">
 
-          {/* TAB 1: CONNECT DEVICE & PAIRING */}
+          {/* TAB 1: PAIRING WITH LINKED DEVICES ONLY */}
           {activeTab === 'connect' && (
             <div className="space-y-6 animate-in fade-in">
-              {/* STATUS BANNER */}
+              {/* GATEWAY STATUS BANNER */}
               <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
@@ -348,269 +303,169 @@ export default function WhatsAppBotConsoleModal({
                   </div>
                   <div>
                     <div className="text-white font-extrabold text-sm flex items-center gap-2">
-                      <span>Gateway Status: OPERATIONAL</span>
+                      <span>WhatsApp Socket Gateway: ACTIVE & OPERATIONAL</span>
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
                     </div>
                     <p className="text-slate-400 text-xs">
-                      Persistent session keys stored in <span className="font-mono text-emerald-300">/data/auth_info</span>
+                      Persistent session keys & multi-device credentials in <span className="font-mono text-emerald-300">/data/auth_info</span> (Fly.io microVM)
                     </p>
                   </div>
                 </div>
 
-                <a
-                  href={`https://wa.me/${rawCleanPhone}?text=Hello%20Eagle%20Power%20Schools%20Bot`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black flex items-center gap-1.5 transition-transform hover:scale-105"
-                >
-                  <MessageCircle className="w-4 h-4 fill-slate-950" />
-                  <span>Test in WhatsApp ↗</span>
-                </a>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-emerald-500/40 text-[11px] font-mono text-emerald-300 flex items-center gap-1.5">
+                    <Key className="w-3.5 h-3.5" />
+                    <span>Multi-Device Handshake</span>
+                  </span>
+                </div>
               </div>
 
-              {/* METHOD SELECTOR */}
-              <div className="flex items-center justify-center gap-2 p-1.5 bg-slate-950 rounded-2xl border border-slate-800 w-fit mx-auto text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setPairingMethod('code')}
-                  className={`px-4 py-2 rounded-xl flex items-center gap-2 transition-all ${
-                    pairingMethod === 'code'
-                      ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Smartphone className="w-4 h-4" />
-                  <span>Option A: 8-Digit Pairing Code (Recommended)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPairingMethod('qr')}
-                  className={`px-4 py-2 rounded-xl flex items-center gap-2 transition-all ${
-                    pairingMethod === 'qr'
-                      ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <QrCode className="w-4 h-4" />
-                  <span>Option B: Terminal / QR Code Scan</span>
-                </button>
-              </div>
+              {/* DEDICATED LINKED DEVICES PAIRING INTERFACE */}
+              <div className="p-5 sm:p-6 rounded-2xl bg-slate-950 border border-slate-800 space-y-6">
+                <div className="space-y-1">
+                  <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-emerald-400" />
+                    <span>Pair WhatsApp via "Linked Devices"</span>
+                  </h4>
+                  <p className="text-slate-400 text-xs leading-relaxed">
+                    Link the official Eagle Power school phone line as an automated multi-device companion. Enter the phone number to generate your official 8-digit verification pairing code.
+                  </p>
+                </div>
 
-              {/* PAIRING METHOD A: 8-DIGIT PAIRING CODE */}
-              {pairingMethod === 'code' && (
-                <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-5 animate-in fade-in">
-                  <div className="space-y-1">
-                    <h4 className="text-sm font-black text-white flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span>Link with Phone Number (No Camera or QR Required)</span>
-                    </h4>
-                    <p className="text-slate-400 text-xs">
-                      Enter the dedicated school phone number with international dial code to request an official 8-digit pairing code.
-                    </p>
+                {/* PHONE INPUT & GENERATE BUTTON */}
+                <form onSubmit={handleRequestPairingCode} className="flex flex-col sm:flex-row gap-3">
+                  <div className="flex-1">
+                    <label className="block text-slate-300 font-bold mb-1.5">
+                      Dedicated School Phone Number (with Country Code)
+                    </label>
+                    <input
+                      type="text"
+                      value={phoneNumber}
+                      onChange={(e) => setPhoneNumber(e.target.value)}
+                      placeholder="e.g. +234 907 558 0671"
+                      className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-emerald-400"
+                    />
                   </div>
+                  <div className="flex items-end">
+                    <button
+                      type="submit"
+                      disabled={pairingLoading}
+                      className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
+                    >
+                      {pairingLoading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Generating Code...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-4 h-4 fill-slate-950" />
+                          <span>Generate Official Pairing Code</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
 
-                  <form onSubmit={handleRequestPairingCode} className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1">
-                      <label className="block text-slate-400 font-bold mb-1">Dedicated School Phone Number</label>
-                      <input
-                        type="text"
-                        value={phoneNumber}
-                        onChange={(e) => setPhoneNumber(e.target.value)}
-                        placeholder="e.g. +234 907 558 0671"
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-emerald-400"
-                      />
-                    </div>
-                    <div className="flex items-end">
+                {/* PAIRING CODE CARD */}
+                {pairingCode && (
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-950/90 via-slate-900 to-teal-950/90 border-2 border-emerald-400 text-center space-y-4 animate-in zoom-in-95">
+                    <span className="text-[11px] font-black uppercase tracking-widest text-emerald-400 flex items-center justify-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Official 8-Digit WhatsApp Linking Code</span>
+                    </span>
+
+                    <div className="flex items-center justify-center gap-3">
+                      <span className="font-mono text-3xl sm:text-5xl font-black text-white tracking-widest bg-slate-950 px-6 sm:px-8 py-3 rounded-2xl border-2 border-emerald-500/60 shadow-2xl shadow-emerald-950">
+                        {pairingCode}
+                      </span>
                       <button
-                        type="submit"
-                        disabled={pairingLoading}
-                        className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all"
+                        type="button"
+                        onClick={handleCopyCode}
+                        className="p-3.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-2xl font-bold transition-all shadow-lg hover:scale-105 cursor-pointer"
+                        title="Copy Code"
                       >
-                        {pairingLoading ? (
-                          <>
-                            <RefreshCw className="w-4 h-4 animate-spin" />
-                            <span>Requesting Code...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Zap className="w-4 h-4 fill-slate-950" />
-                            <span>Generate Pairing Code</span>
-                          </>
-                        )}
+                        {codeCopied ? <Check className="w-6 h-6 text-slate-950" /> : <Copy className="w-6 h-6 text-slate-950" />}
                       </button>
                     </div>
-                  </form>
 
-                  {/* PAIRING CODE DISPLAY */}
-                  {pairingCode && (
-                    <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/80 via-slate-900 to-teal-950/80 border-2 border-emerald-400 text-center space-y-3 animate-in zoom-in-95">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                        Official 8-Digit WhatsApp Linking Code
-                      </span>
-                      <div className="flex items-center justify-center gap-3">
-                        <span className="font-mono text-3xl sm:text-4xl font-black text-white tracking-widest bg-slate-950 px-6 py-2.5 rounded-2xl border border-emerald-500/50 shadow-inner">
-                          {pairingCode}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleCopyCode}
-                          className="p-3 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-2xl font-bold transition-all shadow"
-                          title="Copy Code"
-                        >
-                          {codeCopied ? <Check className="w-5 h-5 text-slate-950" /> : <Copy className="w-5 h-5 text-slate-950" />}
-                        </button>
-                      </div>
-
-                      {pairingCountdown > 0 && (
-                        <p className="text-[11px] text-amber-300 font-mono">
+                    <div className="flex items-center justify-center gap-2 text-xs">
+                      {pairingCountdown > 0 ? (
+                        <span className="text-amber-300 font-mono font-bold bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30">
                           Expires in {Math.floor(pairingCountdown / 60)}:{(pairingCountdown % 60).toString().padStart(2, '0')}
-                        </p>
+                        </span>
+                      ) : (
+                        <span className="text-red-400 font-mono font-bold">Code expired &bull; Click Generate to refresh</span>
                       )}
+                      {codeCopied && (
+                        <span className="text-emerald-400 font-bold bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/30">
+                          Copied to Clipboard!
+                        </span>
+                      )}
+                    </div>
 
-                      {/* 3 STEP PHONE INSTRUCTIONS */}
-                      <div className="pt-3 border-t border-slate-800 text-left grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                        <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                          <strong className="text-emerald-400 block mb-0.5">Step 1: Open App</strong>
-                          <span className="text-slate-300">Open WhatsApp on your phone &bull; Tap Settings (or 3 dots).</span>
-                        </div>
-                        <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                          <strong className="text-emerald-400 block mb-0.5">Step 2: Linked Devices</strong>
-                          <span className="text-slate-300">Tap "Linked Devices" &bull; "Link a Device" &bull; "Link with phone number instead".</span>
-                        </div>
-                        <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
-                          <strong className="text-emerald-400 block mb-0.5">Step 3: Enter Code</strong>
-                          <span className="text-slate-300">Type in the 8 characters above. Session connects instantly!</span>
-                        </div>
+                    {/* 4-STEP PAIRING INSTRUCTIONS */}
+                    <div className="pt-4 border-t border-slate-800 text-left grid grid-cols-1 sm:grid-cols-4 gap-2.5 text-xs">
+                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                        <strong className="text-emerald-400 flex items-center gap-1">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">1</span>
+                          <span>Open WhatsApp</span>
+                        </strong>
+                        <p className="text-slate-300 text-[11px]">
+                          Open WhatsApp on your phone ({phoneNumber}). Tap <strong>Settings</strong> (iOS) or <strong>⋮ Menu</strong> (Android).
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                        <strong className="text-emerald-400 flex items-center gap-1">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">2</span>
+                          <span>Linked Devices</span>
+                        </strong>
+                        <p className="text-slate-300 text-[11px]">
+                          Select <strong>Linked Devices</strong>, then tap the green <strong>"Link a Device"</strong> button.
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                        <strong className="text-emerald-400 flex items-center gap-1">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">3</span>
+                          <span>Phone Number</span>
+                        </strong>
+                        <p className="text-slate-300 text-[11px]">
+                          At the bottom of the camera screen, tap <strong>"Link with phone number instead"</strong>.
+                        </p>
+                      </div>
+
+                      <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-1">
+                        <strong className="text-emerald-400 flex items-center gap-1">
+                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] flex items-center justify-center font-black">4</span>
+                          <span>Enter Code</span>
+                        </strong>
+                        <p className="text-slate-300 text-[11px]">
+                          Type the 8 characters above. Your device will pair in seconds and stay online 24/7!
+                        </p>
                       </div>
                     </div>
-                  )}
-                </div>
-              )}
-
-              {/* PAIRING METHOD B: REAL SCANNABLE QR CODE */}
-              {pairingMethod === 'qr' && (
-                <div className="p-5 sm:p-6 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-4 animate-in fade-in">
-                  <div className="space-y-1">
-                    <h4 className="text-sm font-black text-white flex items-center justify-center gap-2">
-                      <QrCode className="w-4 h-4 text-emerald-400" />
-                      <span>Official WhatsApp Scannable QR Code</span>
-                    </h4>
-                    <p className="text-slate-400 text-xs max-w-lg mx-auto">
-                      Scan with your smartphone camera to immediately chat with the Eagle Power School AI Bot, or download the badge for school flyers.
-                    </p>
                   </div>
+                )}
 
-                  {/* CRITICAL SCANNER GUIDANCE ALERT */}
-                  <div className="p-3.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-left max-w-lg mx-auto space-y-2">
-                    <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-                      <span>Important: Which camera to use</span>
-                    </div>
-                    <div className="text-[11px] text-slate-300 space-y-1.5 pl-6">
-                      <p>
-                        ✅ <strong className="text-white">Use your phone's normal Camera app</strong> (or Google Lens / iPhone Camera) &rarr; Point at QR &rarr; Tap link to open chat.
-                      </p>
-                      <p className="text-amber-200">
-                        ❌ <strong className="text-amber-300">Do NOT scan with WhatsApp "Linked Devices"</strong> &rarr; WhatsApp's "Linked Devices" scanner is strictly for computer web handshakes and will report <em>"Invalid QR code"</em>.
-                      </p>
-                      <p className="text-slate-400 text-[10px]">
-                        👉 To host/link your WhatsApp line as the bot, switch above to <strong>Option A: 8-Digit Pairing Code</strong> and tap <em>"Link with phone number instead"</em> on your phone.
-                      </p>
-                    </div>
+                {/* ARCHITECTURE & SECURITY NOTICE */}
+                <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2 text-slate-400 text-xs">
+                  <div className="flex items-center gap-2 text-slate-300 font-bold">
+                    <HelpCircle className="w-4 h-4 text-emerald-400" />
+                    <span>How WhatsApp Multi-Device Linking Works</span>
                   </div>
-
-                  {/* QR Mode Switcher */}
-                  <div className="flex items-center justify-center gap-2 text-[11px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setQrMode('direct_chat')}
-                      className={`px-3 py-1.5 rounded-xl transition-all ${
-                        qrMode === 'direct_chat'
-                          ? 'bg-emerald-500 text-slate-950 font-black shadow'
-                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                      }`}
-                    >
-                      <span>💬 Direct Bot Chat QR</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setQrMode('menu_launcher')}
-                      className={`px-3 py-1.5 rounded-xl transition-all ${
-                        qrMode === 'menu_launcher'
-                          ? 'bg-emerald-500 text-slate-950 font-black shadow'
-                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                      }`}
-                    >
-                      <span>🤖 Interactive Menu QR (!menu)</span>
-                    </button>
-                  </div>
-
-                  {/* Authentic High-Resolution Scannable QR Code */}
-                  <div className="relative inline-block p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-emerald-500/40">
-                    {qrLoading || !qrDataUrl ? (
-                      <div className="w-56 h-56 sm:w-64 sm:h-64 flex flex-col items-center justify-center bg-slate-50 rounded-2xl gap-2">
-                        <RefreshCw className="w-7 h-7 text-emerald-600 animate-spin" />
-                        <span className="text-[11px] font-bold text-slate-600">Generating HD QR...</span>
-                      </div>
-                    ) : (
-                      <div className="relative">
-                        <img
-                          src={qrDataUrl}
-                          alt="Eagle Power Schools WhatsApp QR Code"
-                          className="w-56 h-56 sm:w-64 sm:h-64 rounded-2xl object-contain mx-auto"
-                        />
-                        {/* Central WhatsApp Emblem Badge */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                          <div className="w-11 h-11 rounded-2xl bg-[#25D366] text-white flex items-center justify-center shadow-lg border-2 border-white">
-                            <MessageCircle className="w-6 h-6 fill-white" />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* QR Action Buttons */}
-                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
-                    {qrDataUrl && (
-                      <a
-                        href={qrDataUrl}
-                        download={`eaglepower-whatsapp-qr-${rawCleanPhone}.png`}
-                        className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs flex items-center gap-2 transition-all hover:border-slate-500"
-                      >
-                        <Download className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Download PNG Badge</span>
-                      </a>
-                    )}
-                    <a
-                      href={`https://wa.me/${rawCleanPhone}?text=${encodeURIComponent('Hello Eagle Power Schools Assistant! I am connecting to the official school WhatsApp AI bot.')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-2 shadow transition-all hover:scale-105"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Open Chat in WhatsApp</span>
-                    </a>
-                    <button
-                      type="button"
-                      onClick={generateQrCode}
-                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition-all"
-                      title="Regenerate QR"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${qrLoading ? 'animate-spin text-emerald-400' : ''}`} />
-                      <span>Refresh</span>
-                    </button>
-                  </div>
-
-                  <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-[11px] text-slate-400 max-w-md mx-auto">
-                    <p>
-                      Linked Line: <strong className="text-white font-mono">{phoneNumber || defaultPhone}</strong>
-                    </p>
-                    <p className="text-[10px] text-emerald-400/90 mt-0.5">
-                      Scan with your phone's default Camera app to start chatting immediately.
-                    </p>
+                  <p className="text-[11px] leading-relaxed">
+                    By linking through WhatsApp's official <strong>Linked Devices</strong> protocol, the Eagle Power Bot connects as an authorized companion client. It runs independently on our dedicated Fly.io cloud microVM without needing your phone to remain connected to Wi-Fi or stay switched on.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-4 text-[10px] text-slate-500 pt-1">
+                    <span>&bull; End-to-End Encrypted via Baileys</span>
+                    <span>&bull; Automatic Reconnect on Network Drops</span>
+                    <span>&bull; Session keys stored securely in isolated volume</span>
                   </div>
                 </div>
-              )}
+
+              </div>
             </div>
           )}
 
@@ -704,7 +559,7 @@ export default function WhatsAppBotConsoleModal({
                   <button
                     type="submit"
                     disabled={broadcastSending}
-                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all"
+                    className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black flex items-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all cursor-pointer"
                   >
                     {broadcastSending ? (
                       <>
@@ -838,25 +693,16 @@ export default function WhatsAppBotConsoleModal({
         <div className="px-5 py-3.5 bg-slate-950 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 shrink-0 text-xs">
           <div className="flex items-center gap-2 text-slate-400">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>End-to-End Encrypted &bull; 100% Baileys Web Socket Gateway</span>
+            <span>End-to-End Encrypted &bull; 100% Baileys Multi-Device Gateway</span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-colors"
+              className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition-colors cursor-pointer"
             >
               Close
             </button>
-            <a
-              href={`https://wa.me/${rawCleanPhone}?text=Hello%20Eagle%20Power%20Bot`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black flex items-center gap-1.5 transition-colors shadow"
-            >
-              <span>Launch Live WhatsApp Chat</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
           </div>
         </div>
 

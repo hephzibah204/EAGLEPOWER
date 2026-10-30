@@ -54,14 +54,19 @@ function formatToWhatsAppJid(phone) {
 
 let activeSocket = null;
 let reconnectTimeout = null;
+let pairingTimer = null;
 let latestCompanionQr = null;
-let latestPairingCode = "5EBX-WVC8";
+let latestPairingCode = "ETLG-667N";
 let latestQrTimestamp = Date.now();
 
 async function startBot() {
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
+  }
+  if (pairingTimer) {
+    clearTimeout(pairingTimer);
+    pairingTimer = null;
   }
   if (activeSocket) {
     try {
@@ -79,35 +84,13 @@ async function startBot() {
   const sock = makeWASocket({
     version,
     logger,
-    printQRInTerminal: true,
+    printQRInTerminal: false,
     auth: state,
     browser: Browsers.ubuntu("Chrome"),
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
   });
   activeSocket = sock;
-
-  // Pairing Code Support with robust retry
-  const usePairingCode = PHONE_NUMBER && process.env.PAIRING_MODE !== 'qr' && !sock.authState.creds.registered;
-  if (usePairingCode) {
-    const tryPairing = async (attempt = 1) => {
-      try {
-        console.log(`📱 Requesting pairing code for: ${PHONE_NUMBER} (attempt ${attempt})...`);
-        const code = await sock.requestPairingCode(PHONE_NUMBER.replace(/\D/g, ""));
-        latestPairingCode = code;
-        console.log("\n==========================================");
-        console.log(`🔑 YOUR WHATSAPP PAIRING CODE: ${code}`);
-        console.log("👉 Go to WhatsApp: Linked Devices -> Link with phone number");
-        console.log("==========================================\n");
-      } catch (err) {
-        console.warn(`Pairing code request attempt ${attempt} delayed:`, err.message);
-        if (attempt < 6) {
-          setTimeout(() => tryPairing(attempt + 1), 5000);
-        }
-      }
-    };
-    setTimeout(() => tryPairing(1), 6000);
-  }
 
   // Connection handling
   sock.ev.on("connection.update", async (update) => {
@@ -132,17 +115,28 @@ async function startBot() {
       const isRegistered = sock.authState?.creds?.registered;
       console.log(`[WhatsApp Socket] Closed with status ${statusCode}. Registered: ${isRegistered}`);
 
-      if (isLoggedOut && !isRegistered) {
+      if (pairingTimer) {
+        clearTimeout(pairingTimer);
+        pairingTimer = null;
+      }
+
+      // If unauthorized or logged out and not registered, reset auth directory
+      if ((isLoggedOut || statusCode === 401) && !isRegistered) {
         try {
           fs.rmSync(AUTH_DIR, { recursive: true, force: true });
           fs.mkdirSync(AUTH_DIR, { recursive: true });
         } catch (_) {}
       }
 
+      const retryDelay = statusCode === 401 ? 8000 : 3000;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      reconnectTimeout = setTimeout(() => startBot(), 3000);
+      reconnectTimeout = setTimeout(() => startBot(), retryDelay);
     } else if (connection === "open") {
       latestCompanionQr = null;
+      if (pairingTimer) {
+        clearTimeout(pairingTimer);
+        pairingTimer = null;
+      }
       console.log("✅ Connected to WhatsApp successfully!");
     }
   });
@@ -155,24 +149,41 @@ async function startBot() {
 
     for (const msg of messages) {
       try {
-        if (!msg.message || msg.key.fromMe) continue;
+        if (!msg.message) continue;
 
         const senderJid = msg.key.remoteJid;
-        if (!senderJid || !senderJid.endsWith('@s.whatsapp.net')) continue;
+        if (!senderJid) continue;
+
+        // Skip broadcast and status updates
+        if (senderJid === 'status@broadcast') continue;
+
+        // Accept standard WhatsApp accounts (@s.whatsapp.net) and Modern Linked Identity Accounts (@lid)
+        if (!senderJid.endsWith('@s.whatsapp.net') && !senderJid.endsWith('@lid') && !senderJid.endsWith('@g.us')) continue;
 
         const textMessage =
           msg.message.conversation ||
           msg.message.extendedTextMessage?.text ||
           msg.message.imageMessage?.caption ||
+          msg.message.buttonsResponseMessage?.selectedButtonId ||
+          msg.message.templateButtonReplyMessage?.selectedId ||
           "";
 
-        const senderPhone = senderJid.replace(/@.+/, "");
-        const senderName = msg.pushName || "Teacher / Parent";
         const cleanText = textMessage.trim();
-
         if (!cleanText) continue;
 
-        logger.debug('Received a direct message');
+        // If sent from the connected device itself (self-chat testing):
+        // Only trigger on explicit commands or test phrases, and never loop on bot output
+        if (msg.key.fromMe) {
+          const isBotReply = cleanText.startsWith("🦅") || cleanText.startsWith("ℹ️") || cleanText.startsWith("🏓") || cleanText.startsWith("✅") || cleanText.startsWith("⚠️");
+          if (isBotReply) continue;
+          const isCommand = cleanText.startsWith("!") || ["hi", "hello", "test", "menu", "fees", "help", "info", "ping"].includes(cleanText.toLowerCase());
+          if (!isCommand) continue;
+        }
+
+        const senderPhone = (msg.key.participant || senderJid).replace(/@.+/, "");
+        const senderName = msg.pushName || "Teacher / Parent";
+
+        console.log(`[WhatsApp Inbound] Message received from ${senderPhone} (${senderName}): "${cleanText}"`);
 
       // 1. HELP / MENU
       if (cleanText.toLowerCase() === "!menu" || cleanText.toLowerCase() === "!help") {
@@ -744,26 +755,32 @@ const httpServer = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
 
   if (url.pathname === '/health' || url.pathname === '/') {
-    const isConn = !!(activeSocket && activeSocket.user);
+    const isConn = !!(activeSocket && (activeSocket.user || activeSocket.authState?.creds?.me));
+    const credsMe = activeSocket?.authState?.creds?.me;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'ok',
       service: 'eaglepower-whatsapp-bot',
       connected: isConn,
-      registered: !!(activeSocket?.authState?.creds?.registered),
+      registered: !!credsMe,
+      account_name: credsMe?.name || 'Eagle Power Schools',
+      phone: credsMe?.id ? credsMe.id.replace(/@.+/, '') : null,
       uptime: Math.floor(process.uptime())
     }));
     return;
   }
 
   if (url.pathname === '/qr') {
-    const isConn = !!(activeSocket && activeSocket.user);
+    const isConn = !!(activeSocket && (activeSocket.user || activeSocket.authState?.creds?.me));
+    const credsMe = activeSocket?.authState?.creds?.me;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
       connected: isConn,
-      registered: !!(activeSocket?.authState?.creds?.registered),
-      qr: latestCompanionQr,
+      registered: !!credsMe,
+      account_name: credsMe?.name || null,
+      phone: credsMe?.id ? credsMe.id.replace(/@.+/, '') : null,
+      qr: credsMe ? null : latestCompanionQr,
       pairing_code: latestPairingCode,
       updated_at: latestQrTimestamp
     }));

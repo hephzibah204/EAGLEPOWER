@@ -1118,6 +1118,12 @@ export async function onRequest(context) {
   if (path === '/api/executive/whatsapp/status') {
     const parentCount = (dbData.students || []).filter(s => s.guardian_phone).length || 92;
     const staffCount = (dbData.staff || []).filter(s => s.phone).length || 27;
+    let liveHealth = null;
+    try {
+      const flyRes = await fetch(`https://eaglepower-whatsapp-bot.fly.dev/health?_t=${Date.now()}`, { signal: AbortSignal.timeout(3000) });
+      if (flyRes.ok) liveHealth = await flyRes.json();
+    } catch (_) {}
+
     return jsonResponse({
       success: true,
       bot: {
@@ -1125,7 +1131,10 @@ export async function onRequest(context) {
         platform: 'Fly.io',
         machineId: '8d999d0ce54368',
         region: 'lhr (London, UK)',
-        status: 'DEPLOYED & OPERATIONAL',
+        status: liveHealth?.connected ? 'CONNECTED & ONLINE' : 'DEPLOYED & OPERATIONAL',
+        linked: !!(liveHealth?.registered),
+        accountName: liveHealth?.account_name || 'Eaglepower school of excellence Awka',
+        phoneNumber: liveHealth?.phone || '+234 907 558 0671',
         authStorage: 'Persistent Volume /data/auth_info (Mounted)',
         nodeVersion: 'Node 22-alpine',
         naturalLanguageBrain: 'In-House Deterministic Bayesian AI'

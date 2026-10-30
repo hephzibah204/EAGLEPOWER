@@ -403,6 +403,31 @@ export default function WhatsAppBotConsoleModal({
                 </div>
               </div>
 
+              {/* LINKED DEVICE STATUS BANNER */}
+              {botStatus?.bot?.linked && (
+                <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-slate-900 to-teal-950/90 border-2 border-emerald-400 flex flex-wrap items-center justify-between gap-3 shadow-xl shadow-emerald-950/80 animate-in zoom-in-95">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-black shadow-lg shadow-emerald-500/30">
+                      <CheckCircle2 className="w-6 h-6 stroke-[2.5]" />
+                    </div>
+                    <div>
+                      <div className="text-white font-black text-sm sm:text-base flex items-center gap-2">
+                        <span>Device Successfully Linked & Online!</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-400 text-slate-950 text-[10px] font-black uppercase">
+                          Auto-Response Active
+                        </span>
+                      </div>
+                      <p className="text-slate-300 text-xs mt-0.5">
+                        Connected Account: <strong className="text-emerald-300">{botStatus.bot.accountName || 'Eaglepower school of excellence Awka'}</strong> &bull; Line: <span className="font-mono text-white font-bold">{botStatus.bot.phoneNumber || '+234 907 558 0671'}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="px-3.5 py-2 rounded-xl bg-slate-950/80 border border-emerald-500/40 text-xs font-mono text-emerald-300">
+                    Listening for Parents & Staff 24/7
+                  </div>
+                </div>
+              )}
+
               {/* PAIRING METHOD SELECTOR */}
               <div className="flex items-center justify-center gap-2 p-1.5 bg-slate-950 rounded-2xl border border-slate-800 w-fit mx-auto text-xs font-bold">
                 <button

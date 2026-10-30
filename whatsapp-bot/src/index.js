@@ -13,15 +13,25 @@ import {
   recordStaffClockOut,
   markStudentAttendance,
   markBatchAttendance,
+  markClassAllPresent,
   recordStudentScore,
   recordBatchScores,
   getClassRoster,
+  getClassRosterForTeacher,
+  getClassBroadsheetSummary,
   getStudentSummary,
+  getStaffPayslipByPhoneOrNumber,
 } from "./smsService.js";
 import { processConversationalMessage } from "./aiBrain.js";
 
 const AUTH_DIR = process.env.AUTH_DIR || path.join(process.cwd(), "auth_info");
 const PHONE_NUMBER = process.env.PHONE_NUMBER;
+
+// This optional integration requires an end-to-end authorization review.
+// Can be enabled with ENABLE_WHATSAPP=true or running in development mode.
+if (process.env.NODE_ENV === 'production' && process.env.ENABLE_WHATSAPP !== 'true') {
+  throw new Error('WhatsApp integration is not production-ready. Complete the authorization and shared-database deployment audit before enabling it. Set ENABLE_WHATSAPP=true to override.');
+}
 
 if (!fs.existsSync(AUTH_DIR)) {
   fs.mkdirSync(AUTH_DIR, { recursive: true });
@@ -29,7 +39,32 @@ if (!fs.existsSync(AUTH_DIR)) {
 
 const logger = pino({ level: process.env.LOG_LEVEL || "warn" });
 
+function formatToWhatsAppJid(phone) {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("0") && digits.length === 11) {
+    digits = "234" + digits.slice(1);
+  } else if (digits.length === 10) {
+    digits = "234" + digits;
+  }
+  return digits.length >= 10 ? `${digits}@s.whatsapp.net` : null;
+}
+
+let activeSocket = null;
+let reconnectTimeout = null;
+
 async function startBot() {
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  if (activeSocket) {
+    try {
+      activeSocket.end();
+    } catch (_) {}
+    activeSocket = null;
+  }
+
   console.log("⚡ Starting Eagle Power WhatsApp Bot with Teacher Toolkit...");
   console.log(`📁 Auth Directory: ${AUTH_DIR}`);
 
@@ -45,6 +80,7 @@ async function startBot() {
     syncFullHistory: false,
     generateHighQualityLinkPreview: true,
   });
+  activeSocket = sock;
 
   // Pairing Code Support
   if (PHONE_NUMBER && !sock.authState.creds.registered) {
@@ -76,7 +112,8 @@ async function startBot() {
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       if (shouldReconnect) {
         console.log("🔄 WhatsApp connection closed. Reconnecting in 5s...");
-        setTimeout(() => startBot(), 5000);
+        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(() => startBot(), 5000);
       }
     } else if (connection === "open") {
       console.log(" Connected to WhatsApp successfully!");
@@ -90,24 +127,25 @@ async function startBot() {
     if (type !== "notify") return;
 
     for (const msg of messages) {
-      if (!msg.message || msg.key.fromMe) continue;
+      try {
+        if (!msg.message || msg.key.fromMe) continue;
 
-      const senderJid = msg.key.remoteJid;
-      if (!senderJid) continue;
+        const senderJid = msg.key.remoteJid;
+        if (!senderJid || !senderJid.endsWith('@s.whatsapp.net')) continue;
 
-      const textMessage =
-        msg.message.conversation ||
-        msg.message.extendedTextMessage?.text ||
-        msg.message.imageMessage?.caption ||
-        "";
+        const textMessage =
+          msg.message.conversation ||
+          msg.message.extendedTextMessage?.text ||
+          msg.message.imageMessage?.caption ||
+          "";
 
-      const senderPhone = senderJid.replace(/@.+/, "");
-      const senderName = msg.pushName || "Teacher / Parent";
-      const cleanText = textMessage.trim();
+        const senderPhone = senderJid.replace(/@.+/, "");
+        const senderName = msg.pushName || "Teacher / Parent";
+        const cleanText = textMessage.trim();
 
-      if (!cleanText) continue;
+        if (!cleanText) continue;
 
-      console.log(`📩 [${senderPhone}] ${senderName}: ${cleanText}`);
+        logger.debug('Received a direct message');
 
       // 1. HELP / MENU
       if (cleanText.toLowerCase() === "!menu" || cleanText.toLowerCase() === "!help") {
@@ -163,7 +201,7 @@ You can talk to me like a human! Try: _"Where is the school located?"_, _"How mu
       else if (cleanText.toLowerCase().startsWith("!clockin")) {
         const parts = cleanText.split(" ");
         const staffNo = parts[1];
-        const staff = getStaffByPhoneOrNumber(staffNo || senderPhone);
+        const staff = getStaffByPhoneOrNumber(senderPhone);
 
         if (!staff) {
           await sock.sendMessage(
@@ -191,7 +229,7 @@ You can talk to me like a human! Try: _"Where is the school located?"_, _"How mu
 
       // 3. TEACHER CLOCK-OUT
       else if (cleanText.toLowerCase().startsWith("!clockout")) {
-        const parts = cleanText.split(" ");
+        const parts = cleanText.split(/\s+/);
         const staffNo = parts[1];
         const staff = getStaffByPhoneOrNumber(staffNo || senderPhone);
 
@@ -220,7 +258,7 @@ You can talk to me like a human! Try: _"Where is the school located?"_, _"How mu
       }
 
       // Check Staff Permissions for Teacher Commands
-      else if (/^\s*!(mark|batch|score|scores|class|homework)\b/i.test(cleanText) && !getStaffByPhoneOrNumber(senderPhone)) {
+      else if (/^\s*!(mark|batch|allpresent|attend|score|scores|class|myclass|payslip|salary|homework)\b/i.test(cleanText) && !getStaffByPhoneOrNumber(senderPhone)) {
         await sock.sendMessage(
           senderJid,
           {
@@ -261,9 +299,8 @@ You can talk to me like a human! Try: _"Where is the school located?"_, _"How mu
 
           // Automated Parent Alert: If marked Absent, notify parent on WhatsApp if number is on file
           if (result.status === "Absent" && result.guardianPhone) {
-            const cleanParentPhone = result.guardianPhone.replace(/\D/g, "");
-            if (cleanParentPhone.length >= 10) {
-              const parentJid = `${cleanParentPhone}@s.whatsapp.net`;
+            const parentJid = formatToWhatsAppJid(result.guardianPhone);
+            if (parentJid) {
               const alertMsg = 
 `🔔 *EAGLE POWER SCHOOLS — ATTENDANCE ALERT*
 
@@ -307,9 +344,8 @@ If this absence is unexcused, please contact the school administration immediate
         // Dispatch alerts for all absentees
         for (const abs of batchResult.absentees) {
           if (abs.guardianPhone) {
-            const cleanParentPhone = abs.guardianPhone.replace(/\D/g, "");
-            if (cleanParentPhone.length >= 10) {
-              const parentJid = `${cleanParentPhone}@s.whatsapp.net`;
+            const parentJid = formatToWhatsAppJid(abs.guardianPhone);
+            if (parentJid) {
               const alertMsg = 
 `🔔 *EAGLE POWER SCHOOLS — ATTENDANCE ALERT*
 
@@ -323,7 +359,94 @@ Please contact the school office if you require clarification.`;
         }
       }
 
-      // 5. RECORD STUDENT SCORE
+      // 4c. ONE-TAP CLASS ATTENDANCE (e.g. !allpresent SS2 or !attend SS2 all)
+      else if (cleanText.toLowerCase().startsWith("!allpresent") || cleanText.toLowerCase().startsWith("!attend ")) {
+        const staff = getStaffByPhoneOrNumber(senderPhone);
+        let targetClass = cleanText.replace(/!allpresent/i, '').replace(/!attend/i, '').replace(/all/i, '').trim();
+        
+        if (!targetClass && staff) {
+          const m = (staff.form_responsibility || staff.assigned_class || '').match(/(SSS?\d|JSS\d|Basic\s*\d|Primary\s*\d|Nursery\s*\d|Pre-Nursery)/i);
+          if (m) targetClass = m[1];
+        }
+
+        if (!targetClass) {
+          await sock.sendMessage(
+            senderJid,
+            { text: "⚠️ Usage: *!allpresent <CLASS_NAME>*\nExample: `!allpresent SS2` or `!allpresent Primary 4`" },
+            { quoted: msg }
+          );
+          continue;
+        }
+
+        const res = markClassAllPresent(targetClass, `WhatsApp:${senderName || staff?.name || 'Teacher'}`);
+        if (res.error) {
+          await sock.sendMessage(senderJid, { text: `❌ ${res.error}` }, { quoted: msg });
+        } else {
+          await sock.sendMessage(
+            senderJid,
+            {
+              text: `✅ *Roll-Call Completed for ${res.className}!*
+• Date: *${res.date}*
+• Total Present: *${res.totalMarked}* pupils
+• Confirmed by: *${staff?.name || senderName}*
+
+All students have been recorded as *Present* in the official school database and the EduCore Portal.`
+            },
+            { quoted: msg }
+          );
+        }
+      }
+
+      // 4d. TEACHER CLASS ROSTER (e.g. !myclass or !students)
+      else if (cleanText.toLowerCase() === "!myclass" || cleanText.toLowerCase() === "!students") {
+        const res = getClassRosterForTeacher(senderPhone);
+        if (res.error) {
+          await sock.sendMessage(senderJid, { text: `❌ ${res.error}` }, { quoted: msg });
+        } else {
+          let list = `📋 *Class Register: ${res.className} (${res.division})*
+Teacher: *${res.teacherName}*
+Total Pupils: *${res.totalStudents}*
+
+`;
+          res.students.forEach((s, idx) => {
+            list += `${idx + 1}. *${s.name}* (\`${s.admissionNo}\`)\n   Parent: ${s.phone}\n`;
+          });
+
+          await sock.sendMessage(senderJid, { text: list }, { quoted: msg });
+        }
+      }
+
+      // 4e. TEACHER PAYSLIP INQUIRY (e.g. !payslip or !salary)
+      else if (cleanText.toLowerCase() === "!payslip" || cleanText.toLowerCase() === "!salary") {
+        const payslip = getStaffPayslipByPhoneOrNumber(senderPhone);
+        if (payslip.error) {
+          await sock.sendMessage(senderJid, { text: `❌ ${payslip.error}` }, { quoted: msg });
+        } else {
+          await sock.sendMessage(
+            senderJid,
+            {
+              text: `🦅 *EAGLE POWER SCHOOLS — CONFIDENTIAL PAYSLIP*
+• Staff Name: *${payslip.name}*
+• Staff ID: \`${payslip.staffNo}\`
+• Designation: *${payslip.role}*
+
+💵 *Monthly Pay Breakdown:*
+• Basic / Gross Salary: *₦${payslip.grossSalary.toLocaleString()}*
+• Deductions / Tax / Pension: *₦0.00*
+• *Net Salary Payable:* *₦${payslip.netPayable.toLocaleString()}*
+
+🏦 *Bank Account on File:*
+• Bank: *${payslip.bankName}*
+• Account No: *${payslip.accountNumber}*
+• Account Name: *${payslip.accountName}*
+• Status: *${payslip.status}*
+
+_For salary adjustments or account changes, contact the Bursar._`
+            },
+            { quoted: msg }
+          );
+        }
+      }
       else if (cleanText.toLowerCase().startsWith("!score ")) {
         // Syntax: !score <admission_no> <subject_code> <ca_score> <exam_score>
         const parts = cleanText.split(/\s+/);
@@ -448,6 +571,36 @@ Please contact the school office if you require clarification.`;
         }
       }
 
+      // 6b. CLASS BROADSHEET INQUIRY
+      else if (cleanText.toLowerCase().startsWith("!broadsheet ") || cleanText.toLowerCase() === "!broadsheet") {
+        const className = cleanText.slice(11).trim() || "SS2";
+        const result = getClassBroadsheetSummary(className);
+
+        if (result.error) {
+          await sock.sendMessage(senderJid, { text: `❌ ${result.error}` }, { quoted: msg });
+        } else if (result.evaluatedCount === 0) {
+          await sock.sendMessage(
+            senderJid,
+            {
+              text: `📊 *Eagle Power Academic Broadsheet: ${result.className}*\n• Session: *${result.session}* (${result.term})\n• Total Pupils: *${result.totalPupils}*\n• Status: *No marks recorded yet for this term.*\n\n_Tip: Use \`!score <ADM> <SUBJ> <CA> <EXAM>\` or open Live Score Entry in the Web Portal._`,
+            },
+            { quoted: msg }
+          );
+        } else {
+          const topList = result.topStudents
+            .map((s, idx) => `${idx + 1}. *${s.name}* (\`${s.admissionNo}\`): *${s.average}%* (${s.subjectCount} subjects)`)
+            .join("\n");
+
+          await sock.sendMessage(
+            senderJid,
+            {
+              text: `🦅 *EAGLE POWER SCHOOLS — ACADEMIC BROADSHEET*\n🏫 *Class: ${result.className}* (${result.division})\n📅 *Term:* ${result.term}, ${result.session}\n\n📊 *Class Performance:*\n• Evaluated: *${result.evaluatedCount}/${result.totalPupils} Pupils*\n• Class Average: *${result.overallAverage}%*\n• Pass Rate (≥50%): *${result.passRate}%*\n\n🏆 *Top Performers:*\n${topList}\n\n📜 _Full master broadsheet and report cards available on your Web Portal._`,
+            },
+            { quoted: msg }
+          );
+        }
+      }
+
       // 7. STUDENT SUMMARY & FEES
       else if (cleanText.toLowerCase().startsWith("!student ")) {
         const admissionNo = cleanText.slice(9).trim();
@@ -532,6 +685,9 @@ Please contact the school office if you require clarification.`;
             { quoted: msg }
           );
         }
+      }
+    } catch (msgErr) {
+        logger.error({ err: msgErr }, "Error processing WhatsApp message");
       }
     }
   });

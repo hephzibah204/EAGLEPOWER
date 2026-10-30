@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import QRCode from 'qrcode';
 import {
   X,
   MessageCircle,
@@ -17,7 +18,8 @@ import {
   ShieldCheck,
   Server,
   Zap,
-  ExternalLink
+  ExternalLink,
+  Download
 } from 'lucide-react';
 import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
@@ -54,6 +56,11 @@ export default function WhatsAppBotConsoleModal({
   const [pairingLoading, setPairingLoading] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [pairingCountdown, setPairingCountdown] = useState(0);
+
+  // Real QR Code state
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrMode, setQrMode] = useState('direct_chat'); // 'direct_chat' | 'pairing'
 
   // Broadcast state
   const [broadcastForm, setBroadcastForm] = useState({
@@ -103,6 +110,40 @@ export default function WhatsAppBotConsoleModal({
     }, 1000);
     return () => clearInterval(timer);
   }, [pairingCountdown]);
+
+  // Generate authentic, scannable QR Code
+  const generateQrCode = useCallback(async () => {
+    setQrLoading(true);
+    try {
+      const cleanDigits = (phoneNumber || defaultPhone).replace(/\D/g, '');
+      const fullPhone = cleanDigits.startsWith('234') ? cleanDigits : (cleanDigits.startsWith('0') ? '234' + cleanDigits.slice(1) : '234' + cleanDigits);
+
+      const targetData = qrMode === 'direct_chat'
+        ? `https://wa.me/${fullPhone}?text=${encodeURIComponent('Hello Eagle Power Schools Assistant! I am connecting to the official school WhatsApp AI bot.')}`
+        : `https://wa.me/${fullPhone}?text=${encodeURIComponent('!menu')}`;
+
+      const url = await QRCode.toDataURL(targetData, {
+        width: 320,
+        margin: 2,
+        errorCorrectionLevel: 'H',
+        color: {
+          dark: '#030712',
+          light: '#ffffff'
+        }
+      });
+      setQrDataUrl(url);
+    } catch (err) {
+      console.error('Failed to generate QR code', err);
+    } finally {
+      setQrLoading(false);
+    }
+  }, [phoneNumber, defaultPhone, qrMode]);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'connect') {
+      generateQrCode();
+    }
+  }, [isOpen, activeTab, generateQrCode]);
 
   // Request 8-digit pairing code
   const handleRequestPairingCode = async (e) => {
@@ -446,59 +487,109 @@ export default function WhatsAppBotConsoleModal({
                 </div>
               )}
 
-              {/* PAIRING METHOD B: QR CODE */}
+              {/* PAIRING METHOD B: REAL SCANNABLE QR CODE */}
               {pairingMethod === 'qr' && (
-                <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-4 animate-in fade-in">
+                <div className="p-5 sm:p-6 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-4 animate-in fade-in">
                   <div className="space-y-1">
                     <h4 className="text-sm font-black text-white flex items-center justify-center gap-2">
                       <QrCode className="w-4 h-4 text-emerald-400" />
-                      <span>Point & Scan QR Code</span>
+                      <span>Official WhatsApp Scannable QR Code</span>
                     </h4>
-                    <p className="text-slate-400 text-xs">
-                      Open WhatsApp on phone &rarr; Settings &rarr; Linked Devices &rarr; Point camera at this screen.
+                    <p className="text-slate-400 text-xs max-w-lg mx-auto">
+                      Scan with any smartphone camera or WhatsApp scanner to immediately launch the Eagle Power School AI Bot chat, or download the high-res badge for school publications.
                     </p>
                   </div>
 
-                  {/* QR Code graphic container */}
-                  <div className="inline-block p-4 rounded-3xl bg-white shadow-2xl relative">
-                    <svg viewBox="0 0 160 160" className="w-44 h-44 mx-auto text-slate-950">
-                      {/* Corner markers */}
-                      <rect x="10" y="10" width="40" height="40" rx="6" fill="#000" />
-                      <rect x="18" y="18" width="24" height="24" rx="3" fill="#fff" />
-                      <rect x="24" y="24" width="12" height="12" rx="2" fill="#000" />
-
-                      <rect x="110" y="10" width="40" height="40" rx="6" fill="#000" />
-                      <rect x="118" y="18" width="24" height="24" rx="3" fill="#fff" />
-                      <rect x="124" y="24" width="12" height="12" rx="2" fill="#000" />
-
-                      <rect x="10" y="110" width="40" height="40" rx="6" fill="#000" />
-                      <rect x="18" y="118" width="24" height="24" rx="3" fill="#fff" />
-                      <rect x="24" y="124" width="12" height="12" rx="2" fill="#000" />
-
-                      {/* Data Pattern */}
-                      <circle cx="80" cy="30" r="4" fill="#059669" />
-                      <circle cx="65" cy="50" r="4" fill="#000" />
-                      <circle cx="95" cy="50" r="4" fill="#000" />
-                      <rect x="70" y="70" width="20" height="20" rx="4" fill="#059669" />
-                      <circle cx="40" cy="80" r="4" fill="#000" />
-                      <circle cx="120" cy="80" r="4" fill="#000" />
-                      <circle cx="60" cy="110" r="4" fill="#000" />
-                      <circle cx="100" cy="110" r="4" fill="#000" />
-                      <circle cx="80" cy="130" r="4" fill="#059669" />
-                      <circle cx="120" cy="130" r="4" fill="#000" />
-                      <circle cx="140" cy="140" r="4" fill="#059669" />
-                    </svg>
-
-                    <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex items-center justify-center">
-                      <div className="p-2 rounded-xl bg-slate-900 border border-emerald-400 text-emerald-400 shadow-md">
-                        <MessageCircle className="w-5 h-5 fill-emerald-400" />
-                      </div>
-                    </div>
+                  {/* QR Mode Switcher */}
+                  <div className="flex items-center justify-center gap-2 text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setQrMode('direct_chat')}
+                      className={`px-3 py-1.5 rounded-xl transition-all ${
+                        qrMode === 'direct_chat'
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <span>💬 Direct Bot Chat QR</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQrMode('menu_launcher')}
+                      className={`px-3 py-1.5 rounded-xl transition-all ${
+                        qrMode === 'menu_launcher'
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow'
+                          : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <span>🤖 Interactive Menu QR (!menu)</span>
+                    </button>
                   </div>
 
-                  <p className="text-slate-400 text-[11px]">
-                    To view raw terminal QR code directly on Fly.io, run: <code className="text-amber-300 font-mono bg-slate-900 px-2 py-0.5 rounded">fly logs -a eaglepower-whatsapp-bot</code>
-                  </p>
+                  {/* Authentic High-Resolution Scannable QR Code */}
+                  <div className="relative inline-block p-4 sm:p-5 rounded-3xl bg-white shadow-2xl border-4 border-emerald-500/40">
+                    {qrLoading || !qrDataUrl ? (
+                      <div className="w-56 h-56 sm:w-64 sm:h-64 flex flex-col items-center justify-center bg-slate-50 rounded-2xl gap-2">
+                        <RefreshCw className="w-7 h-7 text-emerald-600 animate-spin" />
+                        <span className="text-[11px] font-bold text-slate-600">Generating HD QR...</span>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <img
+                          src={qrDataUrl}
+                          alt="Eagle Power Schools WhatsApp QR Code"
+                          className="w-56 h-56 sm:w-64 sm:h-64 rounded-2xl object-contain mx-auto"
+                        />
+                        {/* Central WhatsApp Emblem Badge */}
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="w-11 h-11 rounded-2xl bg-[#25D366] text-white flex items-center justify-center shadow-lg border-2 border-white">
+                            <MessageCircle className="w-6 h-6 fill-white" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* QR Action Buttons */}
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+                    {qrDataUrl && (
+                      <a
+                        href={qrDataUrl}
+                        download={`eaglepower-whatsapp-qr-${rawCleanPhone}.png`}
+                        className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-white font-bold text-xs flex items-center gap-2 transition-all hover:border-slate-500"
+                      >
+                        <Download className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Download PNG Badge</span>
+                      </a>
+                    )}
+                    <a
+                      href={`https://wa.me/${rawCleanPhone}?text=${encodeURIComponent('Hello Eagle Power Schools Assistant! I am connecting to the official school WhatsApp AI bot.')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-2 shadow transition-all hover:scale-105"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Open Chat in WhatsApp</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={generateQrCode}
+                      className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 font-bold text-xs flex items-center gap-1.5 transition-all"
+                      title="Regenerate QR"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${qrLoading ? 'animate-spin text-emerald-400' : ''}`} />
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+
+                  <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 text-[11px] text-slate-400 max-w-md mx-auto">
+                    <p>
+                      Linked Line: <strong className="text-white font-mono">{phoneNumber || defaultPhone}</strong>
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Works with both standard camera apps and in-app WhatsApp camera scanner.
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

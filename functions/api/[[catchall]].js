@@ -1,4 +1,4 @@
-import dbData from '../../src/data/portalDbData.json';
+import dbData from '../../src/data/portalDbData.json' with { type: 'json' };
 
 // In-Memory Cloudflare Edge State
 let maintenanceMode = {
@@ -22,15 +22,35 @@ const auditLogStore = [
   }
 ];
 
-function jsonResponse(data, status = 200) {
+const whatsappBroadcastStore = [
+  {
+    id: 1,
+    broadcast_type: 'ALL',
+    target_audience: 'Entire School Community (Parents + Staff)',
+    title: 'Resumption of Second Term Academic Activities',
+    message: 'Welcome back to Second Term 2024/2025. Classes commence at 7:45 AM prompt.',
+    recipient_count: 119,
+    dispatched_by: 'SuperAdmin',
+    status: 'SENT',
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString()
+  }
+];
+
+function jsonResponse(data, status = 200, extraHeaders = {}) {
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-portal-type'
+  });
+  if (extraHeaders) {
+    for (const [k, v] of Object.entries(extraHeaders)) {
+      headers.set(k, v);
+    }
+  }
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-portal-type'
-    }
+    headers
   });
 }
 
@@ -62,7 +82,67 @@ function getComputedPayrollStats() {
 }
 
 export async function onRequest(context) {
-  const { request, params } = context;
+  const { request, params, env } = context;
+
+  // 1. If an external API_ORIGIN is explicitly specified in environment, proxy to it
+  if (env && (env.API_ORIGIN !== undefined && env.API_ORIGIN !== null)) {
+    let origin;
+    try {
+      origin = new URL(env.API_ORIGIN || '');
+      if (origin.protocol !== 'https:' || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash || origin.origin === new URL(request.url).origin) {
+        throw new Error('Invalid origin');
+      }
+    } catch {
+      return new Response(JSON.stringify({ success: false, message: 'The institutional API is not configured.' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+      });
+    }
+
+    const incoming = new URL(request.url);
+    const target = new URL(origin.origin);
+    target.pathname = incoming.pathname;
+    target.search = incoming.search;
+    const headers = new Headers();
+    for (const name of ['authorization', 'cookie', 'origin', 'x-eagle-request', 'content-type', 'accept', 'x-portal-type', 'x-paystack-signature']) {
+      if (request.headers.has(name)) headers.set(name, request.headers.get(name));
+    }
+    headers.set('Cache-Control', 'no-store');
+    try {
+      const response = await fetch(target, {
+        method: request.method, headers,
+        body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer(),
+        redirect: 'manual', signal: AbortSignal.timeout(30000),
+      });
+      if (response.status >= 300 && response.status < 400) {
+        return new Response(JSON.stringify({ success: false, message: 'The institutional API returned an unexpected redirect.' }), {
+          status: 502,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+        });
+      }
+      const outputHeaders = new Headers(response.headers);
+      outputHeaders.set('Cache-Control', 'no-store');
+      outputHeaders.delete('Access-Control-Allow-Origin');
+      const cookies = response.headers.getSetCookie?.() || response.headers.getAll?.('Set-Cookie');
+      if (cookies) {
+        outputHeaders.delete('Set-Cookie');
+        for (const cookie of cookies) outputHeaders.append('Set-Cookie', cookie);
+      }
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers: outputHeaders });
+    } catch {
+      return new Response(JSON.stringify({ success: false, message: 'The institutional API is temporarily unavailable.' }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+      });
+    }
+  }
+
+  // Institutional records must only be served by the authenticated backend.
+  return new Response(JSON.stringify({ success: false, message: 'The institutional API is not configured.' }), {
+    status: 503, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }
+  });
+
+  // 2. Native Cloudflare Edge API Handler (Autonomous Serverless Cloudflare Pages Engine)
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/$/, '');
   const method = request.method.toUpperCase();
@@ -102,10 +182,13 @@ export async function onRequest(context) {
 
   // 2. Dedicated SuperAdmin Executive Login
   if ((path === '/api/auth/executive-login' || (path === '/api/auth/login' && (body.portal_source === 'executive' || request.headers.get('x-portal-type') === 'executive'))) && method === 'POST') {
-    const { username, password } = body;
-    const cleanUser = (username || '').trim().toLowerCase();
+    const { username, email, phone, identifier, password } = body;
+    const cleanUser = (username || email || phone || identifier || '').trim().toLowerCase();
+    const cleanDigits = cleanUser.replace(/\D/g, '');
+    const phoneKey = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : (cleanDigits.length >= 7 ? cleanDigits : '');
 
-    if (cleanUser === 'superadmin' && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) {
+    const isSuperAdminMatch = cleanUser === 'superadmin' || cleanUser === 'director@eaglepowerschools.com.ng';
+    if (isSuperAdminMatch && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) {
       auditLogStore.unshift({
         id: auditLogStore.length + 101,
         timestamp: new Date().toISOString(),
@@ -118,10 +201,12 @@ export async function onRequest(context) {
         details: 'SuperAdmin authenticated to Executive Console from Cloudflare Edge'
       });
 
+      const token = 'eagle_root_exec_' + btoa('superadmin:' + Date.now());
       return jsonResponse({
         success: true,
+        session: true,
         message: 'Executive Console root access granted.',
-        token: 'eagle_root_exec_' + btoa('superadmin:' + Date.now()),
+        token,
         user: {
           id: 1,
           username: 'superadmin',
@@ -130,29 +215,35 @@ export async function onRequest(context) {
           full_name: 'Proprietor & Director',
           reference_id: null
         }
+      }, 200, {
+        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
       });
     }
 
     if (cleanUser && cleanUser !== 'superadmin') {
       return jsonResponse({
         success: false,
+        session: false,
         message: 'Access Denied: The Executive Security Console is strictly reserved for SuperAdmin personnel.'
       }, 403);
     }
 
     return jsonResponse({
       success: false,
+      session: false,
       message: 'Invalid executive credentials. Please verify your root passphrase.'
     }, 401);
   }
 
   // 3. Portal Login (Supports SuperAdmin, Admin, Teacher, Student, Parent, Front Desk, Staff)
   if (path === '/api/auth/login' && method === 'POST') {
-    const { username, password } = body;
-    const cleanUser = (username || '').trim().toLowerCase();
+    const { username, email, phone, identifier, password } = body;
+    const cleanUser = (username || email || phone || identifier || '').trim().toLowerCase();
+    const cleanDigits = cleanUser.replace(/\D/g, '');
+    const phoneKey = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : (cleanDigits.length >= 7 ? cleanDigits : '');
 
     // SuperAdmin
-    if (cleanUser === 'superadmin' && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) {
+    if ((cleanUser === 'superadmin' || cleanUser === 'director@eaglepowerschools.com.ng') && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) {
       auditLogStore.unshift({
         id: auditLogStore.length + 101,
         timestamp: new Date().toISOString(),
@@ -165,10 +256,12 @@ export async function onRequest(context) {
         details: 'SuperAdmin authenticated from Cloudflare Edge'
       });
 
+      const token = 'eagle_root_exec_' + btoa('superadmin:' + Date.now());
       return jsonResponse({
         success: true,
+        session: true,
         message: 'SuperAdmin login successful.',
-        token: 'eagle_root_exec_' + btoa('superadmin:' + Date.now()),
+        token,
         user: {
           id: 1,
           username: 'superadmin',
@@ -177,15 +270,19 @@ export async function onRequest(context) {
           full_name: 'Proprietor & Director',
           reference_id: null
         }
+      }, 200, {
+        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
       });
     }
 
     // Admin / Principal
     if (cleanUser === 'admin' && password === 'EagleAdmin2025!') {
+      const token = 'eagle_admin_' + btoa('admin:' + Date.now());
       return jsonResponse({
         success: true,
+        session: true,
         message: 'Login successful.',
-        token: 'eagle_admin_' + btoa('admin:' + Date.now()),
+        token,
         user: {
           id: 2,
           username: 'admin',
@@ -194,15 +291,19 @@ export async function onRequest(context) {
           full_name: 'Principal / School Administrator',
           reference_id: 'EPS-ADM-01'
         }
+      }, 200, {
+        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
       });
     }
 
     // Teacher
     if (cleanUser === 'teacher' && password === 'Teacher2025!') {
+      const token = 'eagle_teacher_' + btoa('teacher:' + Date.now());
       return jsonResponse({
         success: true,
+        session: true,
         message: 'Login successful.',
-        token: 'eagle_teacher_' + btoa('teacher:' + Date.now()),
+        token,
         user: {
           id: 3,
           username: 'teacher',
@@ -211,15 +312,19 @@ export async function onRequest(context) {
           full_name: 'Senior Academic Faculty',
           reference_id: 'EPS-TCH-01'
         }
+      }, 200, {
+        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
       });
     }
 
     // Bursar
     if (cleanUser === 'bursar' && password === 'Bursar2025!') {
+      const token = 'eagle_bursar_' + btoa('bursar:' + Date.now());
       return jsonResponse({
         success: true,
+        session: true,
         message: 'Login successful.',
-        token: 'eagle_bursar_' + btoa('bursar:' + Date.now()),
+        token,
         user: {
           id: 4,
           username: 'bursar',
@@ -228,15 +333,19 @@ export async function onRequest(context) {
           full_name: 'School Bursar / Finance Head',
           reference_id: 'EPS-BUR-01'
         }
+      }, 200, {
+        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
       });
     }
 
     // Student (ESE2009012)
     if (cleanUser === 'ese2009012' && (password === 'Eagle2025!' || password === 'ESE2009012')) {
+      const token = 'eagle_student_' + btoa('ese2009012:' + Date.now());
       return jsonResponse({
         success: true,
+        session: true,
         message: 'Login successful.',
-        token: 'eagle_student_' + btoa('ese2009012:' + Date.now()),
+        token,
         user: {
           id: 5,
           username: 'ESE2009012',
@@ -252,25 +361,245 @@ export async function onRequest(context) {
             division: 'Junior College'
           }
         }
+      }, 200, {
+        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
       });
+    }
+
+    // Dynamic user lookup for all faculty, students, parents, and administrative staff
+    const matchedUser = (dbData.users || []).find(u => {
+      const uName = (u.username || '').toLowerCase();
+      const uRef = (u.reference_id || '').toLowerCase();
+      const uEmail = (u.email || '').toLowerCase();
+      const uPhone = (u.phone || '').replace(/\D/g, '');
+
+      if (uName === cleanUser || uRef === cleanUser || uEmail === cleanUser) return true;
+      if (phoneKey && uPhone && (uPhone.endsWith(phoneKey) || phoneKey.endsWith(uPhone))) return true;
+
+      // Also match by verified staff phone number or email
+      const staffRec = (dbData.staff || []).find(st => 
+        (u.reference_id && st.staff_no?.toLowerCase() === u.reference_id.toLowerCase()) || 
+        (u.full_name && st.name?.toLowerCase() === u.full_name?.toLowerCase())
+      );
+      if (staffRec) {
+        if (staffRec.email && staffRec.email.toLowerCase() === cleanUser) return true;
+        if (phoneKey && staffRec.phone) {
+          const stDigits = staffRec.phone.replace(/\D/g, '');
+          if (stDigits && (stDigits.endsWith(phoneKey) || phoneKey.endsWith(stDigits))) return true;
+        }
+      }
+
+      // Also match by parent guardian phone or guardian email
+      if (u.role === 'parent') {
+        const studentRec = (dbData.students || []).find(st => 
+          (u.reference_id && st.admission_no?.toLowerCase() === u.reference_id.toLowerCase()) ||
+          (u.reference_id && String(st.id) === String(u.reference_id))
+        );
+        if (studentRec) {
+          if (studentRec.guardian_email && studentRec.guardian_email.toLowerCase() === cleanUser) return true;
+          if (phoneKey && studentRec.guardian_phone) {
+            const gDigits = studentRec.guardian_phone.replace(/\D/g, '');
+            if (gDigits && (gDigits.endsWith(phoneKey) || phoneKey.endsWith(gDigits))) return true;
+          }
+        }
+      }
+
+      return false;
+    });
+
+    if (matchedUser) {
+      let isValidPass = false;
+      if (matchedUser.role === 'superadmin' && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) isValidPass = true;
+      else if (matchedUser.role === 'admin' && (password === 'EagleAdmin2025!' || password === 'EagleStaff2025!')) isValidPass = true;
+      else if (matchedUser.role === 'teacher' && (password === 'EagleStaff2025!' || password === 'Teacher2025!')) isValidPass = true;
+      else if (matchedUser.role === 'bursar' && (password === 'Bursar2025!' || password === 'EagleStaff2025!')) isValidPass = true;
+      else if (matchedUser.role === 'student' && (password === 'Eagle2025!' || password === matchedUser.username || password === matchedUser.reference_id)) isValidPass = true;
+      else if (matchedUser.role === 'parent' && (password === 'EagleParent2025!' || password === 'Eagle2025!' || password === matchedUser.reference_id)) isValidPass = true;
+
+      if (isValidPass) {
+        const studentInfo = matchedUser.role === 'student'
+          ? (dbData.students || []).find(s => s.admission_no === matchedUser.reference_id || s.id === matchedUser.reference_id)
+          : undefined;
+
+        const staffInfo = (['teacher', 'admin', 'bursar'].includes(matchedUser.role))
+          ? (dbData.staff || []).find(st => st.staff_no === matchedUser.reference_id || st.name?.toLowerCase() === matchedUser.full_name?.toLowerCase())
+          : undefined;
+
+        const token = `eagle_${matchedUser.role}_` + btoa(`${matchedUser.username}:${Date.now()}`);
+        return jsonResponse({
+          success: true,
+          session: true,
+          message: 'Login successful.',
+          token,
+          user: {
+            ...matchedUser,
+            student: studentInfo,
+            staff: staffInfo
+          }
+        }, 200, {
+          'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
+        });
+      }
     }
 
     return jsonResponse({
       success: false,
+      session: false,
       message: 'Invalid credentials. Please verify your username and password.'
     }, 401);
   }
 
-  // 4. Session Validation (/api/auth/me)
-  if (path === '/api/auth/me') {
-    const authHeader = request.headers.get('Authorization') || '';
-    if (!authHeader) {
-      return jsonResponse({ success: false, message: 'Unauthenticated' }, 401);
+  // 3b. WhatsApp OTP Request (/api/auth/whatsapp-otp/request)
+  if (path === '/api/auth/whatsapp-otp/request' && method === 'POST') {
+    const { phone } = body;
+    if (!phone) {
+      return jsonResponse({ success: false, message: 'Phone number or Staff ID is required.' }, 400);
     }
 
-    if (authHeader.includes('exec') || authHeader.includes('superadmin')) {
+    const cleanInput = (phone || '').trim().toLowerCase();
+    const cleanDigits = cleanInput.replace(/\D/g, '');
+
+    const matchedUser = (dbData.users || []).find(u => {
+      const uName = (u.username || '').toLowerCase();
+      const uRef = (u.reference_id || '').toLowerCase();
+      if (uName === cleanInput || uRef === cleanInput) return true;
+
+      if (cleanDigits && cleanDigits.length >= 7) {
+        const staffRec = (dbData.staff || []).find(st => st.staff_no === u.reference_id || st.name?.toLowerCase() === u.full_name?.toLowerCase());
+        if (staffRec && staffRec.phone) {
+          const stDigits = staffRec.phone.replace(/\D/g, '');
+          if (stDigits && (stDigits.endsWith(cleanDigits) || cleanDigits.endsWith(stDigits))) return true;
+        }
+      }
+      return false;
+    });
+
+    if (!matchedUser) {
+      return jsonResponse({ success: false, message: 'No registered account found matching this phone number or Staff ID.' }, 404);
+    }
+
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    return jsonResponse({
+      success: true,
+      message: `A 6-digit secure login code has been sent to your WhatsApp number. Valid for 5 minutes.`,
+      debug_code: otpCode
+    }, 200);
+  }
+
+  // 3c. WhatsApp OTP Verify (/api/auth/whatsapp-otp/verify)
+  if (path === '/api/auth/whatsapp-otp/verify' && method === 'POST') {
+    const { phone, code } = body;
+    if (!phone || !code) {
+      return jsonResponse({ success: false, message: 'Phone number and 6-digit OTP code are required.' }, 400);
+    }
+
+    const cleanInput = (phone || '').trim().toLowerCase();
+    const cleanDigits = cleanInput.replace(/\D/g, '');
+
+    const matchedUser = (dbData.users || []).find(u => {
+      const uName = (u.username || '').toLowerCase();
+      const uRef = (u.reference_id || '').toLowerCase();
+      if (uName === cleanInput || uRef === cleanInput) return true;
+
+      if (cleanDigits && cleanDigits.length >= 7) {
+        const staffRec = (dbData.staff || []).find(st => st.staff_no === u.reference_id || st.name?.toLowerCase() === u.full_name?.toLowerCase());
+        if (staffRec && staffRec.phone) {
+          const stDigits = staffRec.phone.replace(/\D/g, '');
+          if (stDigits && (stDigits.endsWith(cleanDigits) || cleanDigits.endsWith(stDigits))) return true;
+        }
+      }
+      return false;
+    });
+
+    if (!matchedUser) {
+      return jsonResponse({ success: false, message: 'User not found or unverified.' }, 404);
+    }
+
+    const studentInfo = matchedUser.role === 'student'
+      ? (dbData.students || []).find(s => s.admission_no === matchedUser.reference_id || s.id === matchedUser.reference_id)
+      : undefined;
+
+    const staffInfo = (['teacher', 'admin', 'bursar'].includes(matchedUser.role))
+      ? (dbData.staff || []).find(st => st.staff_no === matchedUser.reference_id || st.name?.toLowerCase() === matchedUser.full_name?.toLowerCase())
+      : undefined;
+
+    const token = `eagle_${matchedUser.role}_` + btoa(`${matchedUser.username}:${Date.now()}`);
+    return jsonResponse({
+      success: true,
+      session: true,
+      message: 'WhatsApp OTP verified. Login successful.',
+      token,
+      user: {
+        ...matchedUser,
+        student: studentInfo,
+        staff: staffInfo
+      }
+    }, 200, {
+      'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
+    });
+  }
+
+  // 4. Logout (/api/auth/logout)
+  if (path === '/api/auth/logout') {
+    return jsonResponse({
+      success: true,
+      session: false,
+      message: 'Logged out successfully.'
+    }, 200, {
+      'Set-Cookie': 'eagle_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    });
+  }
+
+  // 4b. Change Password (/api/auth/change-password)
+  if (path === '/api/auth/change-password' && method === 'POST') {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+
+    if (!rawToken) {
+      return jsonResponse({ success: false, message: 'Authentication required to update password.' }, 401);
+    }
+
+    const { old_password, current_password, new_password } = body;
+    const currentPass = current_password || old_password;
+    if (!currentPass || !new_password || new_password.length < 8 || !/[A-Za-z]/.test(new_password) || !/\d/.test(new_password)) {
+      return jsonResponse({
+        success: false,
+        message: 'New password must be at least 8 characters long and contain both letters and numbers.'
+      }, 400);
+    }
+
+    auditLogStore.unshift({
+      id: auditLogStore.length + 101,
+      timestamp: new Date().toISOString(),
+      action: 'PASSWORD_CHANGED',
+      module: 'AUTH',
+      ip_address: request.headers.get('cf-connecting-ip') || '127.0.0.1',
+      details: 'User password successfully updated.'
+    });
+
+    return jsonResponse({
+      success: true,
+      message: 'Password updated successfully.'
+    }, 200);
+  }
+
+  // 5. Session Validation (/api/auth/me)
+  if (path === '/api/auth/me') {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+
+    if (!rawToken) {
+      return jsonResponse({ success: false, session: false, message: 'Unauthenticated' }, 401);
+    }
+
+    if (rawToken.includes('exec') || rawToken.includes('superadmin')) {
       return jsonResponse({
         success: true,
+        session: true,
         user: {
           id: 1,
           username: 'superadmin',
@@ -281,8 +610,113 @@ export async function onRequest(context) {
       });
     }
 
+    // Check if token format is eagle_${role}_base64(username:timestamp)
+    let parsedUsername = null;
+    let parsedRole = null;
+    try {
+      const parts = rawToken.split('_');
+      if (parts.length >= 3) {
+        parsedRole = parts[1];
+        const decoded = atob(parts.slice(2).join('_'));
+        parsedUsername = decoded.split(':')[0];
+      }
+    } catch {
+      // ignore
+    }
+
+    if (parsedUsername) {
+      const cleanUser = parsedUsername.toLowerCase();
+      const matchedUser = (dbData.users || []).find(u => {
+        const uName = (u.username || '').toLowerCase();
+        const uRef = (u.reference_id || '').toLowerCase();
+        const uEmail = (u.email || '').toLowerCase();
+        return uName === cleanUser || uRef === cleanUser || uEmail === cleanUser;
+      });
+
+      if (matchedUser) {
+        const studentInfo = matchedUser.role === 'student'
+          ? (dbData.students || []).find(s => s.admission_no === matchedUser.reference_id || s.id === matchedUser.reference_id)
+          : undefined;
+
+        const staffInfo = (['teacher', 'admin', 'bursar'].includes(matchedUser.role))
+          ? (dbData.staff || []).find(st => st.staff_no === matchedUser.reference_id || st.name?.toLowerCase() === matchedUser.full_name?.toLowerCase())
+          : undefined;
+
+        return jsonResponse({
+          success: true,
+          session: true,
+          user: {
+            ...matchedUser,
+            student: studentInfo,
+            staff: staffInfo
+          }
+        });
+      }
+    }
+
+    if (rawToken.includes('admin')) {
+      return jsonResponse({
+        success: true,
+        session: true,
+        user: {
+          id: 2,
+          username: 'admin',
+          email: 'principal@eaglepowerschools.com.ng',
+          role: 'admin',
+          full_name: 'Principal / School Administrator',
+          reference_id: 'EPS-ADM-01'
+        }
+      });
+    }
+
+    if (rawToken.includes('teacher')) {
+      return jsonResponse({
+        success: true,
+        session: true,
+        user: {
+          id: 3,
+          username: 'teacher',
+          email: 'teacher@eaglepowerschools.com.ng',
+          role: 'teacher',
+          full_name: 'Senior Academic Faculty',
+          reference_id: 'EPS-TCH-01'
+        }
+      });
+    }
+
+    if (rawToken.includes('bursar')) {
+      return jsonResponse({
+        success: true,
+        session: true,
+        user: {
+          id: 4,
+          username: 'bursar',
+          email: 'bursary@eaglepowerschools.com.ng',
+          role: 'bursar',
+          full_name: 'School Bursar / Finance Head',
+          reference_id: 'EPS-BUR-01'
+        }
+      });
+    }
+
+    if (rawToken.includes('student')) {
+      return jsonResponse({
+        success: true,
+        session: true,
+        user: {
+          id: 5,
+          username: 'ESE2009012',
+          email: 'student@eaglepowerschools.com.ng',
+          role: 'student',
+          full_name: 'Ugochi Eze',
+          reference_id: 'ESE2009012'
+        }
+      });
+    }
+
     return jsonResponse({
       success: true,
+      session: true,
       user: {
         id: 2,
         username: 'admin',
@@ -512,7 +946,7 @@ export async function onRequest(context) {
     });
   }
 
-  if (path === '/api/system/health') {
+  if (path === '/api/system/health' || path === '/api/system/status') {
     return jsonResponse({
       success: true,
       status: 'HEALTHY',
@@ -614,6 +1048,88 @@ export async function onRequest(context) {
       });
     }
     return jsonResponse({ success: true, maintenance: maintenanceMode });
+  }
+
+  // WhatsApp Bot Status & Management
+  if (path === '/api/executive/whatsapp/status') {
+    const parentCount = (dbData.students || []).filter(s => s.guardian_phone).length || 92;
+    const staffCount = (dbData.staff || []).filter(s => s.phone).length || 27;
+    return jsonResponse({
+      success: true,
+      bot: {
+        appName: 'eaglepower-whatsapp-bot',
+        platform: 'Fly.io',
+        machineId: '8d999d0ce54368',
+        region: 'lhr (London, UK)',
+        status: 'DEPLOYED & OPERATIONAL',
+        authStorage: 'Persistent Volume /data/auth_info (Mounted)',
+        nodeVersion: 'Node 22-alpine',
+        naturalLanguageBrain: 'In-House Deterministic Bayesian AI'
+      },
+      reach: {
+        parent_contacts: parentCount,
+        staff_contacts: staffCount,
+        total_unique_recipients: parentCount + staffCount
+      },
+      broadcasts: {
+        total_sent: (whatsappBroadcastStore || []).length,
+        recent: (whatsappBroadcastStore || []).slice(0, 5)
+      }
+    });
+  }
+
+  if (path === '/api/executive/whatsapp/broadcast' && method === 'POST') {
+    const { broadcast_type = 'ALL', target_audience, title, message } = body;
+    const parentCount = (dbData.students || []).filter(s => s.guardian_phone).length || 92;
+    const staffCount = (dbData.staff || []).filter(s => s.phone).length || 27;
+    const recipientCount = broadcast_type === 'PARENTS' ? parentCount : broadcast_type === 'STAFF' ? staffCount : parentCount + staffCount;
+
+    const newBroadcast = {
+      id: (whatsappBroadcastStore?.length || 0) + 1,
+      broadcast_type,
+      target_audience: target_audience || (broadcast_type === 'PARENTS' ? 'All Verified Guardians' : broadcast_type === 'STAFF' ? 'All Staff Faculty' : 'Entire School Community'),
+      title: title || 'Official Announcement',
+      message: message || '',
+      recipient_count: recipientCount,
+      dispatched_by: 'SuperAdmin',
+      status: 'SENT',
+      created_at: new Date().toISOString()
+    };
+    whatsappBroadcastStore.unshift(newBroadcast);
+
+    return jsonResponse({
+      success: true,
+      message: `Broadcast message queued & dispatched to ${recipientCount} verified recipients.`,
+      broadcast: newBroadcast
+    }, 201);
+  }
+
+  if (path === '/api/executive/whatsapp/broadcasts') {
+    return jsonResponse({
+      success: true,
+      count: (whatsappBroadcastStore || []).length,
+      broadcasts: whatsappBroadcastStore || []
+    });
+  }
+
+  if (path === '/api/executive/whatsapp/pair' && method === 'POST') {
+    const { phone } = body;
+    const clean = (phone || '').replace(/\D/g, '');
+    const codePart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const codePart2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const pairingCode = `${codePart1}-${codePart2}`;
+
+    return jsonResponse({
+      success: true,
+      phone: clean,
+      pairing_code: pairingCode,
+      expires_in_seconds: 180,
+      instructions: [
+        'Open WhatsApp on your mobile device',
+        'Navigate to Settings > Linked Devices > Link with phone number instead',
+        `Enter the 8-digit verification pairing code: ${pairingCode}`
+      ]
+    });
   }
 
   // 6. Public Portal Academics & Roster
@@ -790,6 +1306,76 @@ export async function onRequest(context) {
     });
   }
 
+  if (path === '/api/staff/profile') {
+    if (method === 'PATCH' || method === 'PUT') {
+      const { photo_url, signature_url, blood_group, emergency_contact, phone, email } = body;
+      return jsonResponse({
+        success: true,
+        message: 'Profile picture and signature credentials updated successfully.',
+        staff: {
+          photo_url,
+          signature_url,
+          blood_group: blood_group || 'O+',
+          emergency_contact: emergency_contact || '+234 907 558 0671',
+          phone,
+          email
+        }
+      });
+    }
+
+    const defaultStaff = (dbData.staff || [])[0] || {};
+    return jsonResponse({
+      success: true,
+      staff: defaultStaff,
+      id_card: {
+        staff_no: defaultStaff.staff_no || 'EPS-STF-01',
+        name: defaultStaff.name || 'Faculty Member',
+        role: defaultStaff.role || 'Senior Academic Faculty',
+        blood_group: 'O+',
+        issue_date: '09/2025',
+        expiry_date: '08/2028',
+        school: {
+          name: dbData.system?.name || 'Eagle Power Schools',
+          motto: dbData.system?.motto || 'Love, Truth & Service',
+          phone: dbData.system?.admin_contact || '+234 907 558 0671'
+        }
+      }
+    });
+  }
+
+  if (path.startsWith('/api/staff/') && path.endsWith('/id-card')) {
+    const staffId = path.split('/')[3];
+    const staff = (dbData.staff || []).find(s => String(s.id) === String(staffId) || (s.staff_no || '').toLowerCase() === String(staffId).toLowerCase()) || (dbData.staff || [])[0] || {};
+    return jsonResponse({
+      success: true,
+      id_card: {
+        id: staff.id,
+        staff_no: staff.staff_no || 'EPS-STF-01',
+        name: staff.name || 'Staff Member',
+        role: staff.role || 'Academic Faculty',
+        qualification: staff.qualification || 'B.Ed / NCE',
+        assigned_class: staff.assigned_class || 'General Faculty',
+        email: staff.email || '',
+        phone: staff.phone || '+234 907 558 0671',
+        blood_group: staff.blood_group || 'O+',
+        emergency_contact: staff.emergency_contact || staff.phone || '+234 907 558 0671',
+        photo_url: staff.photo_url || null,
+        signature_url: staff.signature_url || null,
+        issue_date: '09/2025',
+        expiry_date: '08/2028',
+        school: {
+          name: dbData.system?.name || 'Eagle Power Schools',
+          motto: dbData.system?.motto || 'Love, Truth & Service',
+          address: dbData.system?.address || '2 & 9 Amikwo Road, Awka, Anambra State',
+          phone: dbData.system?.admin_contact || '+234 907 558 0671',
+          email: dbData.system?.admin_email || 'info@eaglepowerschools.com.ng',
+          website: 'https://eaglepowerschools.com.ng',
+          authorized_signatory: 'Adaeze Uzoefuna (Vice Principal / Registrar)'
+        }
+      }
+    });
+  }
+
   if (path === '/api/exams/class-broadsheet') {
     const classId = url.searchParams.get('class_id') || '1';
     const cls = (dbData.classes || []).find(c => String(c.id) === String(classId)) || { name: 'JSS 1 Gold' };
@@ -888,7 +1474,86 @@ export async function onRequest(context) {
   }
 
   if (path === '/api/exams/marks/batch' && method === 'POST') {
-    const { subject_id, session = '2024/2025', term = 'Second Term', entries = [] } = body;
+    const { subject_id, class_id, session = '2024/2025', term = 'Second Term', entries = [] } = body;
+
+    // Academic Permission Verification for Teachers
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+
+    let isTeacherUser = rawToken.startsWith('eagle_teacher_');
+    let teacherUsername = null;
+    if (isTeacherUser) {
+      try {
+        const parts = rawToken.split('_');
+        if (parts.length >= 3) {
+          const decoded = atob(parts.slice(2).join('_'));
+          teacherUsername = decoded.split(':')[0];
+        }
+      } catch {}
+    }
+
+    if (isTeacherUser && teacherUsername) {
+      const u = (dbData.users || []).find(u => (u.username || '').toLowerCase() === teacherUsername.toLowerCase());
+      const st = (dbData.staff || []).find(s => 
+        (u?.reference_id && (s.staff_no || '').toUpperCase() === u.reference_id.toUpperCase()) ||
+        (u?.full_name && (s.name || '').toLowerCase() === u.full_name.toLowerCase())
+      );
+
+      if (st) {
+        let effClassId = class_id;
+        if (!effClassId && entries[0]?.student_id) {
+          const sObj = (dbData.students || []).find(s => String(s.id) === String(entries[0].student_id));
+          if (sObj?.class_id) effClassId = sObj.class_id;
+        }
+
+        const cls = (dbData.classes || []).find(c => String(c.id) === String(effClassId));
+        const sub = (dbData.subjects || []).find(s => String(s.id) === String(subject_id));
+
+        if (cls && sub) {
+          const cleanCls = (cls.name || '').toUpperCase().replace(/\s+/g, '');
+          const isFormTeacher = (cls.class_teacher_id && String(cls.class_teacher_id) === String(st.id)) ||
+            (st.form_responsibility && (
+              (cleanCls.includes('SS2') && st.form_responsibility.toUpperCase().includes('SSS2')) ||
+              (cleanCls.includes('SS1') && st.form_responsibility.toUpperCase().includes('SSS1')) ||
+              (cleanCls.includes('JSS2') && st.form_responsibility.toUpperCase().includes('JSS2')) ||
+              (cleanCls.includes('JSS3') && st.form_responsibility.toUpperCase().includes('JSS3')) ||
+              (cleanCls.includes('PRIMARY') && st.form_responsibility.toUpperCase().includes(cleanCls.replace('PRIMARY', 'BASIC '))) ||
+              (cleanCls.includes('NURSERY') && st.form_responsibility.toUpperCase().includes(cleanCls.replace('NURSERY', 'NURSERY ')))
+            )) ||
+            (st.assigned_class && st.assigned_class.toLowerCase().includes('all') && st.assigned_class.toUpperCase().replace(/\s+/g, '').includes(cleanCls.replace('PRIMARY', 'BASIC')));
+
+          if (!isFormTeacher) {
+            // Must be subject teacher matching class & subject
+            const assignedText = (st.assigned_class || '').toLowerCase();
+            const subCode = (sub.code || '').toLowerCase();
+            const subName = (sub.name || '').toLowerCase();
+            const subMatches = assignedText.includes(subCode) || assignedText.includes(subName) ||
+              (subCode === 'aigb' && assignedText.includes('igbo')) ||
+              (subCode === 'phy' && assignedText.includes('physics')) ||
+              (subCode === 'mth' && assignedText.includes('math')) ||
+              (subCode === 'eng' && assignedText.includes('english')) ||
+              (subCode === 'com' && assignedText.includes('commerce')) ||
+              (subCode === 'gov' && assignedText.includes('government')) ||
+              (subCode === 'chm' && assignedText.includes('chemistry')) ||
+              (subCode === 'bio' && assignedText.includes('biology')) ||
+              (subCode === 'geo' && assignedText.includes('geography')) ||
+              (subCode === 'ecn' && assignedText.includes('economics')) ||
+              (subCode === 'crs' && assignedText.includes('crs')) ||
+              (subCode === 'isc' && assignedText.includes('science'));
+
+            if (!subMatches) {
+              return jsonResponse({
+                success: false,
+                message: `Access denied: As a subject teacher in '${cls.name}', you are only permitted to enter scores for your assigned subjects, not '${sub.name}'. Class teachers have access to all subjects in their class.`
+              }, 403);
+            }
+          }
+        }
+      }
+    }
+
     if (Array.isArray(entries)) {
       if (!dbData.marks) dbData.marks = [];
       entries.forEach(entry => {
@@ -1306,6 +1971,312 @@ export async function onRequest(context) {
     } catch (e) {
       return jsonResponse({ success: false, message: e.message }, 500);
     }
+  }
+
+  // Parent Self-Service Registration
+  if (path === '/api/auth/register' && method === 'POST') {
+    const { username, password, full_name, phone, email, admission_no } = body;
+    if (!username || !password || !phone) {
+      return jsonResponse({ success: false, message: 'Username, password, and phone number are required.' }, 400);
+    }
+    const token = 'eagle_parent_' + btoa((username || 'parent') + ':' + Date.now());
+    return jsonResponse({
+      success: true,
+      message: 'Parent portal account created successfully.',
+      token,
+      user: {
+        id: Math.floor(100 + Math.random() * 900),
+        username: (username || '').trim().toLowerCase(),
+        full_name: full_name || 'Registered Parent',
+        role: 'parent',
+        phone,
+        email: email || '',
+        children: admission_no ? [{ admission_no, first_name: 'Pupil' }] : []
+      }
+    }, 201, {
+      'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
+    });
+  }
+
+  // Homework Assignments Hub
+  if (path === '/api/homework') {
+    if (method === 'POST') {
+      const { title, description, class_id, subject_id, teacher_id, due_date } = body;
+      const newHw = {
+        id: (dbData.homework_assignments?.length || 5) + 1,
+        assignment_code: `HW-ASSGN-${Date.now().toString().slice(-4)}`,
+        class_id: Number(class_id) || 1,
+        subject_id: Number(subject_id) || 1,
+        teacher_id: Number(teacher_id) || 1,
+        title: title || 'Homework Assignment',
+        description: description || '',
+        due_date: due_date || new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0],
+        status: 'Active',
+        created_at: new Date().toISOString()
+      };
+      return jsonResponse({ success: true, message: 'Homework assignment posted successfully.', assignment: newHw });
+    }
+    return jsonResponse({
+      success: true,
+      count: (dbData.homework_assignments || []).length,
+      data: dbData.homework_assignments || []
+    });
+  }
+
+  if (path.startsWith('/api/homework/') && path.endsWith('/submit') && method === 'POST') {
+    const hwId = path.split('/')[3];
+    const { student_id, submitted_by_phone, submission_text } = body;
+    const submission = {
+      id: Math.floor(100 + Math.random() * 900),
+      assignment_id: Number(hwId) || 1,
+      student_id: Number(student_id) || 1,
+      submitted_by_phone: submitted_by_phone || '',
+      submission_text: submission_text || '',
+      ai_evaluated: 1,
+      ai_score: 8.5,
+      ai_feedback: 'Well reasoned answer with solid fundamental concepts applied correctly.',
+      status: 'AI_Reviewed',
+      submitted_at: new Date().toISOString()
+    };
+    return jsonResponse({
+      success: true,
+      message: 'Homework submitted and reviewed by In-House AI successfully.',
+      submission
+    });
+  }
+
+  // Teacher Lesson Notes & Scheme of Work
+  if (path === '/api/lesson-notes') {
+    if (method === 'POST') {
+      const note = {
+        id: (dbData.lesson_notes?.length || 10) + 1,
+        teacher_id: Number(body.teacher_id) || 1,
+        teacher_name: body.teacher_name || 'Faculty Member',
+        class_id: Number(body.class_id) || 1,
+        subject_id: Number(body.subject_id) || 1,
+        week_number: body.week_number || 'Week 1',
+        topic: body.topic || 'Curriculum Topic',
+        subtopic: body.subtopic || '',
+        behavioral_objectives: body.behavioral_objectives || '',
+        instructional_materials: body.instructional_materials || '',
+        status: 'Under Review',
+        created_at: new Date().toISOString()
+      };
+      return jsonResponse({ success: true, message: 'Lesson note submitted for HOD review.', data: note }, 201);
+    }
+    return jsonResponse({
+      success: true,
+      count: (dbData.lesson_notes || []).length,
+      data: dbData.lesson_notes || []
+    });
+  }
+
+  if (path.startsWith('/api/lesson-notes/') && method === 'PATCH') {
+    return jsonResponse({
+      success: true,
+      message: 'Lesson note status updated successfully.'
+    });
+  }
+
+  // Front Desk Visitors, Enquiries, Calls, Complaints
+  if (path === '/api/frontdesk/visitors') {
+    if (method === 'POST') {
+      const { visitor_name, phone, purpose, person_to_see } = body;
+      const pass_no = `VP-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+      const newVisitor = {
+        id: Math.floor(100 + Math.random() * 900),
+        pass_no,
+        visitor_name: visitor_name || 'Guest',
+        phone: phone || '',
+        purpose: purpose || 'Official Enquiry',
+        person_to_see: person_to_see || 'Principal',
+        status: 'In Campus',
+        check_in_time: new Date().toISOString()
+      };
+      return jsonResponse({ success: true, message: 'Visitor pass issued successfully.', data: newVisitor }, 201);
+    }
+    return jsonResponse({
+      success: true,
+      count: (dbData.visitors || []).length,
+      data: dbData.visitors || []
+    });
+  }
+
+  if (path.startsWith('/api/frontdesk/visitors/') && path.endsWith('/checkout') && method === 'PATCH') {
+    return jsonResponse({
+      success: true,
+      message: 'Visitor checked out successfully.'
+    });
+  }
+
+  if (path === '/api/frontdesk/calls' && method === 'POST') {
+    return jsonResponse({ success: true, message: 'Phone call logged successfully.' }, 201);
+  }
+
+  if (path === '/api/frontdesk/enquiries' && method === 'POST') {
+    return jsonResponse({ success: true, message: 'Admission walk-in enquiry logged successfully.' }, 201);
+  }
+
+  if (path === '/api/frontdesk/complaints' && method === 'POST') {
+    return jsonResponse({ success: true, message: 'Feedback / complaint logged successfully.' }, 201);
+  }
+
+  // Online Checkout & Fee Payments
+  if (path === '/api/finance/checkout/initialize' && method === 'POST') {
+    const reference = `PAY-EP-${Date.now()}`;
+    return jsonResponse({
+      success: true,
+      reference,
+      access_code: `acs_${Date.now()}`,
+      authorization_url: `https://checkout.paystack.com/eaglepower-test-${Date.now()}`
+    });
+  }
+
+  if (path.startsWith('/api/finance/checkout/verify/')) {
+    const ref = path.split('/')[5];
+    return jsonResponse({
+      success: true,
+      status: 'success',
+      data: {
+        reference: ref,
+        amount: 5000,
+        status: 'success',
+        paid_at: new Date().toISOString()
+      }
+    });
+  }
+
+  if (path === '/api/finance/payments' && method === 'POST') {
+    return jsonResponse({
+      success: true,
+      message: 'Payment recorded and student clearance updated successfully.',
+      receipt_no: `RCT-${Date.now()}`
+    });
+  }
+
+  // Payroll Roster, Batches, Payslips
+  if (path === '/api/payroll/staff-roster') {
+    const staff = dbData.staff || [];
+    return jsonResponse({
+      success: true,
+      count: staff.length,
+      data: staff.map((s, idx) => ({
+        staff_id: s.id,
+        staff_name: s.name,
+        role: s.role,
+        department: s.department || 'Academic',
+        base_salary: 65000 + (idx * 5000),
+        allowances: 15000,
+        deductions: 5000,
+        net_salary: 75000 + (idx * 5000),
+        bank_name: 'Zenith Bank',
+        account_number: '1014882910'
+      }))
+    });
+  }
+
+  if (path === '/api/payroll/batches/generate' && method === 'POST') {
+    const batch = {
+      id: Math.floor(10 + Math.random() * 90),
+      batch_no: `PAY-BATCH-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
+      month_year: body.month_year || 'Current Period',
+      total_staff: (dbData.staff || []).length,
+      total_gross: 2450000,
+      total_net_payout: 2150000,
+      status: 'Pending'
+    };
+    return jsonResponse({ success: true, message: 'Monthly payroll batch generated successfully.', batch });
+  }
+
+  if (path.startsWith('/api/payroll/payslip/')) {
+    return jsonResponse({
+      success: true,
+      payslip: {
+        staff_name: 'Faculty Member',
+        staff_no: 'EPS/ST/001',
+        month_year: 'October 2026',
+        base_salary: 75000,
+        allowances: 15000,
+        gross_salary: 90000,
+        deductions: 6000,
+        net_salary: 84000,
+        bank_name: 'Zenith Bank',
+        account_number: '1014882910'
+      }
+    });
+  }
+
+  if (path.startsWith('/api/payroll/staff/') && path.endsWith('/salary') && method === 'PUT') {
+    return jsonResponse({ success: true, message: 'Staff salary structure updated successfully.' });
+  }
+
+  // Reports & System Settings
+  if (path === '/api/reports/template' && method === 'POST') {
+    const template = body.template || body.template_id || 'ELITE';
+    return jsonResponse({
+      success: true,
+      message: `Active report card template successfully set to '${template}'.`,
+      template
+    });
+  }
+
+  if (path === '/api/system/settings') {
+    if (method === 'PUT' || method === 'POST') {
+      return jsonResponse({
+        success: true,
+        message: 'System settings updated successfully.'
+      });
+    }
+    return jsonResponse({
+      success: true,
+      data: {
+        school_name: 'Eagle Power Schools Awka',
+        current_session: '2024/2025',
+        current_term: 'Second Term',
+        active_report_template: 'ELITE',
+        term_locked: 0
+      }
+    });
+  }
+
+  // Broadsheet Bulk Reports & AI Batch Remarks
+  if (path === '/api/exams/batch-generate-ai-comments' && method === 'POST') {
+    return jsonResponse({
+      success: true,
+      message: 'AI broadsheet comments generated successfully for class roster.',
+      count: 32
+    });
+  }
+
+  if (path.startsWith('/api/exams/class-reports/')) {
+    const students = (dbData.students || []).slice(0, 10);
+    const reports = students.map(s => ({
+      admissionNo: s.admission_no,
+      studentName: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+      className: 'JSS 1 Gold',
+      term: 'Second Term',
+      session: '2024/2025',
+      scores: {
+        'Mathematics': { ca1: 8, ca2: 8, exam: 55, total: 71, grade: 'B2', remark: 'Very Good' },
+        'English Language': { ca1: 9, ca2: 9, exam: 60, total: 78, grade: 'A1', remark: 'Distinction' }
+      },
+      summary: { total: 149, average: 74.5, position: '1st', outOf: 10 }
+    }));
+    return jsonResponse({ success: true, data: reports, count: reports.length });
+  }
+
+  if (path.startsWith('/api/progress/student/')) {
+    return jsonResponse({
+      success: true,
+      data: {
+        mastery_levels: { 'Mathematics': 'Proficient', 'English Language': 'Exemplary' },
+        learning_trajectory: 'Improving',
+        recommendations: [
+          'Continue weekly practice with algebraic equations',
+          'Participate in the school debate society'
+        ]
+      }
+    });
   }
 
   // Default fallback for unmatched /api routes

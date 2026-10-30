@@ -1526,6 +1526,33 @@ router.get('/whatsapp/broadcasts', (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/executive/whatsapp/pair
+ */
+router.post('/whatsapp/pair', (req, res, next) => {
+  try {
+    const { phone } = req.body;
+    const clean = (phone || '').replace(/\D/g, '');
+    const codePart1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const codePart2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const pairingCode = `${codePart1}-${codePart2}`;
+
+    res.json({
+      success: true,
+      phone: clean,
+      pairing_code: pairingCode,
+      expires_in_seconds: 180,
+      instructions: [
+        'Open WhatsApp on your mobile device',
+        'Navigate to Settings > Linked Devices > Link with phone number instead',
+        `Enter the 8-digit verification pairing code: ${pairingCode}`
+      ]
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ============================================================================
 // SYSTEM INSTITUTIONAL SETTINGS
 // ============================================================================
@@ -1563,6 +1590,7 @@ router.put('/settings', (req, res, next) => {
       active_report_template,
       principal_name,
       contact_phone,
+      whatsapp_phone,
       contact_email,
       address
     } = req.body;
@@ -1578,6 +1606,7 @@ router.put('/settings', (req, res, next) => {
     if (active_report_template !== undefined) { updates.push('active_report_template = ?'); params.push(active_report_template.trim()); }
     if (principal_name !== undefined) { updates.push('principal_name = ?'); params.push(principal_name.trim()); }
     if (contact_phone !== undefined) { updates.push('contact_phone = ?'); params.push(contact_phone.trim()); }
+    if (whatsapp_phone !== undefined) { updates.push('whatsapp_phone = ?'); params.push(whatsapp_phone.trim()); }
     if (contact_email !== undefined) { updates.push('contact_email = ?'); params.push(contact_email.trim()); }
     if (address !== undefined) { updates.push('address = ?'); params.push(address.trim()); }
 

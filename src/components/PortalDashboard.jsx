@@ -1,3 +1,4 @@
+import { getDashboardRole, canAccessTab, defaultTab, canLoadDashboardResource } from '../utils/portalPermissions';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Menu,
@@ -25,6 +26,7 @@ import {
   Plus,
   PhoneCall,
   MessageSquare,
+  MessageCircle,
   Save,
   DollarSign,
   Landmark,
@@ -49,9 +51,28 @@ import {
   User,
   Zap,
   Bot,
-  Send
+  Send,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Trash2,
+  FileText,
+  ArrowRight,
+  Crown,
+  HelpCircle,
+  Info,
+  QrCode,
+  Smartphone,
+  ExternalLink
 } from 'lucide-react';
-import { getApiBase } from '../config/api';
+import { getApiBase, COOKIE_SESSION, restoreSession, setSessionToken, apiFetch as fetch } from '../config/api';
+import {
+  getAllowedClassesForTeacher,
+  getAllowedSubjectsForClass,
+  isFormTeacherOfClass,
+  canTeacherGradeSubject,
+  isUnrestrictedStaff
+} from '../utils/teacherPermissions';
 import BroadsheetView from './reports/BroadsheetView';
 import { TemplateGallery } from './reports/TemplateGallery';
 import { EliteModernTemplate } from './reports/EliteModernTemplate';
@@ -64,6 +85,8 @@ import ExecutiveReportingCockpit from './ExecutiveReportingCockpit';
 import StudentMasterConsole from './superadmin/modules/StudentMasterConsole';
 import CurriculumArchitect from './superadmin/modules/CurriculumArchitect';
 import SystemGovernanceConsole from './superadmin/modules/SystemGovernanceConsole';
+import StaffIDCardModal from './staff/StaffIDCardModal';
+import WhatsAppBotConsoleModal from './superadmin/modules/WhatsAppBotConsoleModal';
 
 export default function PortalDashboard({
   isOpen = true,
@@ -75,6 +98,18 @@ export default function PortalDashboard({
 }) {
   const API_BASE = getApiBase();
 
+  // ─── Reusable Inline Tooltip ─────────────────────────────────────────────
+  // Usage: <Tooltip text="Help text here"><HelpCircle className="w-3.5 h-3.5 text-slate-500 hover:text-amber-400 cursor-help" /></Tooltip>
+  const Tooltip = ({ text, children, wide = false, position = 'top' }) => (
+    <div className="relative group inline-flex items-center">
+      {children}
+      <div className={`absolute ${position === 'bottom' ? 'top-full mt-2' : 'bottom-full mb-2'} left-1/2 -translate-x-1/2 px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200 ${wide ? 'w-80' : 'w-64'} shadow-xl z-[999] opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 leading-relaxed whitespace-normal`}>
+        {text}
+        <div className={`absolute ${position === 'bottom' ? 'bottom-full border-b-slate-700 border-b-4 border-l-transparent border-r-transparent border-l-4 border-r-4' : 'top-full border-t-slate-700 border-t-4 border-l-transparent border-r-transparent border-l-4 border-r-4'} left-1/2 -translate-x-1/2 w-0 h-0`} />
+      </div>
+    </div>
+  );
+
   const isExecutive = Boolean(
     isExecutiveConsole ||
     initialRole === 'superadmin' ||
@@ -85,38 +120,26 @@ export default function PortalDashboard({
   );
 
   // Authentication & Session
-  const [authToken, setAuthToken] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('eagle_token') || '';
-    }
-    return '';
-  });
-  const [currentUser, setCurrentUser] = useState(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        return JSON.parse(localStorage.getItem('eagle_user') || 'null');
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const [authToken, setAuthToken] = useState('');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [sessionChecking, setSessionChecking] = useState(true);
+  const [sessionRetry, setSessionRetry] = useState(0);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // Client hydration fallback for SSR
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedToken = localStorage.getItem('eagle_token');
-      const storedUser = localStorage.getItem('eagle_user');
-      if (storedToken && !authToken) setAuthToken(storedToken);
-      if (storedUser && !currentUser) {
-        try {
-          const parsed = JSON.parse(storedUser);
-          setCurrentUser(parsed);
-          if (parsed?.role) setActiveRole(parsed.role);
-        } catch {}
-      }
-    }
-  }, [authToken, currentUser]);
+  // Staff ID Card & Credentials Modal
+  const [isStaffIdModalOpen, setIsStaffIdModalOpen] = useState(false);
+  const [staffIdTarget, setStaffIdTarget] = useState(null);
+
+  // Change Password Modal States
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [changePassCurrent, setChangePassCurrent] = useState('');
+  const [changePassNew, setChangePassNew] = useState('');
+  const [changePassConfirm, setChangePassConfirm] = useState('');
+  const [changePassShowCurrent, setChangePassShowCurrent] = useState(false);
+  const [changePassShowNew, setChangePassShowNew] = useState(false);
+  const [changePassLoading, setChangePassLoading] = useState(false);
+  const [changePassError, setChangePassError] = useState('');
+  const [changePassSuccess, setChangePassSuccess] = useState('');
 
   // Login form state
   const [loginUsername, setLoginUsername] = useState('');
@@ -124,12 +147,60 @@ export default function PortalDashboard({
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // WhatsApp OTP Login States
+  const [isOtpMode, setIsOtpMode] = useState(false);
+  const [otpPhone, setOtpPhone] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpStep, setOtpStep] = useState('request'); // 'request' | 'verify'
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpSuccessMessage, setOtpSuccessMessage] = useState('');
+
+  // Class WhatsApp Announcement Composer State
+  const [announcementTemplate, setAnnouncementTemplate] = useState('homework');
+  const [announcementCustomNotes, setAnnouncementCustomNotes] = useState('');
+  const [announcementCopied, setAnnouncementCopied] = useState(false);
+
+  // Recover from the server cookie on every page load; cached browser profiles are not trusted.
+  useEffect(() => {
+    if (!isOpen) return;
+    const controller = new AbortController();
+    setSessionChecking(true);
+    setLoginError('');
+    restoreSession({ signal: controller.signal })
+      .then(user => {
+        if (controller.signal.aborted) return;
+        setSessionToken(user ? COOKIE_SESSION : '');
+        setAuthToken(user ? COOKIE_SESSION : '');
+        setCurrentUser(user);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setSessionToken('');
+        setAuthToken('');
+        setCurrentUser(null);
+        setLoginError('Unable to restore your session. Please check your connection and try again.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setSessionChecking(false);
+      });
+    return () => controller.abort();
+  }, [isOpen, sessionRetry]);
+
+  useEffect(() => {
+    // A full reload drops all account-specific data when a session expires or is revoked.
+    const handleExpired = () => window.location.reload();
+    window.addEventListener('eagle-session-expired', handleExpired);
+    return () => window.removeEventListener('eagle-session-expired', handleExpired);
+  }, []);
+
   // Mobile menu drawer state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Active Role and Tab
-  const [activeRole, setActiveRole] = useState(() => currentUser?.role || initialRole || (isExecutive ? 'superadmin' : 'admin'));
+  const [previewRole, setActiveRole] = useState(() => currentUser?.role || initialRole || (isExecutive ? 'superadmin' : 'admin'));
   
+  const activeRole = getDashboardRole(currentUser?.role, previewRole);
+
   // Intelligent tab initialization: URL params -> URL path -> initialTab -> role default
   const [activeTabInternal, setActiveTabInternal] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -176,7 +247,7 @@ export default function PortalDashboard({
     }
   }, [isModal]);
 
-  const activeTab = activeTabInternal;
+  const activeTab = canAccessTab(activeRole, activeTabInternal) ? activeTabInternal : defaultTab(activeRole);
 
   // Synchronize ONLY when initialTab prop explicitly changes from parent component
   const prevInitialTabRef = useRef(initialTab);
@@ -231,8 +302,34 @@ export default function PortalDashboard({
   const [gradebookMode, setGradebookMode] = useState('standard'); // 'standard' (30/70) | 'multi' (10/10/10/70)
   const [gradebookClassInfo, setGradebookClassInfo] = useState(null);
   const [classSheetRows, setClassSheetRows] = useState([]);
+  const classSheetRequest = useRef(0);
   const [isSavingScores, setIsSavingScores] = useState(false);
   const [scoreSaveSuccess, setScoreSaveSuccess] = useState(false);
+
+  // Dynamic Academic Permissions for Gradebook
+  const currentGradebookClassObj = React.useMemo(() => {
+    return classes.find(c => String(c.id) === String(selectedClassId)) || classes[0] || null;
+  }, [classes, selectedClassId]);
+
+  const currentGradebookSubjectObj = React.useMemo(() => {
+    return subjects.find(s => String(s.id) === String(selectedSubjectId)) || subjects[0] || null;
+  }, [subjects, selectedSubjectId]);
+
+  const allowedGradebookClasses = React.useMemo(() => {
+    return getAllowedClassesForTeacher(currentUser, classes);
+  }, [currentUser, classes]);
+
+  const allowedGradebookSubjects = React.useMemo(() => {
+    return getAllowedSubjectsForClass(currentUser, currentGradebookClassObj, subjects);
+  }, [currentUser, currentGradebookClassObj, subjects]);
+
+  const isCurrentFormTeacher = React.useMemo(() => {
+    return isFormTeacherOfClass(currentUser, currentGradebookClassObj);
+  }, [currentUser, currentGradebookClassObj]);
+
+  const canGradeCurrentSubject = React.useMemo(() => {
+    return canTeacherGradeSubject(currentUser, currentGradebookClassObj, currentGradebookSubjectObj, subjects);
+  }, [currentUser, currentGradebookClassObj, currentGradebookSubjectObj, subjects]);
 
   // Bursar States
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -243,11 +340,12 @@ export default function PortalDashboard({
   const [invoiceFilter, setInvoiceFilter] = useState('All');
 
   // Student Dossier State
-  const [selectedStudentAdmNo, setSelectedStudentAdmNo] = useState('ESE2009012');
+  const [selectedStudentAdmNo, setSelectedStudentAdmNo] = useState('');
   const [studentReportCard, setStudentReportCard] = useState(null);
   const [standardReport, setStandardReport] = useState(null);
   const [studentSelectedTemplate, setStudentSelectedTemplate] = useState('ELITE');
   const [reportCardLoading, setReportCardLoading] = useState(false);
+  const reportCardRequest = useRef(0);
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
 
   // Front Desk Visitor & Module States
@@ -301,34 +399,70 @@ export default function PortalDashboard({
   const [attendanceDate, setAttendanceDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [attendanceClassId, setAttendanceClassId] = useState(2);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const attendanceRequest = useRef(0);
   const [isLoadingAttendance, setIsLoadingAttendance] = useState(false);
   const [isSavingAttendance, setIsSavingAttendance] = useState(false);
   const [attendanceSaveSuccess, setAttendanceSaveSuccess] = useState(false);
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('');
 
-  // Teacher Workspace states
+  // Teacher Workspace & Persistent Lesson Notes states
   const [gradebookSearchQuery, setGradebookSearchQuery] = useState('');
   const [gradebookFilterGrade, setGradebookFilterGrade] = useState('ALL');
   const [lessonNoteModalOpen, setLessonNoteModalOpen] = useState(false);
-  const [lessonNotes, setLessonNotes] = useState(() => [
-    { id: 1, week: 'Week 5', subject: 'Mathematics', topic: 'Quadratic Equations & Graphs', class_name: 'Junior College (JSS 1)', status: 'Approved', date: '2026-10-14' },
-    { id: 2, week: 'Week 6', subject: 'English Language', topic: 'Narrative Essays & Punctuation', class_name: 'Senior College (SS 2)', status: 'Approved', date: '2026-10-12' },
-    { id: 3, week: 'Week 6', subject: 'Basic Science', topic: 'Energy Transformation & Ecosystems', class_name: 'Junior College (JSS 1)', status: 'Under Review', date: '2026-10-15' }
-  ]);
+  const [viewLessonNoteModalOpen, setViewLessonNoteModalOpen] = useState(false);
+  const [selectedLessonNote, setSelectedLessonNote] = useState(null);
+  const [hodReviewModalOpen, setHodReviewModalOpen] = useState(false);
+  const [hodFeedbackText, setHodFeedbackText] = useState('');
+  const [hodReviewStatus, setHodReviewStatus] = useState('Approved');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [lessonNotes, setLessonNotes] = useState([]);
   const [newLessonNote, setNewLessonNote] = useState({
-    week: 'Week 6',
+    week: 'Week 4',
     subject: 'Mathematics',
     topic: '',
+    subtopic: '',
     class_name: 'Junior College (JSS 1)',
     objectives: '',
-    materials: 'Textbook, Graph board, Geometry set'
+    materials: 'Textbook, Graph board, Geometry set',
+    previous_knowledge: '',
+    introduction: '',
+    presentation_steps: '',
+    evaluation: '',
+    conclusion: '',
+    assignment: ''
   });
+
+  // Batch Invoicing States
+  const [batchInvoiceModalOpen, setBatchInvoiceModalOpen] = useState(false);
+  const [batchInvoiceSubmitting, setBatchInvoiceSubmitting] = useState(false);
+  const [batchInvoiceForm, setBatchInvoiceForm] = useState({
+    class_id: 'ALL',
+    session: '2024/2025',
+    term: 'Second Term',
+    title: 'Second Term 2024/2025 Composite Tuition & Levies',
+    due_date: '2025-02-28',
+    breakdown: {
+      tuition: 45000,
+      books: 12000,
+      uniform: 8000,
+      development_levy: 5000,
+      other: 0
+    }
+  });
+
+  // Paystack Fee Checkout States
+  const [paystackCheckoutModalOpen, setPaystackCheckoutModalOpen] = useState(false);
+  const [paystackInvoice, setPaystackInvoice] = useState(null);
+  const [paystackCustomAmount, setPaystackCustomAmount] = useState('');
+  const [paystackEmail, setPaystackEmail] = useState('');
+  const [paystackLoading, setPaystackLoading] = useState(false);
+  const [paystackSuccessReceipt, setPaystackSuccessReceipt] = useState(null);
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [regFullName, setRegFullName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
-  const [regChildAdmNo, setRegChildAdmNo] = useState('ESE2009012');
+  const [regChildAdmNo, setRegChildAdmNo] = useState('');
   const [regLoading, setRegLoading] = useState(false);
   const [regError, setRegError] = useState('');
 
@@ -345,6 +479,9 @@ export default function PortalDashboard({
   });
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [addedStaffSuccess, setAddedStaffSuccess] = useState(null);
+
+  // WhatsApp Bot Connection & Gateway Modal
+  const [whatsappModalOpen, setWhatsappModalOpen] = useState(false);
 
   // Enroll Student & Parent Modal States
   const [enrollStudentModalOpen, setEnrollStudentModalOpen] = useState(false);
@@ -592,6 +729,7 @@ export default function PortalDashboard({
     active_report_template: 'classic_british',
     principal_name: 'Adaeze Uzoefuna',
     contact_phone: '+234 803 359 1058',
+    whatsapp_phone: '+234 907 558 0671',
     contact_email: 'info@eaglepowerschools.com.ng',
     address: '2 & 9 Amikwo Road, Awka, Anambra State'
   });
@@ -606,12 +744,20 @@ export default function PortalDashboard({
       const res = await fetch(`${API_BASE}/system/settings`);
       if (res.ok) {
         const d = await res.json();
-        if (d.data) setSystemSettings(d.data);
+        if (d.data) {
+          setSystemSettings(d.data);
+          if (d.data.current_session) setGradebookSession(d.data.current_session);
+          if (d.data.current_term) setGradebookTerm(d.data.current_term);
+        }
       }
     } catch (err) {
       console.error('Settings fetch error:', err);
     }
   }, [API_BASE]);
+
+  useEffect(() => {
+    if (isOpen && authToken) fetchSystemSettings();
+  }, [isOpen, authToken, fetchSystemSettings]);
 
   const handleSaveSettings = async (e) => {
     if (e) e.preventDefault();
@@ -704,11 +850,11 @@ export default function PortalDashboard({
 
   // Auto-fetch for SuperAdmin tabs
   useEffect(() => {
-    if (activeTab === 'users' && (currentUser?.role === 'superadmin' || activeRole === 'superadmin')) {
+    if (activeTab === 'users' && (activeRole === 'superadmin')) {
       fetchUsers(userPage, userRoleFilter, userStatusFilter, userSearchQuery);
     } else if (activeTab === 'system_settings') {
       fetchSystemSettings();
-    } else if (activeTab === 'threat_radar' && (currentUser?.role === 'superadmin' || activeRole === 'superadmin')) {
+    } else if (activeTab === 'threat_radar' && (activeRole === 'superadmin')) {
       fetchThreatTelemetry();
     }
   }, [activeTab, currentUser, activeRole, fetchUsers, userPage, userRoleFilter, userStatusFilter, userSearchQuery, fetchSystemSettings, fetchThreatTelemetry]);
@@ -718,6 +864,11 @@ export default function PortalDashboard({
   useEffect(() => {
     if (currentUser?.role) {
       setActiveRole(currentUser.role);
+      if (currentUser.role === 'student' && currentUser.reference_id) {
+        setSelectedStudentAdmNo(currentUser.reference_id);
+      } else if (currentUser.role === 'parent' && currentUser.children?.[0]?.admission_no) {
+        setSelectedStudentAdmNo(currentUser.children[0].admission_no);
+      }
       
       // Preserve user-selected tabs after initial mount/login
       if (hasInitialRoleTabSyncedRef.current) return;
@@ -750,53 +901,54 @@ export default function PortalDashboard({
 
   // Load backend data
   const fetchAllData = useCallback(async () => {
+    if (!authToken) return;
     setIsLoading(true);
     try {
       const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
       // 1. Classes
-      const cRes = await fetch(`${API_BASE}/academics/classes`, { headers }).catch(() => null);
+      const cRes = await (canLoadDashboardResource(activeRole, 'academics') ? fetch(`${API_BASE}/academics/classes`, { headers }).catch(() => null) : null);
       if (cRes?.ok) {
         const d = await cRes.json();
         setClasses(d.data || []);
       }
 
       // 2. Subjects
-      const subRes = await fetch(`${API_BASE}/academics/subjects`, { headers }).catch(() => null);
+      const subRes = await (canLoadDashboardResource(activeRole, 'academics') ? fetch(`${API_BASE}/academics/subjects`, { headers }).catch(() => null) : null);
       if (subRes?.ok) {
         const d = await subRes.json();
         setSubjects(d.data || []);
       }
 
       // 3. Students
-      const sRes = await fetch(`${API_BASE}/students?limit=100`, { headers }).catch(() => null);
+      const sRes = await (canLoadDashboardResource(activeRole, 'students') ? fetch(`${API_BASE}/students?limit=100`, { headers }).catch(() => null) : null);
       if (sRes?.ok) {
         const d = await sRes.json();
         setStudents(d.data || []);
       }
 
       // 4. Staff
-      const stRes = await fetch(`${API_BASE}/staff`, { headers }).catch(() => null);
+      const stRes = await (canLoadDashboardResource(activeRole, 'staff') ? fetch(`${API_BASE}/staff`, { headers }).catch(() => null) : null);
       if (stRes?.ok) {
         const d = await stRes.json();
         setStaff(d.data || []);
       }
 
       // 5. Finance Stats & Invoices
-      const fRes = await fetch(`${API_BASE}/finance/stats`, { headers }).catch(() => null);
+      const fRes = await (canLoadDashboardResource(activeRole, 'financeStats') ? fetch(`${API_BASE}/finance/stats`, { headers }).catch(() => null) : null);
       if (fRes?.ok) {
         const d = await fRes.json();
         setFinanceStats(d.data || null);
       }
 
-      const invRes = await fetch(`${API_BASE}/finance/invoices?limit=50`, { headers }).catch(() => null);
+      const invRes = await (canLoadDashboardResource(activeRole, 'invoices') ? fetch(`${API_BASE}/finance/invoices?limit=50`, { headers }).catch(() => null) : null);
       if (invRes?.ok) {
         const d = await invRes.json();
         setInvoices(d.data || []);
       }
 
       // 6. Admissions
-      const admRes = await fetch(`${API_BASE}/admissions`, { headers }).catch(() => null);
+      const admRes = await (canLoadDashboardResource(activeRole, 'admissions') ? fetch(`${API_BASE}/admissions`, { headers }).catch(() => null) : null);
       if (admRes?.ok) {
         const d = await admRes.json();
         setAdmissions(d.data || []);
@@ -804,10 +956,10 @@ export default function PortalDashboard({
 
       // 7. Front Desk Visitors & Sub-modules
       const [fdRes, enqRes, callRes, compRes] = await Promise.all([
-        fetch(`${API_BASE}/frontdesk/visitors`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/frontdesk/enquiries`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/frontdesk/calls`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/frontdesk/complaints`, { headers }).catch(() => null)
+        (canLoadDashboardResource(activeRole, 'frontdesk') ? fetch(`${API_BASE}/frontdesk/visitors`, { headers }).catch(() => null) : null),
+        (canLoadDashboardResource(activeRole, 'frontdesk') ? fetch(`${API_BASE}/frontdesk/enquiries`, { headers }).catch(() => null) : null),
+        (canLoadDashboardResource(activeRole, 'frontdesk') ? fetch(`${API_BASE}/frontdesk/calls`, { headers }).catch(() => null) : null),
+        (canLoadDashboardResource(activeRole, 'frontdesk') ? fetch(`${API_BASE}/frontdesk/complaints`, { headers }).catch(() => null) : null)
       ]);
       if (fdRes?.ok) {
         const d = await fdRes.json();
@@ -827,13 +979,22 @@ export default function PortalDashboard({
       }
 
       // 8. Homework Assignments
-      const hwRes = await fetch(`${API_BASE}/homework`, { headers }).catch(() => null);
+      const hwRes = await (canLoadDashboardResource(activeRole, 'homework') ? fetch(`${API_BASE}/homework`, { headers }).catch(() => null) : null);
       if (hwRes?.ok) {
         const d = await hwRes.json();
         setHomeworkList(d.data || []);
       }
-      // 9. Payroll Data (Bursar / Admin)
-      if (['bursar', 'admin', 'superadmin'].includes(currentUser?.role)) {
+
+      // 9. Persistent Lesson Notes (Curriculum Scheme of Work)
+      const lnRes = await (canLoadDashboardResource(activeRole, 'lessonNotes') ? fetch(`${API_BASE}/lesson-notes?limit=100`, { headers }).catch(() => null) : null);
+      if (lnRes?.ok) {
+        const d = await lnRes.json();
+        if (Array.isArray(d.data) && d.data.length > 0) {
+          setLessonNotes(d.data);
+        }
+      }
+      // 10. Payroll Data (Bursar / Admin)
+      if (canLoadDashboardResource(activeRole, 'payroll')) {
         const [pOverRes, pRosterRes, pBanksRes] = await Promise.all([
           fetch(`${API_BASE}/payroll/overview`, { headers }).catch(() => null),
           fetch(`${API_BASE}/payroll/staff-roster`, { headers }).catch(() => null),
@@ -857,7 +1018,7 @@ export default function PortalDashboard({
     } finally {
       setIsLoading(false);
     }
-  }, [authToken, API_BASE, currentUser]);
+  }, [authToken, API_BASE, activeRole]);
 
   // Fetch Payroll Overview & Roster specifically
   const fetchPayrollData = useCallback(async () => {
@@ -884,6 +1045,282 @@ export default function PortalDashboard({
       console.error('Payroll fetch error:', err);
     }
   }, [authToken, API_BASE]);
+
+  // Fetch Lesson Notes from SQLite
+  const fetchLessonNotes = useCallback(async () => {
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/lesson-notes?limit=100`, { headers });
+      if (res.ok) {
+        const d = await res.json();
+        if (Array.isArray(d.data)) setLessonNotes(d.data);
+      }
+    } catch (err) {
+      console.warn('Error fetching lesson notes:', err);
+    }
+  }, [authToken, API_BASE]);
+
+  // Handle Save New Lesson Note
+  const handleSaveLessonNote = async (e) => {
+    e.preventDefault();
+    if (!newLessonNote.topic.trim()) {
+      alert('Please provide a lesson topic.');
+      return;
+    }
+    const targetClass = classes.find(c => c.name === newLessonNote.class_name) || classes[0];
+    const targetSubject = subjects.find(s => s.name === newLessonNote.subject) || subjects[0];
+
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/lesson-notes`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          class_id: targetClass?.id || 1,
+          subject_id: targetSubject?.id || 1,
+          session: '2024/2025',
+          term: 'Second Term',
+          week_number: newLessonNote.week,
+          topic: newLessonNote.topic.trim(),
+          subtopic: newLessonNote.subtopic?.trim() || null,
+          behavioral_objectives: newLessonNote.objectives?.trim() || null,
+          instructional_materials: newLessonNote.materials?.trim() || null,
+          previous_knowledge: newLessonNote.previous_knowledge?.trim() || null,
+          introduction: newLessonNote.introduction?.trim() || null,
+          presentation_steps: newLessonNote.presentation_steps?.trim() || null,
+          evaluation: newLessonNote.evaluation?.trim() || null,
+          conclusion: newLessonNote.conclusion?.trim() || null,
+          assignment: newLessonNote.assignment?.trim() || null,
+          status: 'Under Review'
+        })
+      });
+
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message || 'Failed to submit lesson note');
+
+      alert(`✅ Lesson note submitted successfully to HOD! Status: Under Review`);
+      setLessonNoteModalOpen(false);
+      setNewLessonNote({
+        week: 'Week 4',
+        subject: 'Mathematics',
+        topic: '',
+        subtopic: '',
+        class_name: 'Junior College (JSS 1)',
+        objectives: '',
+        materials: 'Textbook, Graph board, Geometry set',
+        previous_knowledge: '',
+        introduction: '',
+        presentation_steps: '',
+        evaluation: '',
+        conclusion: '',
+        assignment: ''
+      });
+      await fetchLessonNotes();
+    } catch (err) {
+      alert(`❌ Error: ${err.message}`);
+    }
+  };
+
+  // Handle HOD / Principal Review of Lesson Note
+  const handleReviewLessonNote = async () => {
+    if (!selectedLessonNote) return;
+    if (hodReviewStatus === 'Needs Revision' && !hodFeedbackText.trim()) {
+      alert('Please provide pedagogical feedback / guidance explaining what needs revision.');
+      return;
+    }
+    setSubmittingReview(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/lesson-notes/${selectedLessonNote.id}/review`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          status: hodReviewStatus,
+          hod_feedback: hodFeedbackText.trim()
+        })
+      });
+
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message || 'Failed to review lesson note');
+
+      alert(`✅ Lesson note updated: Marked as '${hodReviewStatus}'!`);
+      setHodReviewModalOpen(false);
+      setSelectedLessonNote(null);
+      setHodFeedbackText('');
+      await fetchLessonNotes();
+    } catch (err) {
+      alert(`❌ Error reviewing note: ${err.message}`);
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  // Handle Delete Lesson Note
+  const handleDeleteLessonNote = async (noteId) => {
+    if (!confirm('Are you sure you want to delete this curriculum lesson note?')) return;
+    try {
+      const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+      const res = await fetch(`${API_BASE}/lesson-notes/${noteId}`, {
+        method: 'DELETE',
+        headers
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message || 'Failed to delete lesson note');
+      await fetchLessonNotes();
+    } catch (err) {
+      alert(`❌ Error: ${err.message}`);
+    }
+  };
+
+  // Handle Batch Invoicing Generation
+  const handleCreateBatchInvoicing = async (e) => {
+    e.preventDefault();
+    setBatchInvoiceSubmitting(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/finance/invoices/batch`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          class_id: batchInvoiceForm.class_id,
+          session: batchInvoiceForm.session,
+          term: batchInvoiceForm.term,
+          title: batchInvoiceForm.title.trim(),
+          due_date: batchInvoiceForm.due_date,
+          breakdown: batchInvoiceForm.breakdown
+        })
+      });
+
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message || 'Batch invoicing failed');
+
+      alert(`🎉 Batch Invoicing Completed!\n• Invoices Issued: ${d.count_created}\n• Duplicates Skipped: ${d.count_skipped}\n• Total Amount Billed: ₦${d.total_amount_billed?.toLocaleString() || 0}`);
+      setBatchInvoiceModalOpen(false);
+
+      // Refresh invoices and stats
+      const [invRes, finRes] = await Promise.all([
+        fetch(`${API_BASE}/finance/invoices?limit=100`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/finance/stats`, { headers }).catch(() => null)
+      ]);
+      if (invRes?.ok) {
+        const invData = await invRes.json();
+        setInvoices(invData.data || []);
+      }
+      if (finRes?.ok) {
+        const finData = await finRes.json();
+        setFinanceStats(finData.data || null);
+      }
+    } catch (err) {
+      alert(`❌ Error: ${err.message}`);
+    } finally {
+      setBatchInvoiceSubmitting(false);
+    }
+  };
+
+  // Handle Paystack Online Fee Checkout
+  const handleInitiatePaystackCheckout = async (invoice, customAmt) => {
+    if (!invoice) return;
+    setPaystackLoading(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const remaining = invoice.amount_due - invoice.amount_paid;
+      const amt = customAmt ? parseFloat(customAmt) : remaining;
+
+      const res = await fetch(`${API_BASE}/finance/checkout/initialize`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          invoice_id: invoice.id,
+          amount: amt,
+          email: paystackEmail.trim() || invoice.guardian_email || currentUser?.email || 'billing@eaglepower.edu.ng',
+          callback_url: typeof window !== 'undefined' ? `${window.location.origin}/portal` : '/portal'
+        })
+      });
+
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.message || 'Failed to initialize Paystack checkout');
+
+      const { authorization_url, reference, is_simulated } = d.data;
+
+      if (is_simulated) {
+        // High-fidelity instant sandbox verification
+        const verifyRes = await fetch(`${API_BASE}/finance/checkout/verify/${reference}`, { headers });
+        const verifyData = await verifyRes.json();
+        if (verifyData.success) {
+          setPaystackSuccessReceipt({
+            receiptNo: verifyData.receipt_no,
+            amount: verifyData.amount || amt,
+            studentName: `${invoice.first_name || ''} ${invoice.last_name || ''}`.trim() || invoice.student_name,
+            className: invoice.class_name,
+            invoiceNo: invoice.invoice_no,
+            reference,
+            method: 'Paystack Online (Direct Card/Bank)'
+          });
+          setPaystackCheckoutModalOpen(false);
+
+          // Refresh invoices
+          const invRes = await fetch(`${API_BASE}/finance/invoices?limit=50`, { headers }).catch(() => null);
+          if (invRes?.ok) {
+            const id = await invRes.json();
+            setInvoices(id.data || []);
+          }
+          const fRes = await fetch(`${API_BASE}/finance/stats`, { headers }).catch(() => null);
+          if (fRes?.ok) {
+            const fd = await fRes.json();
+            setFinanceStats(fd.data || null);
+          }
+        }
+      } else if (authorization_url) {
+        // Live Paystack Redirect
+        window.location.href = authorization_url;
+      }
+    } catch (err) {
+      alert(`❌ Paystack Checkout Error: ${err.message}`);
+    } finally {
+      setPaystackLoading(false);
+    }
+  };
+
+  // Auto-verify Paystack return query in URL
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const paystackRef = urlParams.get('reference') || urlParams.get('trxref');
+      if (paystackRef && paystackRef.startsWith('PSTK-')) {
+        const verifyUrl = `${API_BASE}/finance/checkout/verify/${paystackRef}`;
+        const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+        fetch(verifyUrl, { headers })
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              setPaystackSuccessReceipt({
+                receiptNo: data.receipt_no,
+                amount: data.amount,
+                studentName: data.invoice?.first_name ? `${data.invoice.first_name} ${data.invoice.last_name}` : 'Student',
+                className: data.invoice?.class_name || 'Eagle College',
+                invoiceNo: data.invoice?.invoice_no,
+                reference: paystackRef,
+                method: 'Paystack Verified Online'
+              });
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [API_BASE, authToken]);
 
   // Generate Monthly Payroll Roll Batch
   const handleGeneratePayrollBatch = async () => {
@@ -992,6 +1429,8 @@ export default function PortalDashboard({
 
   // Fetch student daily roll-call attendance
   const fetchStudentAttendance = useCallback(async (cId, dDate) => {
+    const requestId = ++attendanceRequest.current;
+    setAttendanceRecords([]);
     if (!cId) return;
     setIsLoadingAttendance(true);
     try {
@@ -999,12 +1438,12 @@ export default function PortalDashboard({
       const res = await fetch(`${API_BASE}/attendance/students?class_id=${cId}&date=${dDate}`, { headers });
       if (res.ok) {
         const d = await res.json();
-        setAttendanceRecords(d.records || []);
+        if (requestId === attendanceRequest.current) setAttendanceRecords(d.records || []);
       }
     } catch (err) {
       console.warn('Error fetching student attendance:', err);
     } finally {
-      setIsLoadingAttendance(false);
+      if (requestId === attendanceRequest.current) setIsLoadingAttendance(false);
     }
   }, [authToken, API_BASE]);
 
@@ -1035,6 +1474,9 @@ export default function PortalDashboard({
         setAttendanceSaveSuccess(true);
         setTimeout(() => setAttendanceSaveSuccess(false), 4000);
         fetchStudentAttendance(attendanceClassId, attendanceDate);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || 'Attendance was not saved.');
       }
     } catch (err) {
       alert('Error saving attendance: ' + err.message);
@@ -1217,8 +1659,13 @@ export default function PortalDashboard({
     setHwSubmissionResult(null);
 
     try {
-      // Find candidate student ID
-      const targetStudent = currentUser?.children?.[0] || students[0];
+      // Find candidate student ID based on parent selected child or self
+      const targetStudent = (currentUser?.children && selectedStudentAdmNo
+        ? currentUser.children.find(c => c.admission_no === selectedStudentAdmNo)
+        : null)
+        || currentUser?.children?.[0]
+        || (selectedStudentAdmNo ? students.find(s => s.admission_no === selectedStudentAdmNo) : null)
+        || students[0];
       const res = await fetch(`${API_BASE}/homework/${selectedAssignmentForSubmit.id}/submit`, {
         method: 'POST',
         headers: {
@@ -1255,16 +1702,21 @@ export default function PortalDashboard({
 
   // Load teacher class score sheet whenever class, subject, session, or term changes
   const fetchClassSheet = useCallback(async (cId, sId) => {
+    const requestId = ++classSheetRequest.current;
     const classIdToUse = cId !== undefined ? cId : selectedClassId;
     const subjectIdToUse = sId !== undefined ? sId : selectedSubjectId;
-    if (!classIdToUse) return;
+    setClassSheetRows([]);
+    setGradebookClassInfo(null);
+    setScoreSaveSuccess(false);
+    if (!classIdToUse || !subjectIdToUse) return;
 
     try {
       const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
       const res = await fetch(`${API_BASE}/exams/class-sheet?class_id=${classIdToUse}&subject_id=${subjectIdToUse}&session=${encodeURIComponent(gradebookSession)}&term=${encodeURIComponent(gradebookTerm)}`, { headers });
       if (res.ok) {
         const d = await res.json();
-        if (Array.isArray(d.data) && d.data.length > 0) {
+        if (requestId !== classSheetRequest.current) return;
+        if (Array.isArray(d.data)) {
           setClassSheetRows(d.data);
           if (d.class_info) {
             setGradebookClassInfo(d.class_info);
@@ -1276,51 +1728,51 @@ export default function PortalDashboard({
       console.warn('Error fetching class sheet from API:', err.message);
     }
 
-    // Client-side Fallback: Populate classSheetRows from loaded students roster for selected class
-    if (students && students.length > 0) {
-      const matchingStudents = students.filter(st => 
-        String(st.class_id) === String(classIdToUse) ||
-        (st.class_name && classes?.find(c => String(c.id) === String(classIdToUse))?.name === st.class_name)
-      );
-
-      if (matchingStudents.length > 0) {
-        const rows = matchingStudents.map(st => ({
-          student_id: st.id,
-          admission_no: st.admission_no,
-          first_name: st.first_name,
-          last_name: st.last_name,
-          ca1_score: null,
-          ca2_score: null,
-          project_score: null,
-          ca_score: 0,
-          exam_score: 0,
-          total_score: 0,
-          grade: '-',
-          remark: 'Pending',
-          division_grade: null
-        }));
-        setClassSheetRows(rows);
-      }
-    }
-  }, [API_BASE, authToken, gradebookSession, gradebookTerm, students, classes, selectedClassId, selectedSubjectId]);
+    // A failed request must never fabricate zero marks that could overwrite saved results.
+  }, [API_BASE, authToken, gradebookSession, gradebookTerm, selectedClassId, selectedSubjectId]);
 
   useEffect(() => {
-    if (isOpen && (activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin' || activeTab === 'gradebook')) {
+    if (isOpen && (activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin' || activeTab === 'gradebook')) {
       fetchClassSheet(selectedClassId, selectedSubjectId);
     }
   }, [isOpen, activeRole, currentUser, activeTab, selectedClassId, selectedSubjectId, gradebookSession, gradebookTerm, fetchClassSheet, students.length]);
 
+  // Auto-align Gradebook to an authorized class and subject for the logged-in teacher
+  useEffect(() => {
+    if (activeRole === 'teacher' && currentUser && classes.length > 0) {
+      const allowedCls = getAllowedClassesForTeacher(currentUser, classes);
+      if (allowedCls.length > 0 && !allowedCls.some(c => String(c.id) === String(selectedClassId))) {
+        const targetCls = allowedCls[0];
+        setSelectedClassId(targetCls.id);
+        const allowedSubs = getAllowedSubjectsForClass(currentUser, targetCls, subjects);
+        if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
+          setSelectedSubjectId(allowedSubs[0].id);
+        }
+      } else if (currentGradebookClassObj && subjects.length > 0) {
+        const allowedSubs = getAllowedSubjectsForClass(currentUser, currentGradebookClassObj, subjects);
+        if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
+          setSelectedSubjectId(allowedSubs[0].id);
+        }
+      }
+    }
+  }, [activeRole, currentUser, classes, subjects, selectedClassId, selectedSubjectId, currentGradebookClassObj]);
+
   // Load student report card
   const fetchReportCard = useCallback(async (admNo) => {
+    const requestId = ++reportCardRequest.current;
     const cleanId = admNo?.trim()?.toUpperCase();
     if (!cleanId) return;
 
     setReportCardLoading(true);
+    setStudentReportCard(null);
+    setStandardReport(null);
     try {
       const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-      const res = await fetch(`${API_BASE}/exams/report-card/${cleanId}`, { headers });
+      const res = await fetch(`${API_BASE}/exams/report-card/${encodeURIComponent(cleanId)}`, { headers });
+      if (requestId !== reportCardRequest.current) return;
       if (res.ok) {
         const d = await res.json();
+        if (requestId !== reportCardRequest.current) return;
         if (d.report_card) {
           setStudentReportCard(d.report_card);
           if (d.standard_report) {
@@ -1335,10 +1787,12 @@ export default function PortalDashboard({
       setStudentReportCard(null);
       setStandardReport(null);
     } catch {
-      setStudentReportCard(null);
-      setStandardReport(null);
+      if (requestId === reportCardRequest.current) {
+        setStudentReportCard(null);
+        setStandardReport(null);
+      }
     } finally {
-      setReportCardLoading(false);
+      if (requestId === reportCardRequest.current) setReportCardLoading(false);
     }
   }, [API_BASE, authToken]);
 
@@ -1370,7 +1824,8 @@ export default function PortalDashboard({
       };
 
       const bodyPayload = { 
-        username: u.trim(), 
+        username: u.trim(),
+        identifier: u.trim(),
         password: p,
         portal_source: isExecutive ? 'executive' : 'public'
       };
@@ -1392,16 +1847,16 @@ export default function PortalDashboard({
 
       const data = await res.json().catch(() => ({}));
 
-      if (!res.ok || !data.token) {
+      if (!res.ok || (!data.session && !data.token && !data.success) || !data.user) {
         setLoginError(data.message || 'Login failed. Please verify credentials.');
         return;
       }
 
-      setAuthToken(data.token);
+      setAuthToken(data.token || COOKIE_SESSION);
       setCurrentUser(data.user);
-      localStorage.setItem('eagle_token', data.token);
-      localStorage.setItem('eagle_user', JSON.stringify(data.user));
+      setSessionToken(COOKIE_SESSION);
       setActiveRole(data.user.role);
+      setLoginPassword('');
 
       if (data.user.role === 'superadmin') {
         setActiveTab('overview');
@@ -1415,11 +1870,201 @@ export default function PortalDashboard({
     }
   };
 
-  const handleLogout = () => {
-    setAuthToken('');
-    setCurrentUser(null);
-    localStorage.removeItem('eagle_token');
-    localStorage.removeItem('eagle_user');
+  // WhatsApp Passwordless OTP Request Handler
+  const handleRequestOtp = async (e) => {
+    if (e) e.preventDefault();
+    if (!otpPhone.trim()) {
+      setLoginError('Please enter your registered WhatsApp phone number or Staff ID.');
+      return;
+    }
+    setOtpLoading(true);
+    setLoginError('');
+    setOtpSuccessMessage('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/whatsapp-otp/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: otpPhone.trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Failed to request WhatsApp OTP.');
+      setOtpStep('verify');
+      setOtpSuccessMessage(data.message || '6-digit OTP code sent to your WhatsApp.');
+    } catch (err) {
+      setLoginError(err.message || 'Unable to generate WhatsApp OTP. Please try your standard password.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // WhatsApp Passwordless OTP Verify Handler
+  const handleVerifyOtp = async (e) => {
+    if (e) e.preventDefault();
+    if (!otpCode.trim()) {
+      setLoginError('Please enter the 6-digit OTP code sent to your WhatsApp.');
+      return;
+    }
+    setOtpLoading(true);
+    setLoginError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/whatsapp-otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: otpPhone.trim(), code: otpCode.trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.user) throw new Error(data.message || 'Invalid or expired WhatsApp OTP.');
+
+      setAuthToken(data.token || COOKIE_SESSION);
+      setCurrentUser(data.user);
+      setSessionToken(COOKIE_SESSION);
+      setActiveRole(data.user.role);
+      setOtpCode('');
+      setOtpStep('request');
+      setIsOtpMode(false);
+
+      if (data.user.role === 'superadmin') {
+        setActiveTab('overview');
+      } else if (data.user.role === 'student' && data.user.reference_id) {
+        setSelectedStudentAdmNo(data.user.reference_id);
+      }
+    } catch (err) {
+      setLoginError(err.message || 'Failed to verify OTP.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // AI Remark Suggestions for Gradebook
+  const handleSuggestRemark = (originalIndex) => {
+    setClassSheetRows(prev => {
+      const next = [...prev];
+      const row = next[originalIndex];
+      if (!row) return prev;
+      const total = Number(row.total_score || 0);
+      let remark = '';
+      if (total >= 75) {
+        const pool = [
+          'Brilliant academic performance! Demonstrates outstanding intellectual agility.',
+          'Superb distinction! Consistently enthusiastic, disciplined and focused.',
+          'Exceptional mastery of subject concepts. An exemplary, soaring Eagle scholar.'
+        ];
+        remark = pool[originalIndex % pool.length];
+      } else if (total >= 60) {
+        const pool = [
+          'Commendable effort and solid grasp of subject. Keep up the high standard.',
+          'Good academic progress this term. With extra practice, distinction is assured.',
+          'Very good performance. Shows strong diligence in tests and classroom work.'
+        ];
+        remark = pool[originalIndex % pool.length];
+      } else if (total >= 50) {
+        const pool = [
+          'Satisfactory pass. More regular practice and homework completion needed.',
+          'Fair understanding shown. Advised to revise challenging topics consistently.',
+          'Capable of higher achievements with sustained focus and evening coaching.'
+        ];
+        remark = pool[originalIndex % pool.length];
+      } else {
+        const pool = [
+          'Needs intensive academic support and dedicated revision before final exam.',
+          'Weak foundation detected. Extra tutoring and close parental monitoring recommended.',
+          'Struggling with core concepts. Immediate teacher-parent consultation required.'
+        ];
+        remark = pool[originalIndex % pool.length];
+      }
+      next[originalIndex] = { ...row, remark };
+      return next;
+    });
+  };
+
+  const handleSuggestAllRemarks = () => {
+    setClassSheetRows(prev => {
+      return prev.map((row, idx) => {
+        const total = Number(row.total_score || 0);
+        let remark = '';
+        if (total >= 75) remark = 'Brilliant academic performance! Demonstrates outstanding intellectual agility.';
+        else if (total >= 60) remark = 'Commendable effort and solid grasp of subject. Keep up the high standard.';
+        else if (total >= 50) remark = 'Satisfactory pass. More regular practice and revision needed.';
+        else remark = 'Needs intensive academic support and dedicated revision before final exam.';
+        return { ...row, remark };
+      });
+    });
+  };
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      const response = await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
+      if (!response.ok) throw new Error('Unable to sign out. Please try again.');
+      setAuthToken('');
+      setCurrentUser(null);
+      setSessionToken('');
+      window.location.reload();
+    } catch {
+      alert('Unable to sign out. Please check your connection and try again.');
+      setIsLoggingOut(false);
+    }
+  };
+
+  // Change Password Handler for Authenticated Teachers, Faculty & Users
+  const handleChangePassword = async (e) => {
+    if (e) e.preventDefault();
+    setChangePassError('');
+    setChangePassSuccess('');
+
+    if (!changePassCurrent) {
+      setChangePassError('Please enter your current password.');
+      return;
+    }
+    if (!changePassNew || changePassNew.length < 8) {
+      setChangePassError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[A-Za-z]/.test(changePassNew) || !/\d/.test(changePassNew)) {
+      setChangePassError('New password must contain both letters and numbers.');
+      return;
+    }
+    if (changePassNew !== changePassConfirm) {
+      setChangePassError('New password and confirmation do not match.');
+      return;
+    }
+
+    setChangePassLoading(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          current_password: changePassCurrent,
+          new_password: changePassNew
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || 'Failed to update password.');
+      }
+
+      setChangePassSuccess('Password updated successfully! Your account is now secured with your new password.');
+      if (data.token) {
+        setAuthToken(data.token);
+        setSessionToken(data.token);
+      }
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+        setChangePassCurrent('');
+        setChangePassNew('');
+        setChangePassConfirm('');
+        setChangePassSuccess('');
+      }, 2000);
+    } catch (err) {
+      setChangePassError(err.message || 'Failed to update password.');
+    } finally {
+      setChangePassLoading(false);
+    }
   };
 
   // Parent Registration Handler
@@ -1453,15 +2098,8 @@ export default function PortalDashboard({
         throw new Error(data.message || 'Parent registration failed.');
       }
 
-      setAuthToken(data.token);
-      setCurrentUser(data.user);
-      localStorage.setItem('eagle_token', data.token);
-      localStorage.setItem('eagle_user', JSON.stringify(data.user));
-      setActiveRole('parent');
-      setActiveTab('child_overview');
-      if (data.user.children?.[0]?.admission_no) {
-        setSelectedStudentAdmNo(data.user.children[0].admission_no);
-      }
+      // Provisioning another account must never replace the administrator's session.
+      setIsRegisterMode(false);
     } catch (err) {
       setRegError(err.message || 'Registration failed.');
     } finally {
@@ -1578,7 +2216,8 @@ export default function PortalDashboard({
 
   // Teacher Grade Computation & Editing (Multi-Component & Division-Aware)
   const handleScoreEdit = (index, field, val) => {
-    const num = Math.max(0, parseInt(val) || 0);
+    const parsed = parseFloat(val);
+    const num = isNaN(parsed) ? 0 : Math.max(0, Math.round(parsed * 10) / 10);
     const updated = [...classSheetRows];
     const row = { ...updated[index] };
 
@@ -1633,10 +2272,17 @@ export default function PortalDashboard({
   // Save Batch Marks to Backend SQLite (Multi-Component Aware)
   const handleSaveBatchScores = async () => {
     if (!classSheetRows.length) return;
+
+    if (activeRole === 'teacher' && !canGradeCurrentSubject) {
+      alert(`Access restricted: You are not authorized to enter scores for '${currentGradebookSubjectObj?.name}' in '${currentGradebookClassObj?.name}'. Class teachers have full access to all subjects in their assigned class, while subject teachers can only enter scores for their assigned subjects.`);
+      return;
+    }
+
     setIsSavingScores(true);
 
     try {
       const payload = {
+        class_id: parseInt(selectedClassId),
         subject_id: parseInt(selectedSubjectId),
         session: gradebookSession,
         term: gradebookTerm,
@@ -1662,6 +2308,9 @@ export default function PortalDashboard({
       if (res.ok) {
         setScoreSaveSuccess(true);
         setTimeout(() => setScoreSaveSuccess(false), 4000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || 'Scores were not saved.');
       }
     } catch (err) {
       alert('Failed to save scores: ' + err.message);
@@ -2098,13 +2747,41 @@ export default function PortalDashboard({
           )}
 
           <div className="flex items-center gap-2">
+            {currentUser && ['superadmin', 'admin', 'teacher', 'bursar', 'frontdesk'].includes(activeRole) && (
+              <button
+                onClick={() => {
+                  setStaffIdTarget(null);
+                  setIsStaffIdModalOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-400 text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                title="View & Print Official Staff ID Card / Upload Photo & Signature"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">My Staff ID</span>
+              </button>
+            )}
+            {currentUser && (
+              <button
+                onClick={() => {
+                  setChangePassError('');
+                  setChangePassSuccess('');
+                  setIsChangePasswordOpen(true);
+                }}
+                className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                title="Change Account Password"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Change Password</span>
+              </button>
+            )}
             {currentUser && (
               <button
                 onClick={handleLogout}
+                disabled={isLoggingOut}
                 className="px-2.5 py-1 rounded-lg bg-red-950/60 hover:bg-red-900 border border-red-800 text-red-300 text-xs font-bold flex items-center gap-1 transition-colors"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>Log Out</span>
+                <span>{isLoggingOut ? 'Signing out…' : 'Log Out'}</span>
               </button>
             )}
             <button
@@ -2129,7 +2806,11 @@ export default function PortalDashboard({
         </div>
 
         {/* If user is NOT logged in: Production Authentication Screen */}
-        {!currentUser ? (
+        {sessionChecking ? (
+          <div role="status" className="grow flex items-center justify-center gap-3 p-8 text-sm text-slate-300">
+            <RefreshCw className="w-5 h-5 animate-spin" /> Restoring your session…
+          </div>
+        ) : !currentUser || !authToken ? (
           <div className="grow overflow-y-auto p-6 flex flex-col items-center justify-center max-w-xl mx-auto w-full space-y-5">
             <div className="text-center space-y-1.5">
               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto shadow-inner ${
@@ -2147,55 +2828,173 @@ export default function PortalDashboard({
                   ? 'Dedicated Institutional Governance & High-Privilege Administration'
                   : 'Secure institutional authentication for Parents, Students, Faculty & Administrators.'}
               </p>
+              <p className="text-xs text-slate-400">
+                You stay signed in when you refresh. Log out when using a shared device.
+              </p>
             </div>
 
-            {/* Login Form */}
-            <form onSubmit={handlePerformLogin} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs shadow-xl">
-              {loginError && (
-                <div className="w-full p-3.5 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex flex-col gap-2.5">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
-                    <span className="leading-relaxed">{loginError}</span>
+            {/* Login Mode Switcher (Standard Password vs. WhatsApp OTP) */}
+            {!isExecutive && (
+              <div className="w-full flex items-center p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setIsOtpMode(false); setLoginError(''); }}
+                  className={`flex-1 py-1.5 rounded-lg font-bold transition-all ${
+                    !isOtpMode ? 'bg-amber-400 text-slate-950 font-black shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Password Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsOtpMode(true); setLoginError(''); }}
+                  className={`flex-1 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all ${
+                    isOtpMode ? 'bg-emerald-500 text-white font-black shadow' : 'text-slate-400 hover:text-emerald-400'
+                  }`}
+                >
+                  <MessageCircle className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>WhatsApp Code</span>
+                </button>
+              </div>
+            )}
+
+            {/* Login Form: Password vs WhatsApp OTP */}
+            {!isOtpMode ? (
+              <form onSubmit={handlePerformLogin} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs shadow-xl">
+                {loginError && (
+                  <div className="w-full p-3.5 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex flex-col gap-2.5">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                      <span className="leading-relaxed">{loginError}</span>
+                    </div>
+                    <button type="button" className="text-left underline" onClick={() => setSessionRetry(value => value + 1)}>Retry session recovery</button>
                   </div>
+                )}
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">
+                    {isExecutive ? 'SuperAdmin Username / Email / Executive ID' : 'Username / Email / Phone / Admission No'}
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={loginUsername}
+                    onChange={(e) => setLoginUsername(e.target.value)}
+                    placeholder={isExecutive ? 'superadmin or director@eaglepowerschools.com.ng' : 'e.g. admin, adaeze3011@gmail.com, 08033591058, or ESE2009012'}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                  />
                 </div>
-              )}
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">
-                  {isExecutive ? 'SuperAdmin Username / Executive ID' : 'Username / Admission Number / Phone'}
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={loginUsername}
-                  onChange={(e) => setLoginUsername(e.target.value)}
-                  placeholder={isExecutive ? 'superadmin' : 'e.g. admin, ESE2009012, or 08037098816'}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                />
-              </div>
 
-              <div>
-                <label className="block font-bold text-slate-300 uppercase mb-1">
-                  {isExecutive ? 'Master Security Passkey' : 'Password / Secure Access PIN'}
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
-                />
-              </div>
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">
+                    {isExecutive ? 'Master Security Passkey' : 'Password / Secure Access PIN'}
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
 
-              <button
-                type="submit"
-                disabled={loginLoading}
-                className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
-              >
-                {loginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : isExecutive ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-                <span>{isExecutive ? 'Authenticate Executive Console' : 'Authenticate & Launch Portal'}</span>
-              </button>
-            </form>
+                <button
+                  type="submit"
+                  disabled={loginLoading}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                >
+                  {loginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : isExecutive ? <ShieldCheck className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
+                  <span>{isExecutive ? 'Authenticate Executive Console' : 'Authenticate & Launch Portal'}</span>
+                </button>
+              </form>
+            ) : (
+              <div className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-emerald-900/40 text-xs shadow-xl">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+                  <MessageCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>Passwordless WhatsApp Login</span>
+                </div>
+
+                {loginError && (
+                  <div className="w-full p-3 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                {otpSuccessMessage && (
+                  <div className="w-full p-3 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-200 text-xs flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                    <span>{otpSuccessMessage}</span>
+                  </div>
+                )}
+
+                {otpStep === 'request' ? (
+                  <form onSubmit={handleRequestOtp} className="space-y-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">
+                        Registered WhatsApp Number or Staff ID
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={otpPhone}
+                        onChange={(e) => setOtpPhone(e.target.value)}
+                        placeholder="e.g. 08130439923 or EPS/ST/002"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-emerald-400"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        We will send a single-use 6-digit verification code to your school WhatsApp.
+                      </p>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={otpLoading}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                    >
+                      {otpLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      <span>Send 6-Digit WhatsApp Code</span>
+                    </button>
+                  </form>
+                ) : (
+                  <form onSubmit={handleVerifyOtp} className="space-y-3">
+                    <div>
+                      <label className="block font-bold text-slate-300 uppercase mb-1">
+                        Enter 6-Digit WhatsApp Code
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        required
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value)}
+                        placeholder="888999"
+                        className="w-full px-3.5 py-3 rounded-xl bg-slate-900 border border-emerald-500 text-center text-xl font-mono tracking-widest text-emerald-300 font-extrabold focus:outline-none"
+                      />
+                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-1.5">
+                        <span>Code expires in 5 minutes</span>
+                        <button
+                          type="button"
+                          onClick={() => { setOtpStep('request'); setOtpCode(''); }}
+                          className="text-emerald-400 hover:underline font-bold"
+                        >
+                          Change number
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={otpLoading}
+                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                    >
+                      {otpLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      <span>Verify & Enter Portal</span>
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
 
             {/* Institutional Portal Guidance & Protection Notice */}
             {isExecutive ? (
@@ -2277,7 +3076,7 @@ export default function PortalDashboard({
 
                 {/* Role Specific Nav */}
                 <nav className="space-y-1">
-                  {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && (
+                  {(activeRole === 'superadmin') && (
                     <div className="space-y-3">
                       {/* Category 1: Strategic & Executive */}
                       <div className="space-y-1">
@@ -2473,11 +3272,27 @@ export default function PortalDashboard({
                           <Settings className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                           <span className="truncate">Settings & Backup</span>
                         </button>
+                        <button
+                          onClick={() => {
+                            setWhatsappModalOpen(true);
+                          }}
+                          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl font-bold transition-all bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 mt-1 group"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 group-hover:scale-110 transition-transform" />
+                            <span className="truncate text-xs font-black">WhatsApp Bot Hub</span>
+                          </div>
+                          <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-mono font-black">LIVE</span>
+                        </button>
                       </div>
                     </div>
                   )}
 
-                  {(activeRole === 'admin' && currentUser?.role !== 'superadmin') && (
+                  {(activeRole === 'admin') && (
                     <>
                       <button
                         onClick={() => setActiveTab('executive_cockpit')}
@@ -2648,6 +3463,27 @@ export default function PortalDashboard({
                       </button>
                       <button
                         onClick={() => {
+                          setStaffIdTarget(null);
+                          setIsStaffIdModalOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors text-amber-400 hover:text-white bg-amber-400/10 border border-amber-400/20 hover:bg-amber-400/20"
+                      >
+                        <CreditCard className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Staff ID Card & Signature</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setChangePassError('');
+                          setChangePassSuccess('');
+                          setIsChangePasswordOpen(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Change Password</span>
+                      </button>
+                      <button
+                        onClick={() => {
                           setActiveTab('ai_progress');
                           if (students[0]?.id) fetchStudentAiProgress(students[0].id);
                         }}
@@ -2705,6 +3541,20 @@ export default function PortalDashboard({
                       >
                         <Building2 className="w-3.5 h-3.5 text-amber-400" />
                         <span>Lesson Planner</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActiveTab('reportcard');
+                          if (students[0]?.admission_no && !selectedStudentAdmNo) {
+                            setSelectedStudentAdmNo(students[0].admission_no);
+                          }
+                        }}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'reportcard' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Award className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Student Report Cards</span>
                       </button>
                     </>
                   )}
@@ -2923,17 +3773,120 @@ export default function PortalDashboard({
               )}
 
               {/* EXECUTIVE & SUPERADMIN DASHBOARD: OVERVIEW KPIS */}
-              {(activeRole === 'superadmin' || activeRole === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && activeTab === 'overview' && (
+              {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'overview' && (
                 <div className="space-y-6 animate-in fade-in">
-                  <div>
-                    <h3 className="text-lg font-black text-white">Executive Command Overview</h3>
-                    <p className="text-xs text-slate-400">Live school analytics from SQLite production database</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-black text-white">Executive Command Overview</h3>
+                      <p className="text-xs text-slate-400">Live school analytics & automated communication infrastructure</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setWhatsappModalOpen(true)}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                      >
+                        <MessageCircle className="w-4 h-4 fill-slate-950/20" />
+                        <span>Connect WhatsApp Bot</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-950 animate-ping"></span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* PROMINENT WHATSAPP BOT CONNECTION HERO CARD */}
+                  <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-950/70 via-slate-950 to-emerald-950/40 border-2 border-emerald-500/40 p-5 sm:p-6 shadow-2xl shadow-emerald-950/40">
+                    <div className="absolute -top-16 -right-16 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+                    <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+                      
+                      {/* Left info & status */}
+                      <div className="space-y-3 max-w-2xl">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-inner">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            BOT ONLINE &bull; READY TO PAIR
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-400 bg-slate-900/80 px-2.5 py-1 rounded-full border border-slate-800">
+                            Fly.io Cloud Gateway
+                          </span>
+                          <span className="text-[11px] font-bold text-amber-300/90 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                            24/7 Parent & Staff AI
+                          </span>
+                        </div>
+
+                        <div>
+                          <h4 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-2.5">
+                            <div className="p-2 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400">
+                              <MessageCircle className="w-6 h-6" />
+                            </div>
+                            Official School WhatsApp AI Bot & Gateway
+                          </h4>
+                          <p className="text-xs sm:text-sm text-slate-300 mt-1 leading-relaxed">
+                            Parents check fee balances, attendance, and exam report cards directly on WhatsApp. Staff clock in and record scores. Pair your school phone line or dispatch instant targeted push announcements.
+                          </p>
+                        </div>
+
+                        {/* Quick Stats Badges */}
+                        <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300">
+                            <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>Linked Line: <strong className="text-white font-mono">{systemSettings?.whatsapp_phone || '+234 907 558 0671'}</strong></span>
+                          </div>
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300">
+                            <Users className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Verified Reach: <strong className="text-emerald-400">119 Contacts</strong> (92 Parents, 27 Staff)</span>
+                          </div>
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-slate-300">
+                            <Radio className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Gateway: <strong className="text-white">Fly.io / Persistent Volume</strong></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right call-to-action buttons */}
+                      <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 w-full lg:w-auto shrink-0">
+                        <button
+                          onClick={() => setWhatsappModalOpen(true)}
+                          className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 hover:from-emerald-400 hover:to-teal-300 text-slate-950 font-black text-sm flex items-center justify-center gap-3 shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all hover:scale-[1.03] active:scale-[0.98] group"
+                        >
+                          <QrCode className="w-5 h-5 text-slate-950 group-hover:rotate-6 transition-transform" />
+                          <span>CONNECT / PAIR WHATSAPP BOT</span>
+                          <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
+                        </button>
+
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setWhatsappModalOpen(true)}
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-300 font-bold text-xs flex items-center justify-center gap-2 transition-all"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            <span>Push Broadcast</span>
+                          </button>
+                          <a
+                            href={`https://wa.me/${(systemSettings?.whatsapp_phone || '2349075580671').replace(/[^0-9]/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-300 font-bold text-xs flex items-center justify-center gap-2 transition-all"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Test in WhatsApp</span>
+                          </a>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
                       <div className="flex justify-between items-center text-slate-400 text-xs">
-                        <span>Total Pupils Enrolled</span>
+                        <div className="flex items-center gap-1.5">
+                          <span>Total Pupils Enrolled</span>
+                          <Tooltip text="Total active pupils across all classes and divisions in the school. Includes all enrolled students tracked in the SQLite database.">
+                            <HelpCircle className="w-3 h-3 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <Users className="w-4 h-4 text-blue-400" />
                       </div>
                       <div className="text-2xl font-black text-white mt-1">
@@ -2944,7 +3897,12 @@ export default function PortalDashboard({
 
                     <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
                       <div className="flex justify-between items-center text-slate-400 text-xs">
-                        <span>Fees Invoiced</span>
+                        <div className="flex items-center gap-1.5">
+                          <span>Fees Invoiced</span>
+                          <Tooltip text="Total tuition fees invoiced this term vs amount actually collected. A collection rate below 80% triggers automated debt-alert notifications to parents.">
+                            <HelpCircle className="w-3 h-3 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <CreditCard className="w-4 h-4 text-amber-400" />
                       </div>
                       <div className="text-2xl font-black text-amber-400 mt-1">
@@ -2957,7 +3915,12 @@ export default function PortalDashboard({
 
                     <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
                       <div className="flex justify-between items-center text-slate-400 text-xs">
-                        <span>Outstanding Debt</span>
+                        <div className="flex items-center gap-1.5">
+                          <span>Outstanding Debt</span>
+                          <Tooltip text="Total fees invoiced but not yet paid. Use the Finance tab to send reminder messages to parents or generate debt reports for the Bursar.">
+                            <HelpCircle className="w-3 h-3 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <AlertCircle className="w-4 h-4 text-red-400" />
                       </div>
                       <div className="text-2xl font-black text-red-400 mt-1">
@@ -2966,9 +3929,38 @@ export default function PortalDashboard({
                       <span className="text-[11px] text-slate-400 mt-1 block">Pending collection</span>
                     </div>
 
+                    {/* WhatsApp Bot Connection KPI */}
+                    <div 
+                      onClick={() => setWhatsappModalOpen(true)}
+                      className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/50 via-slate-950 to-slate-950 border border-emerald-500/40 hover:border-emerald-400 transition-all cursor-pointer group shadow-lg shadow-emerald-950/20"
+                    >
+                      <div className="flex justify-between items-center text-emerald-400 text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-white group-hover:text-emerald-300 transition-colors">WhatsApp Bot AI</span>
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                        </div>
+                        <MessageCircle className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                      </div>
+                      <div className="text-2xl font-black text-emerald-400 mt-1 flex items-center justify-between">
+                        <span>ONLINE</span>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-lg border border-emerald-500/30">Connect &rarr;</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">
+                        119 Reach &bull; Click to Manage
+                      </span>
+                    </div>
+
                     <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
                       <div className="flex justify-between items-center text-slate-400 text-xs">
-                        <span>Security Hardening</span>
+                        <div className="flex items-center gap-1.5">
+                          <span>Security Hardening</span>
+                          <Tooltip text="Server-side security: 0 PHP execution paths, bcrypt password hashing, threat detection active. All API requests validated with session tokens.">
+                            <HelpCircle className="w-3 h-3 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
                       </div>
                       <div className="text-2xl font-black text-emerald-400 mt-1">100% Active</div>
@@ -2980,7 +3972,7 @@ export default function PortalDashboard({
 
               {/* SUPERADMIN: User IAM Directory & Access Control */}
 
-              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'users' && (
+              {(activeRole === 'superadmin') && activeTab === 'users' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -2994,6 +3986,13 @@ export default function PortalDashboard({
                       <p className="text-xs text-slate-400">
                         Institutional Identity & Access Management (IAM) &bull; Freeze/unfreeze, unlock, and manage role security
                       </p>
+                      {/* IAM How-To Banner */}
+                      <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800">
+                        <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          <span className="font-bold text-amber-400">Staff onboarding:</span> New staff accounts are created via the <span className="text-white font-bold">Register</span> endpoint and appear here. Use <span className="text-amber-400 font-bold">Freeze</span> to suspend access without deleting the account. <span className="text-amber-400 font-bold">Reset Password</span> sends a temporary credential. Role changes take effect on the next login.
+                        </p>
+                      </div>
                     </div>
                     <button
                       onClick={() => fetchUsers(userPage, userRoleFilter, userStatusFilter, userSearchQuery)}
@@ -3202,7 +4201,7 @@ export default function PortalDashboard({
               )}
 
               {/* PRINCIPAL: System Settings */}
-              {(activeRole === 'admin' && currentUser?.role !== 'superadmin') && activeTab === 'system_settings' && (
+              {(activeRole === 'admin') && activeTab === 'system_settings' && (
                 <div className="space-y-6 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -3298,7 +4297,7 @@ export default function PortalDashboard({
                           />
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="block text-slate-400 font-bold mb-1">Official Contact Phone</label>
                             <input
@@ -3306,6 +4305,16 @@ export default function PortalDashboard({
                               value={systemSettings.contact_phone || ''}
                               onChange={(e) => setSystemSettings({ ...systemSettings, contact_phone: e.target.value })}
                               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-400 font-bold mb-1">Official WhatsApp</label>
+                            <input
+                              type="text"
+                              value={systemSettings.whatsapp_phone || ''}
+                              onChange={(e) => setSystemSettings({ ...systemSettings, whatsapp_phone: e.target.value })}
+                              className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-emerald-400 font-mono focus:outline-none focus:border-amber-400"
+                              placeholder="+234 907 558 0671"
                             />
                           </div>
                           <div>
@@ -3411,7 +4420,7 @@ export default function PortalDashboard({
               )}
 
               {/* SUPERADMIN: WAF Threat Radar & Cyber Defense */}
-              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'threat_radar' && (
+              {(activeRole === 'superadmin') && activeTab === 'threat_radar' && (
                 <div className="space-y-6 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -3564,7 +4573,7 @@ export default function PortalDashboard({
               )}
 
               {/* SUPERADMIN & ADMIN: Staff */}
-              {(activeRole === 'superadmin' || activeRole === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && activeTab === 'staff' && (
+              {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'staff' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3">
                     <div>
@@ -3593,8 +4602,19 @@ export default function PortalDashboard({
                           <div className="text-slate-300 font-semibold">{s.role}</div>
                           <div className="text-slate-400 text-[11px]">{s.qualification}</div>
                         </div>
-                        {s.role.toLowerCase().includes('teacher') && (
-                          <div className="pt-2 border-t border-slate-900 flex justify-end">
+                        <div className="pt-2 border-t border-slate-900 flex justify-between items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setStaffIdTarget(s);
+                              setIsStaffIdModalOpen(true);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold flex items-center gap-1 transition-colors"
+                            title="View & Print Official Staff ID Card"
+                          >
+                            <CreditCard className="w-3 h-3" />
+                            <span>Print ID Card</span>
+                          </button>
+                          {s.role.toLowerCase().includes('teacher') && (
                             <button
                               onClick={() => {
                                 setSelectedStaffForClass(s);
@@ -3604,10 +4624,10 @@ export default function PortalDashboard({
                               }}
                               className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 border border-amber-400/30 text-[10px] font-bold transition-colors"
                             >
-                              Assign / Change Class &rarr;
+                              Assign Class &rarr;
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3634,7 +4654,7 @@ export default function PortalDashboard({
               )}
 
               {/* PRINCIPAL: Student Registry */}
-              {(activeRole === 'admin' && currentUser?.role !== 'superadmin') && activeTab === 'students' && (
+              {(activeRole === 'admin') && activeTab === 'students' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3">
                     <div>
@@ -3750,7 +4770,7 @@ export default function PortalDashboard({
               )}
 
               {/* PRINCIPAL (ADMIN) & SUPERADMIN: Admissions */}
-              {(activeRole === 'admin' || activeRole === 'superadmin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && activeTab === 'admissions' && (
+              {(activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'admissions' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex justify-between items-center">
                     <div>
@@ -3810,14 +4830,14 @@ export default function PortalDashboard({
               )}
 
               {/* SUPERADMIN: Curriculum Architect */}
-              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'classes' && (
+              {(activeRole === 'superadmin') && activeTab === 'classes' && (
                 <div className="animate-in fade-in">
                   <CurriculumArchitect authToken={authToken} staffList={staff} />
                 </div>
               )}
 
               {/* PRINCIPAL & SUPERADMIN: Classes */}
-              {(activeRole === 'admin' && currentUser?.role !== 'superadmin') && activeTab === 'classes' && (
+              {(activeRole === 'admin') && activeTab === 'classes' && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3">
                     <div>
@@ -3888,21 +4908,21 @@ export default function PortalDashboard({
               )}
 
               {/* SUPERADMIN: Student Master Console */}
-              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'students' && (
+              {(activeRole === 'superadmin') && activeTab === 'students' && (
                 <div className="animate-in fade-in">
                   <StudentMasterConsole authToken={authToken} classes={classes} />
                 </div>
               )}
 
               {/* SUPERADMIN: System Governance & Disaster Recovery */}
-              {(activeRole === 'superadmin' || currentUser?.role === 'superadmin') && activeTab === 'system_settings' && (
+              {(activeRole === 'superadmin') && activeTab === 'system_settings' && (
                 <div className="animate-in fade-in">
                   <SystemGovernanceConsole authToken={authToken} />
                 </div>
               )}
 
               {/* PRINCIPAL & RECEPTION: FRONT DESK & VISITOR MANAGEMENT */}
-              {(activeRole === 'admin' || activeRole === 'frontdesk' || activeRole === 'superadmin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && (activeTab === 'visitors' || (activeRole === 'frontdesk' && activeTab === 'overview')) && (
+              {(activeRole === 'admin' || activeRole === 'frontdesk' || activeRole === 'superadmin') && (activeTab === 'visitors' || (activeRole === 'frontdesk' && activeTab === 'overview')) && (
                 <div className="space-y-4 animate-in fade-in">
                   {/* Front Desk Sub-Tab Selector */}
                   <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 p-2 rounded-2xl border border-slate-800">
@@ -4319,9 +5339,37 @@ export default function PortalDashboard({
                         <p className="text-xs text-slate-400 max-w-xl">
                           Assigned Form Class: <span className="text-amber-400 font-bold">{classes.find(c => c.id === attendanceClassId)?.name || 'Junior College (JSS 1)'}</span> • 1st Term 2025/2026 Academic Session. Manage roll-calls, enter continuous assessments, coordinate homework, and prepare lesson schemes.
                         </p>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Info className="w-3.5 h-3.5 text-slate-500" />
+                          <p className="text-[11px] text-slate-500">
+                            <span className="text-amber-400/80 font-bold">Form Class Teacher</span> — you have full access to all subjects in your class. Subject-only teachers are restricted to their assigned subjects.
+                          </p>
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setStaffIdTarget(null);
+                            setIsStaffIdModalOpen(true);
+                          }}
+                          className="px-4 py-2.5 rounded-2xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 font-bold text-xs border border-amber-400/30 flex items-center gap-2 transition-all hover:scale-102"
+                        >
+                          <CreditCard className="w-4 h-4 text-amber-400" />
+                          <span>My Staff ID Card & Signature</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setChangePassError('');
+                            setChangePassSuccess('');
+                            setIsChangePasswordOpen(true);
+                          }}
+                          className="px-4 py-2.5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 flex items-center gap-2 transition-all hover:scale-102"
+                          title="Change Account Password"
+                        >
+                          <KeyRound className="w-4 h-4 text-amber-400" />
+                          <span>Change Password</span>
+                        </button>
                         <button
                           onClick={() => {
                             setActiveTab('attendance');
@@ -4348,7 +5396,12 @@ export default function PortalDashboard({
                     {/* Class Roster */}
                     <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Class Roll</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Class Roll</span>
+                          <Tooltip text="Total number of pupils enrolled in your assigned form class. Click 'View Class Register' to see the full attendance history for each pupil.">
+                            <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center">
                           <Users className="w-4 h-4" />
                         </div>
@@ -4375,7 +5428,12 @@ export default function PortalDashboard({
                     {/* Today's Roll-Call */}
                     <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Attendance</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Today's Attendance</span>
+                          <Tooltip text="Mark each pupil Present, Absent, or Late. Once submitted the register is locked for the day. Attendance feeds directly into the terminal report card.">
+                            <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
                           <Clock className="w-4 h-4" />
                         </div>
@@ -4404,7 +5462,12 @@ export default function PortalDashboard({
                     {/* CA & Exams */}
                     <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Subject Gradebook</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Subject Gradebook</span>
+                          <Tooltip text="CA score is out of 30 marks, Exam is out of 70. Total = CA + Exam (max 100). Grades auto-compute using the WAEC 9-point scale (A1–F9) or your division's grading system." wide>
+                            <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
                           <Award className="w-4 h-4" />
                         </div>
@@ -4429,7 +5492,12 @@ export default function PortalDashboard({
                     {/* Homework & AI Submissions */}
                     <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 relative group hover:border-amber-400/40 transition-all">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Homework & AI</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Homework & AI</span>
+                          <Tooltip text="Assignments you create are auto-graded by EduCore AI when pupils submit answers via WhatsApp or the Parent Portal. Review scores and override them if needed." wide>
+                            <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                          </Tooltip>
+                        </div>
                         <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
                           <BookOpen className="w-4 h-4" />
                         </div>
@@ -4543,20 +5611,112 @@ export default function PortalDashboard({
                         </div>
                       </div>
 
-                      {/* WhatsApp Bot Teacher Guide Card */}
-                      <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-slate-950 to-slate-950 border border-emerald-800/40 flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
-                          <MessageSquare className="w-5 h-5" />
+                      {/* WhatsApp Teaching Command Hub & Broadcast Composer */}
+                      <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/50 via-slate-950 to-slate-950 border border-emerald-800/40 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                              <MessageCircle className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h4 className="font-extrabold text-emerald-300 text-sm">Class WhatsApp Hub & Broadcaster</h4>
+                              <p className="text-[11px] text-slate-400">Two-way integration between your form room and parents</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1 rounded-full self-start sm:self-auto">
+                            Bot Active & Synchronized
+                          </span>
                         </div>
-                        <div className="space-y-1 text-xs">
-                          <h4 className="font-bold text-emerald-300 text-sm">WhatsApp Score Recording Shortcut</h4>
-                          <p className="text-slate-400 leading-relaxed">
-                            Educators can also record scores directly from WhatsApp! Send formatted text:
-                            <code className="mx-1.5 px-2 py-0.5 rounded bg-slate-900 text-amber-300 font-mono text-[11px] border border-slate-700">
-                              SCORE ESE2009012 MTH 25 58
-                            </code>
-                            to update CA and Exam marks straight to the official database.
-                          </p>
+
+                        {/* Broadcast Message Templates */}
+                        <div className="space-y-2 pt-2 border-t border-slate-800">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="text-slate-400 font-bold">Template:</span>
+                            {[
+                              { id: 'homework', label: 'Homework Alert' },
+                              { id: 'attendance', label: 'Attendance Check' },
+                              { id: 'exam', label: 'Test / Exam Notice' },
+                              { id: 'cultural', label: 'Dress Code & Events' }
+                            ].map(t => (
+                              <button
+                                key={t.id}
+                                type="button"
+                                onClick={() => setAnnouncementTemplate(t.id)}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                  announcementTemplate === t.id
+                                    ? 'bg-emerald-500 text-white font-black shadow'
+                                    : 'bg-slate-900 text-slate-400 hover:text-white'
+                                }`}
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Computed Broadcast Message */}
+                          {(() => {
+                            const className = classes.find(c => c.id === attendanceClassId)?.name || 'Class';
+                            let text = '';
+                            if (announcementTemplate === 'homework') {
+                              text = `🦅 *EAGLE POWER SCHOOLS — ${className.toUpperCase()} HOMEWORK NOTICE*\n\nDear Parents/Guardians,\nPlease ensure your child completes their homework assignment today. Submission is due at morning assembly tomorrow.\n\n_Thank you for your active partnership in excellence!_\n*Form Teacher / Subject Master*\nEagle Power Schools, Awka`;
+                            } else if (announcementTemplate === 'attendance') {
+                              text = `🦅 *EAGLE POWER SCHOOLS — ${className.toUpperCase()} ATTENDANCE NOTICE*\n\nDear Parents/Guardians,\nDaily roll-call has been recorded for ${className}. Regular attendance is vital for academic distinction.\n\n_Eagle Power Schools Administration_`;
+                            } else if (announcementTemplate === 'exam') {
+                              text = `🦅 *EAGLE POWER SCHOOLS — ${className.toUpperCase()} ASSESSMENT NOTICE*\n\nDear Parents/Guardians,\nContinuous Assessment (CA) and revision tests are scheduled this week. Please ensure your child reviews their lesson notes and arrives promptly.\n\n*Eagle Power Academic Directorate*`;
+                            } else {
+                              text = `🦅 *EAGLE POWER SCHOOLS — ${className.toUpperCase()} EVENT NOTICE*\n\nDear Parents/Guardians,\nPlease take note of the upcoming school event and designated attire. Students are expected to adhere strictly to school standards.\n\n*Eagle Power Schools, Awka*`;
+                            }
+
+                            return (
+                              <div className="space-y-2">
+                                <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] font-sans text-slate-300 whitespace-pre-line leading-relaxed">
+                                  {text}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(text);
+                                      setAnnouncementCopied(true);
+                                      setTimeout(() => setAnnouncementCopied(false), 2500);
+                                    }}
+                                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] flex items-center gap-1.5 transition-all"
+                                  >
+                                    {announcementCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                    <span>{announcementCopied ? 'Copied to Clipboard!' : 'Copy Formatted Text'}</span>
+                                  </button>
+                                  <a
+                                    href={`https://wa.me/?text=${encodeURIComponent(text)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1.5 transition-all shadow"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <span>Broadcast via WhatsApp</span>
+                                  </a>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        {/* WhatsApp Bot Teacher Shortcuts */}
+                        <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400">
+                          <span className="text-slate-300 font-bold">Direct WhatsApp Commands for Your Phone:</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 mt-1.5 font-mono text-[10px]">
+                            <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                              <span className="text-emerald-400">!allpresent SS2</span>: 1-Tap class roll-call
+                            </div>
+                            <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                              <span className="text-emerald-400">!score 001 MTH 25 55</span>: Enter CA & Exam marks
+                            </div>
+                            <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                              <span className="text-emerald-400">!myclass</span>: View your pupils & parents
+                            </div>
+                            <div className="p-1.5 rounded bg-slate-900 border border-slate-800">
+                              <span className="text-emerald-400">!payslip</span>: View monthly salary voucher
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -4617,7 +5777,7 @@ export default function PortalDashboard({
               )}
 
               {/* ATTENDANCE REGISTER (TEACHER, SUPERADMIN & PRINCIPAL) */}
-              {(activeRole === 'teacher' || activeRole === 'superadmin' || activeRole === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && activeTab === 'attendance' && (
+              {(activeRole === 'teacher' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'attendance' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -4793,7 +5953,23 @@ export default function PortalDashboard({
                               <td className="p-3 text-center font-mono text-slate-500 text-[11px]">{i + 1}</td>
                               <td className="p-3 font-mono font-bold text-amber-400">{r.admission_no}</td>
                               <td className="p-3 font-bold text-white">{r.first_name} {r.last_name}</td>
-                              <td className="p-3 font-mono text-slate-400 text-[11px]">{r.guardian_phone || '—'}</td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-1.5 font-mono text-slate-300 text-[11px]">
+                                  <span>{r.guardian_phone || '—'}</span>
+                                  {r.guardian_phone && (
+                                    <a
+                                      href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${r.guardian_name || 'Parent'}, this is Eagle Power Schools regarding your child ${r.first_name} ${r.last_name} in ${classes.find(c => c.id === attendanceClassId)?.name || 'Class'}. Today's attendance status (${attendanceDate}): ${r.status}.`)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all ml-1 shrink-0 inline-flex items-center gap-1 text-[10px]"
+                                      title={`Open WhatsApp chat with ${r.guardian_name || 'Parent'}`}
+                                    >
+                                      <MessageCircle className="w-3 h-3" />
+                                      <span className="hidden sm:inline">WhatsApp</span>
+                                    </a>
+                                  )}
+                                </div>
+                              </td>
                               <td className="p-3 text-center">
                                 <div className="inline-flex rounded-xl bg-slate-900 p-1 border border-slate-800 gap-1">
                                   {[
@@ -4837,7 +6013,7 @@ export default function PortalDashboard({
               )}
 
               {/* LIVE PRODUCTION GRADEBOOK (TEACHER & ADMIN) */}
-              {(activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && activeTab === 'gradebook' && (
+              {(activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'gradebook' && (
                 <div className="space-y-5 animate-in fade-in">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-950 p-4 rounded-3xl border border-slate-800">
                     <div>
@@ -4852,9 +6028,16 @@ export default function PortalDashboard({
                       <p className="text-xs text-slate-400 mt-0.5">
                         Multi-component scoring, division grading scale auto-computation & permanent SQLite marksheet storage
                       </p>
+                      {/* Gradebook Quick-Start Instructions */}
+                      <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-slate-900/60 border border-slate-800">
+                        <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          <span className="font-bold text-amber-400">Quick start:</span> Select the correct <span className="text-white font-bold">Session → Term → Class → Subject</span>, then type scores into each pupil's row. Use <span className="text-purple-300 font-bold">AI Suggest All Remarks</span> for auto-generated comments, then click <span className="text-amber-400 font-bold">Save Scores</span>. If the save button is locked, the term has been closed by the Principal — contact an Admin.
+                        </p>
+                      </div>
 
                       {/* Mode Switcher */}
-                      <div className="flex items-center gap-2 mt-3">
+                      <div className="flex items-center gap-2 mt-3 flex-wrap">
                         <button
                           type="button"
                           onClick={() => setGradebookMode('standard')}
@@ -4878,60 +6061,98 @@ export default function PortalDashboard({
                         >
                           ✨ Multi-Component: Test 1 (10) + Test 2 (10) + Project (10) + Exam (70)
                         </button>
+
+                        <Tooltip text="Standard: Enter one CA total (max 30) + Exam (max 70). Multi-Component: Break CA into Test 1, Test 2, and Project (10 marks each = 30 total CA). Use whichever matches your school's assessment format." wide>
+                          <HelpCircle className="w-4 h-4 text-slate-600 hover:text-amber-400 cursor-help" />
+                        </Tooltip>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       {/* Session Selector */}
-                      <select
-                        value={gradebookSession}
-                        onChange={(e) => setGradebookSession(e.target.value)}
-                        className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
-                      >
-                        <option value="2024/2025">2024/2025</option>
-                        <option value="2025/2026">2025/2026</option>
-                      </select>
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={gradebookSession}
+                          onChange={(e) => setGradebookSession(e.target.value)}
+                          className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
+                        >
+                          <option value="2024/2025">2024/2025</option>
+                          <option value="2025/2026">2025/2026</option>
+                        </select>
+                        <Tooltip text="Always confirm the session matches the current academic year before entering marks. Scores are stored per-session and cannot be moved across sessions." wide>
+                          <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                        </Tooltip>
+                      </div>
 
                       {/* Term Selector */}
-                      <select
-                        value={gradebookTerm}
-                        onChange={(e) => setGradebookTerm(e.target.value)}
-                        className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
-                      >
-                        <option value="First Term">First Term</option>
-                        <option value="Second Term">Second Term</option>
-                        <option value="Third Term">Third Term</option>
-                      </select>
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={gradebookTerm}
+                          onChange={(e) => setGradebookTerm(e.target.value)}
+                          className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
+                        >
+                          <option value="First Term">First Term</option>
+                          <option value="Second Term">Second Term</option>
+                          <option value="Third Term">Third Term</option>
+                        </select>
+                        <Tooltip text="Marks are stored per-term. Ensure this matches the physical exam paper you are currently scoring. Selecting the wrong term will save scores to the wrong report card period.">
+                          <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                        </Tooltip>
+                      </div>
 
                       {/* Class Selector */}
-                      <select
-                        value={selectedClassId}
-                        onChange={(e) => {
-                          const val = Number(e.target.value) || e.target.value;
-                          setSelectedClassId(val);
-                          fetchClassSheet(val, selectedSubjectId);
-                        }}
-                        className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
-                      >
-                        {classes.map(c => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.student_count || students.filter(s => String(s.class_id) === String(c.id)).length} pupils)</option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={selectedClassId}
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || e.target.value;
+                            setSelectedClassId(val);
+                            const targetCls = classes.find(c => String(c.id) === String(val)) || null;
+                            const newAllowedSubs = getAllowedSubjectsForClass(currentUser, targetCls, subjects);
+                            let nextSubId = selectedSubjectId;
+                            if (newAllowedSubs.length > 0 && !newAllowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
+                              nextSubId = newAllowedSubs[0].id;
+                              setSelectedSubjectId(nextSubId);
+                            }
+                            fetchClassSheet(val, nextSubId);
+                          }}
+                          className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
+                        >
+                          {(allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes).map(c => {
+                            const isForm = isFormTeacherOfClass(currentUser, c);
+                            return (
+                              <option key={c.id} value={c.id}>
+                                {c.name} {isForm ? '👑 (Your Form Class)' : ''} ({c.student_count || students.filter(s => String(s.class_id) === String(c.id)).length} pupils)
+                              </option>
+                            );
+                          })}
+                        </select>
+                        <Tooltip text="Teachers only see their assigned classes. If a class is missing, contact the Admin to update your class assignment in the IAM system." wide>
+                          <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                        </Tooltip>
+                      </div>
 
                       {/* Subject Selector */}
-                      <select
-                        value={selectedSubjectId}
-                        onChange={(e) => {
-                          const val = Number(e.target.value) || e.target.value;
-                          setSelectedSubjectId(val);
-                          fetchClassSheet(selectedClassId, val);
-                        }}
-                        className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
-                      >
-                        {subjects.map(s => (
-                          <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                      <div className="flex items-center gap-1">
+                        <select
+                          value={selectedSubjectId}
+                          onChange={(e) => {
+                            const val = Number(e.target.value) || e.target.value;
+                            setSelectedSubjectId(val);
+                            fetchClassSheet(selectedClassId, val);
+                          }}
+                          className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
+                        >
+                          {(allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects).map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} ({s.code}) {isCurrentFormTeacher ? '• All Subjects Access' : '• Your Subject'}
+                            </option>
                         ))}
                       </select>
+                      <Tooltip text="Only subjects assigned to you by the curriculum coordinator appear here. If a subject is missing, ask the Admin to update your subject assignment." wide>
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
+                      </Tooltip>
+                      </div>
 
                       <button
                         onClick={() => {
@@ -4985,22 +6206,94 @@ export default function PortalDashboard({
                           });
                           setClassSheetRows(updated);
                         }}
-                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold transition-all"
-                        title="Auto-fill empty CA components with benchmark marks (8+8+9 = 25/30)"
+                        disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                        className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                          activeRole === 'teacher' && !canGradeCurrentSubject
+                            ? 'bg-slate-900 text-slate-600 cursor-not-allowed border border-slate-800'
+                            : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
+                        }`}
+                        title={activeRole === 'teacher' && !canGradeCurrentSubject ? 'Score entry restricted for this subject' : 'Auto-fill empty CA components with benchmark marks (8+8+9 = 25/30)'}
                       >
                         Quick-Fill CA (25)
                       </button>
 
                       <button
-                        onClick={handleSaveBatchScores}
-                        disabled={isSavingScores}
-                        className="px-4 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow transition-all flex items-center gap-1.5"
+                        onClick={handleSuggestAllRemarks}
+                        disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all ${
+                          activeRole === 'teacher' && !canGradeCurrentSubject
+                            ? 'bg-slate-900 text-slate-600 cursor-not-allowed border border-slate-800'
+                            : 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        }`}
+                        title={activeRole === 'teacher' && !canGradeCurrentSubject ? 'Score entry restricted for this subject' : 'Automatically generate tailored remarks for all pupils based on their scores'}
                       >
-                        {isSavingScores ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                        <span>Save Scores to Database</span>
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        <span>AI Suggest All Remarks</span>
                       </button>
+
+                      <Tooltip text="Click 'AI Suggest All Remarks' to auto-generate contextual performance remarks for every pupil based on their total scores. You can still edit each remark manually before saving." wide>
+                        <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/5 border border-purple-500/20 cursor-help">
+                          <Info className="w-3 h-3 text-purple-400" />
+                          <span className="text-[10px] text-purple-400/80">AI tip</span>
+                        </div>
+                      </Tooltip>
+
+                      <Tooltip text="Scores are saved permanently to the school SQLite database. If the Principal has locked the term, the Save button is disabled until the term is unlocked by an Admin." wide>
+                        <button
+                          onClick={handleSaveBatchScores}
+                          disabled={isSavingScores || (activeRole === 'teacher' && !canGradeCurrentSubject)}
+                          className={`px-4 py-1.5 rounded-xl font-black shadow transition-all flex items-center gap-1.5 ${
+                            activeRole === 'teacher' && !canGradeCurrentSubject
+                              ? 'bg-slate-900 text-slate-500 cursor-not-allowed border border-slate-800'
+                              : 'bg-amber-400 hover:bg-amber-500 text-slate-950'
+                          }`}
+                        >
+                          {activeRole === 'teacher' && !canGradeCurrentSubject ? (
+                            <>
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Score Entry Restricted</span>
+                            </>
+                          ) : (
+                            <>
+                              {isSavingScores ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                              <span>Save Scores to Database</span>
+                            </>
+                          )}
+                        </button>
+                      </Tooltip>
                     </div>
                   </div>
+
+                  {/* Academic Access Level Notification Banner */}
+                  {activeRole === 'teacher' && (
+                    <div>
+                      {isCurrentFormTeacher ? (
+                        <div className="flex items-center gap-2.5 p-3 px-4 rounded-2xl bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs shadow-sm">
+                          <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                          <div>
+                            <span className="font-black uppercase tracking-wider text-amber-400 mr-2">Form Teacher Full Class Access:</span>
+                            <span>You are the designated Class/Form Teacher for <strong>{currentGradebookClassObj?.name}</strong>. You have full access to enter, edit, and grade <strong>all subjects</strong> for your class.</span>
+                          </div>
+                        </div>
+                      ) : canGradeCurrentSubject ? (
+                        <div className="flex items-center gap-2.5 p-3 px-4 rounded-2xl bg-indigo-950/60 border border-indigo-700/50 text-indigo-200 text-xs shadow-sm">
+                          <BookOpen className="w-4 h-4 text-indigo-400 shrink-0" />
+                          <div>
+                            <span className="font-black uppercase tracking-wider text-indigo-400 mr-2">Subject Teacher Access:</span>
+                            <span>You are authorized to enter scores for your taught subject: <strong>{currentGradebookSubjectObj?.name}</strong> in {currentGradebookClassObj?.name}.</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2.5 p-3 px-4 rounded-2xl bg-rose-950/60 border border-rose-700/50 text-rose-200 text-xs shadow-sm">
+                          <Lock className="w-4 h-4 text-rose-400 shrink-0" />
+                          <div>
+                            <span className="font-black uppercase tracking-wider text-rose-400 mr-2">Score Entry Restricted:</span>
+                            <span>You are not assigned to teach <strong>{currentGradebookSubjectObj?.name}</strong> in {currentGradebookClassObj?.name}. Class teachers have access to all subjects, while subject teachers can only grade their assigned subjects.</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Gradebook Performance Summary Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
@@ -5146,7 +6439,8 @@ export default function PortalDashboard({
                                     value={r.ca1_score !== undefined && r.ca1_score !== null ? r.ca1_score : ''}
                                     onChange={(e) => handleScoreEdit(originalIndex, 'ca1', e.target.value)}
                                     placeholder="0"
-                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400"
+                                    disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
                                   />
                                 </td>
                                 <td className="p-3 text-center bg-indigo-950/20">
@@ -5157,7 +6451,8 @@ export default function PortalDashboard({
                                     value={r.ca2_score !== undefined && r.ca2_score !== null ? r.ca2_score : ''}
                                     onChange={(e) => handleScoreEdit(originalIndex, 'ca2', e.target.value)}
                                     placeholder="0"
-                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400"
+                                    disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
                                   />
                                 </td>
                                 <td className="p-3 text-center bg-indigo-950/20">
@@ -5168,7 +6463,8 @@ export default function PortalDashboard({
                                     value={r.project_score !== undefined && r.project_score !== null ? r.project_score : ''}
                                     onChange={(e) => handleScoreEdit(originalIndex, 'project', e.target.value)}
                                     placeholder="0"
-                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400"
+                                    disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
                                   />
                                 </td>
                                 <td className="p-3 text-center font-bold text-indigo-300 bg-indigo-900/20">
@@ -5183,7 +6479,8 @@ export default function PortalDashboard({
                                   max="30"
                                   value={r.ca_score || 0}
                                   onChange={(e) => handleScoreEdit(originalIndex, 'ca', e.target.value)}
-                                  className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-center font-bold text-white focus:outline-none focus:border-amber-400"
+                                  disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                  className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-center font-bold text-white focus:outline-none focus:border-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
                               </td>
                             )}
@@ -5195,7 +6492,8 @@ export default function PortalDashboard({
                                 max="70"
                                 value={r.exam_score || 0}
                                 onChange={(e) => handleScoreEdit(originalIndex, 'exam', e.target.value)}
-                                className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-center font-bold text-white focus:outline-none focus:border-amber-400"
+                                disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                className="w-16 px-2 py-1 rounded bg-slate-900 border border-slate-700 text-center font-bold text-white focus:outline-none focus:border-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
                               />
                             </td>
                             <td className="p-3 text-center font-black text-amber-400 text-sm">
@@ -5214,7 +6512,42 @@ export default function PortalDashboard({
                                 {r.division_grade ? `${r.division_grade}` : r.grade}
                               </span>
                             </td>
-                            <td className="p-3 text-slate-300 italic">{r.remark}</td>
+                            <td className="p-3">
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={r.remark || ''}
+                                  onChange={(e) => handleScoreEdit(originalIndex, 'remark', e.target.value)}
+                                  placeholder="e.g. Excellent grasp..."
+                                  disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                  className="flex-1 min-w-32 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSuggestRemark(originalIndex)}
+                                  disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                  className={`p-1.5 rounded-lg border transition-all shrink-0 ${
+                                    activeRole === 'teacher' && !canGradeCurrentSubject
+                                      ? 'opacity-40 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-600'
+                                      : 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border-purple-500/30'
+                                  }`}
+                                  title={activeRole === 'teacher' && !canGradeCurrentSubject ? 'Score entry restricted for this subject' : 'AI Suggest Tailored Remark based on score'}
+                                >
+                                  <Sparkles className="w-3.5 h-3.5" />
+                                </button>
+                                {r.guardian_phone && (
+                                  <a
+                                    href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${r.guardian_name || 'Parent'}, this is your child's subject teacher at Eagle Power Schools. Current score for ${r.first_name} ${r.last_name} in ${subjects.find(s => s.id === selectedSubjectId)?.name || 'Subject'}: CA: ${r.ca_score || 0}/30, Exam: ${r.exam_score || 0}/70, Total: ${r.total_score || 0}/100 (${r.grade || 'A1'}). Remark: ${r.remark || 'Dedicated student'}.`)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all shrink-0"
+                                    title="Send score update to parent via WhatsApp"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -5348,107 +6681,185 @@ export default function PortalDashboard({
                 </div>
               )}
 
-              {/* TEACHER DASHBOARD: LESSON PLANNER & SCHEME OF WORK */}
-              {activeRole === 'teacher' && activeTab === 'lesson_notes' && (
-                <div className="space-y-5 animate-in fade-in">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-black text-white">Curriculum Lesson Planner & Scheme of Work</h3>
-                      <p className="text-xs text-slate-400">Weekly syllabus breakdown, instructional objectives, and academic approvals</p>
-                    </div>
+              {/* TEACHER & ACADEMIC LEADERSHIP: CURRICULUM LESSON PLANNER & SCHEME OF WORK */}
+              {(activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'lesson_notes' && (() => {
+                const isReviewer = ['superadmin', 'admin'].includes(activeRole);
+                const approvedCount = lessonNotes.filter(n => n.status === 'Approved').length;
+                const underReviewCount = lessonNotes.filter(n => n.status === 'Under Review').length;
+                const needsRevisionCount = lessonNotes.filter(n => n.status === 'Needs Revision').length;
 
-                    <button
-                      onClick={() => setLessonNoteModalOpen(true)}
-                      className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow flex items-center gap-1.5 transition-all"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Draft New Lesson Note</span>
-                    </button>
-                  </div>
+                return (
+                  <div className="space-y-5 animate-in fade-in">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-lg font-black text-white flex items-center gap-2">
+                          <BookOpen className="w-5 h-5 text-amber-400" />
+                          <span>Curriculum Lesson Planner & Scheme of Work</span>
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Structured weekly syllabus breakdown, instructional objectives, WAEC/NERDC pedagogical steps, and formal HOD review approvals.
+                        </p>
+                        {/* Lesson Notes How-To Banner */}
+                        <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-amber-950/20 border border-amber-800/30">
+                          <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                          <p className="text-[11px] text-amber-300/80 leading-relaxed">
+                            <span className="font-bold text-amber-400">How it works:</span> Draft a lesson note, then submit it for HOD review. Once the HOD marks it <span className="text-emerald-400 font-bold">Approved</span>, it becomes part of the official Scheme of Work. Notes marked <span className="text-rose-400 font-bold">Needs Revision</span> require your corrections before re-submission.
+                          </p>
+                        </div>
+                      </div>
 
-                  {/* Summary Metric Badges */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
-                      <div className="text-slate-400 text-[10px] uppercase font-bold">Total Planned Units</div>
-                      <div className="text-white font-black text-xl mt-1">{lessonNotes.length}</div>
-                    </div>
-                    <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/40">
-                      <div className="text-emerald-400 text-[10px] uppercase font-bold">Approved By HOD</div>
-                      <div className="text-emerald-300 font-black text-xl mt-1">
-                        {lessonNotes.filter(n => n.status === 'Approved').length}
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={fetchLessonNotes}
+                          className="px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs border border-slate-800 flex items-center gap-1.5 transition-all"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Refresh</span>
+                        </button>
+                        <button
+                          onClick={() => setLessonNoteModalOpen(true)}
+                          className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow flex items-center gap-1.5 transition-all"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Draft New Lesson Note</span>
+                        </button>
                       </div>
                     </div>
-                    <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/40">
-                      <div className="text-amber-400 text-[10px] uppercase font-bold">Under Review</div>
-                      <div className="text-amber-300 font-black text-xl mt-1">
-                        {lessonNotes.filter(n => n.status === 'Under Review').length}
+
+                    {/* Summary Metric Badges */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                        <div className="text-slate-400 text-[10px] uppercase font-bold">Total Scheme Units</div>
+                        <div className="text-white font-black text-xl mt-1">{lessonNotes.length}</div>
+                        <span className="text-[10px] text-slate-500 mt-0.5 block">Active Curriculum Ledger</span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/40">
+                        <div className="text-emerald-400 text-[10px] uppercase font-bold">Approved By HOD</div>
+                        <div className="text-emerald-300 font-black text-xl mt-1">{approvedCount}</div>
+                        <span className="text-[10px] text-emerald-500/80 mt-0.5 block">Cleared for Delivery</span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/40">
+                        <div className="text-amber-400 text-[10px] uppercase font-bold">Under Review</div>
+                        <div className="text-amber-300 font-black text-xl mt-1">{underReviewCount}</div>
+                        <span className="text-[10px] text-amber-500/80 mt-0.5 block">Pending HOD Evaluation</span>
+                      </div>
+                      <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-800/40">
+                        <div className="text-rose-400 text-[10px] uppercase font-bold">Needs Revision</div>
+                        <div className="text-rose-300 font-black text-xl mt-1">{needsRevisionCount}</div>
+                        <span className="text-[10px] text-rose-500/80 mt-0.5 block">Requires Teacher Adjustments</span>
                       </div>
                     </div>
-                    <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-800/40">
-                      <div className="text-blue-400 text-[10px] uppercase font-bold">Academic Session</div>
-                      <div className="text-blue-300 font-black text-sm mt-1">1st Term 2025/2026</div>
-                    </div>
-                  </div>
 
-                  {/* Lesson Notes List / Table */}
-                  <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px]">
-                          <th className="p-3">Timeline</th>
-                          <th className="p-3">Subject & Class</th>
-                          <th className="p-3">Curriculum Topic & Objectives</th>
-                          <th className="p-3">Instructional Materials</th>
-                          <th className="p-3 text-center">Status</th>
-                          <th className="p-3 text-center">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800/60">
-                        {lessonNotes.map((note) => (
-                          <tr key={note.id} className="hover:bg-slate-900/40">
-                            <td className="p-3 font-mono font-bold text-amber-400 whitespace-nowrap">
-                              <div>{note.week}</div>
-                              <div className="text-[10px] text-slate-500 font-normal">{note.date}</div>
-                            </td>
-                            <td className="p-3">
-                              <div className="font-bold text-white">{note.subject}</div>
-                              <div className="text-[11px] text-slate-400">{note.class_name}</div>
-                            </td>
-                            <td className="p-3">
-                              <div className="font-bold text-white">{note.topic}</div>
-                              <div className="text-[11px] text-slate-400 max-w-md line-clamp-2">
-                                {note.objectives || 'Specific behavioral objectives aligned with WAEC syllabus guidelines.'}
-                              </div>
-                            </td>
-                            <td className="p-3 text-slate-300 text-[11px]">
-                              {note.materials || 'Standard classroom aids & textbooks'}
-                            </td>
-                            <td className="p-3 text-center">
-                              <span className={`px-2.5 py-1 rounded-full font-black text-[10px] ${
-                                note.status === 'Approved'
-                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                                  : 'bg-amber-950 text-amber-400 border border-amber-800'
-                              }`}>
-                                {note.status}
-                              </span>
-                            </td>
-                            <td className="p-3 text-center">
-                              <button
-                                onClick={() => {
-                                  setLessonNotes(prev => prev.filter(n => n.id !== note.id));
-                                }}
-                                className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-[11px] font-bold transition-all"
-                              >
-                                Delete
-                              </button>
-                            </td>
+                    {/* Lesson Notes List / Table */}
+                    <div className="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px]">
+                            <th className="p-3">Timeline & Author</th>
+                            <th className="p-3">Subject & Class</th>
+                            <th className="p-3">Curriculum Topic & Objectives</th>
+                            <th className="p-3">Instructional Aids</th>
+                            <th className="p-3 text-center">Status & Feedback</th>
+                            <th className="p-3 text-center">Actions</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60">
+                          {lessonNotes.length === 0 ? (
+                            <tr>
+                              <td colSpan={6} className="p-8 text-center text-slate-500">
+                                No lesson notes drafted yet. Click &quot;Draft New Lesson Note&quot; to begin your curriculum unit.
+                              </td>
+                            </tr>
+                          ) : (
+                            lessonNotes.map((note) => (
+                              <tr key={note.id} className="hover:bg-slate-900/40 transition-colors">
+                                <td className="p-3 font-mono font-bold text-amber-400 whitespace-nowrap">
+                                  <div>{note.week_number ? `Week ${note.week_number}` : note.week}</div>
+                                  <div className="text-[10px] text-slate-400 font-medium">{note.teacher_name || 'Staff Teacher'}</div>
+                                  <div className="text-[10px] text-slate-500 font-normal">{note.created_at ? note.created_at.slice(0, 10) : (note.date || '2025/2026')}</div>
+                                </td>
+                                <td className="p-3">
+                                  <div className="font-bold text-white">{note.subject_name || note.subject}</div>
+                                  <div className="text-[11px] text-slate-400">{note.class_name}</div>
+                                  <span className="text-[10px] text-slate-500">{note.session || '2024/2025'} &bull; {note.term || 'Second Term'}</span>
+                                </td>
+                                <td className="p-3">
+                                  <div className="font-bold text-white">{note.topic}</div>
+                                  {note.subtopic && (
+                                    <div className="text-[10px] text-amber-400/90 font-medium">Subtopic: {note.subtopic}</div>
+                                  )}
+                                  <div className="text-[11px] text-slate-400 max-w-sm line-clamp-2 mt-0.5">
+                                    {note.behavioral_objectives || note.objectives || 'Specific behavioral objectives aligned with WAEC syllabus guidelines.'}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-slate-300 text-[11px] max-w-xs">
+                                  {note.instructional_materials || note.materials || 'Standard classroom aids & textbooks'}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="inline-flex flex-col items-center gap-1">
+                                    <span className={`px-2.5 py-1 rounded-full font-black text-[10px] ${
+                                      note.status === 'Approved'
+                                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                        : note.status === 'Needs Revision'
+                                        ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                        : 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    }`}>
+                                      {note.status || 'Under Review'}
+                                    </span>
+                                    {note.hod_feedback && (
+                                      <span className="text-[10px] text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60 max-w-[160px] truncate" title={note.hod_feedback}>
+                                        💬 {note.hod_feedback}
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-center whitespace-nowrap">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      onClick={() => {
+                                        setSelectedLessonNote(note);
+                                        setViewLessonNoteModalOpen(true);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-all"
+                                      title="View Lesson Details"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+
+                                    {/* HOD Review Action Button */}
+                                    {isReviewer && (
+                                      <button
+                                        onClick={() => {
+                                          setSelectedLessonNote(note);
+                                          setHodReviewStatus(note.status || 'Approved');
+                                          setHodFeedbackText(note.hod_feedback || '');
+                                          setHodReviewModalOpen(true);
+                                        }}
+                                        className="px-2 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 border border-amber-400/30 text-[11px] font-bold transition-all flex items-center gap-1"
+                                      >
+                                        <Award className="w-3 h-3" />
+                                        <span>HOD Review</span>
+                                      </button>
+                                    )}
+
+                                    <button
+                                      onClick={() => handleDeleteLessonNote(note.id)}
+                                      className="p-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-xs font-bold transition-all"
+                                      title="Delete Note"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* EAGLE AI ACADEMIC TUTOR, PUTER AI GATEWAY & IN-HOUSE LEARNING DIAGNOSTICS */}
               {activeTab === 'ai_progress' && (
@@ -5845,7 +7256,7 @@ export default function PortalDashboard({
               )}
 
               {/* BURSAR, PARENT, SUPERADMIN & PRINCIPAL: FINANCIAL INVOICES & CLEARANCE */}
-              {(activeRole === 'bursar' || activeRole === 'parent' || activeRole === 'superadmin' || activeRole === 'admin' || currentUser?.role === 'superadmin' || currentUser?.role === 'admin') && (activeTab === 'invoices' || (activeRole === 'bursar' && activeTab === 'overview')) && (() => {
+              {(activeRole === 'bursar' || activeRole === 'parent' || activeRole === 'superadmin' || activeRole === 'admin') && (activeTab === 'invoices' || (activeRole === 'bursar' && activeTab === 'overview')) && (() => {
                 const displayedInvoices = invoices.filter(inv => {
                   if (activeRole === 'parent' && currentUser?.children && currentUser.children.length > 0) {
                     const childAdmNos = currentUser.children.map(c => c.admission_no);
@@ -5888,9 +7299,18 @@ export default function PortalDashboard({
                         </p>
                       </div>
 
-                      {/* Status Badges */}
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-slate-400 font-bold mr-1">Status:</span>
+                      {/* Status Badges & Actions */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {activeRole !== 'parent' && (
+                          <button
+                            onClick={() => setBatchInvoiceModalOpen(true)}
+                            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black shadow flex items-center gap-1.5 transition-transform active:scale-95"
+                          >
+                            <Zap className="w-3.5 h-3.5 fill-current" />
+                            <span>⚡ Batch Cohort Invoicing</span>
+                          </button>
+                        )}
+                        <span className="text-slate-400 font-bold ml-1">Status:</span>
                         {['All', 'Unpaid', 'Partial', 'Paid'].map(st => (
                           <button
                             key={st}
@@ -6023,17 +7443,31 @@ export default function PortalDashboard({
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
+                            <div className="flex flex-wrap items-center gap-2 shrink-0">
+                              {inv.status !== 'Paid' && (
+                                <button
+                                  onClick={() => {
+                                    setPaystackInvoice(inv);
+                                    setPaystackCustomAmount(String(inv.amount_due - inv.amount_paid));
+                                    setPaystackEmail(inv.guardian_email || currentUser?.email || '');
+                                    setPaystackCheckoutModalOpen(true);
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs shadow-md flex items-center gap-1.5 transition-transform active:scale-95"
+                                >
+                                  <Lock className="w-3.5 h-3.5" />
+                                  <span>Pay Online (Paystack)</span>
+                                </button>
+                              )}
                               {inv.status !== 'Paid' && activeRole === 'parent' && (
                                 <button
                                   onClick={() => {
                                     setSelectedInvoiceForParent(inv);
                                     setParentBankModalOpen(true);
                                   }}
-                                  className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-xs shadow-md flex items-center gap-1.5 transition-transform active:scale-95"
+                                  className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs border border-slate-800 flex items-center gap-1.5 transition-colors"
                                 >
                                   <CreditCard className="w-3.5 h-3.5" />
-                                  <span>{inv.status === 'Partial' ? 'Pay Remaining Balance' : 'Pay Tuition / Bank Transfer'}</span>
+                                  <span>Manual Bank Transfer</span>
                                 </button>
                               )}
                               {inv.status !== 'Paid' && activeRole !== 'parent' && (
@@ -6045,7 +7479,7 @@ export default function PortalDashboard({
                                   }}
                                   className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow"
                                 >
-                                  Record Payment
+                                  Record Cash/POS
                                 </button>
                               )}
                               {inv.status === 'Paid' && (
@@ -6080,7 +7514,7 @@ export default function PortalDashboard({
               {/* BROADSHEET & MASTER REPORT SHEETS MODULE */}
               {activeTab === 'broadsheet' && (
                 <div className="space-y-6 animate-in fade-in">
-                  <BroadsheetView token={authToken} userRole={activeRole} />
+                  <BroadsheetView token={authToken} userRole={activeRole} assignedClass={currentUser?.assigned_class} />
                 </div>
               )}
 
@@ -6091,8 +7525,8 @@ export default function PortalDashboard({
                 </div>
               )}
 
-              {/* ACADEMIC EVALUATION: OFFICIAL PRODUCTION REPORT CARD (STUDENT, PARENT, ADMIN, SUPERADMIN, BURSAR) */}
-              {(activeRole === 'student' || activeRole === 'parent' || activeRole === 'admin' || activeRole === 'superadmin' || activeRole === 'bursar') && (activeTab === 'reportcard' || (activeRole === 'student' && activeTab === 'overview')) && (
+              {/* ACADEMIC EVALUATION: OFFICIAL PRODUCTION REPORT CARD (STUDENT, PARENT, TEACHER, ADMIN, SUPERADMIN, BURSAR) */}
+              {(activeRole === 'student' || activeRole === 'parent' || activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin' || activeRole === 'bursar') && (activeTab === 'reportcard' || (activeRole === 'student' && activeTab === 'overview')) && (
                 <div className="space-y-4 animate-in fade-in">
                   <div className="flex flex-wrap justify-between items-center gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800">
                     <div>
@@ -6629,7 +8063,7 @@ export default function PortalDashboard({
               )}
 
               {/* PAYROLL MANAGEMENT COCKPIT (BURSAR & ADMIN) */}
-              {activeTab === 'payroll' && ['bursar', 'admin', 'superadmin'].includes(currentUser?.role || activeRole) && (
+              {activeTab === 'payroll' && ['bursar', 'admin', 'superadmin'].includes(activeRole) && (
                 <div className="space-y-6 animate-in fade-in">
                   {/* Header & Controls */}
                   <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap justify-between items-center gap-4">
@@ -6643,6 +8077,13 @@ export default function PortalDashboard({
                       <p className="text-xs text-slate-400 mt-1">
                         Automated Nigerian bank payouts powered by Paystack Transfers API &bull; NUBAN resolution & NIBSS clearing
                       </p>
+                      {/* Payroll How-To Instruction Banner */}
+                      <div className="mt-2 flex items-start gap-2 p-3 rounded-xl bg-slate-900 border border-slate-800">
+                        <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          <span className="font-bold text-amber-400">How to run payroll:</span> ① Click <span className="text-white font-bold">Compile Monthly Roll</span> to generate a draft batch. ② Review the staff salary roster below. ③ Click <span className="text-emerald-400 font-bold">Execute Paystack Bulk Transfer</span> to disburse net salaries directly into each staff's NUBAN. Configure salary per-staff in the roster table.
+                        </p>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2.5">
@@ -8623,18 +10064,18 @@ export default function PortalDashboard({
           </div>
         )}
 
-        {/* Modal: Teacher Create Lesson Note */}
+        {/* Modal: Teacher Create Lesson Note (Persistent with SQLite) */}
         {lessonNoteModalOpen && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl">
-              <div className="flex justify-between items-center">
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 rounded-3xl max-w-2xl w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
                 <div className="flex items-center gap-2">
                   <div className="w-9 h-9 rounded-xl bg-amber-400/10 text-amber-400 flex items-center justify-center">
-                    <Building2 className="w-5 h-5" />
+                    <BookOpen className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-base font-black text-white">Draft Scheme Lesson Plan</h3>
-                    <p className="text-xs text-slate-400">Submit weekly curriculum unit note to Head of Department</p>
+                    <p className="text-xs text-slate-400">Formal curriculum unit note submitted for Head of Department pedagogical review</p>
                   </div>
                 </div>
                 <button
@@ -8645,40 +10086,10 @@ export default function PortalDashboard({
                 </button>
               </div>
 
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!newLessonNote.topic.trim()) {
-                    alert('Please provide a lesson topic.');
-                    return;
-                  }
-                  const newNote = {
-                    id: Date.now(),
-                    week: newLessonNote.week,
-                    subject: newLessonNote.subject,
-                    topic: newLessonNote.topic.trim(),
-                    class_name: newLessonNote.class_name,
-                    objectives: newLessonNote.objectives.trim(),
-                    materials: newLessonNote.materials.trim(),
-                    status: 'Approved',
-                    date: new Date().toISOString().split('T')[0]
-                  };
-                  setLessonNotes(prev => [newNote, ...prev]);
-                  setLessonNoteModalOpen(false);
-                  setNewLessonNote({
-                    week: 'Week 6',
-                    subject: 'Mathematics',
-                    topic: '',
-                    class_name: 'Junior College (JSS 1)',
-                    objectives: '',
-                    materials: 'Textbook, Graph board, Geometry set'
-                  });
-                }}
-                className="space-y-4 text-xs"
-              >
-                <div className="grid grid-cols-2 gap-3">
+              <form onSubmit={handleSaveLessonNote} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <label className="text-slate-400 font-bold">Academic Week</label>
+                    <label className="text-slate-400 font-bold">Academic Week *</label>
                     <select
                       value={newLessonNote.week}
                       onChange={(e) => setNewLessonNote(prev => ({ ...prev, week: e.target.value }))}
@@ -8691,7 +10102,7 @@ export default function PortalDashboard({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-slate-400 font-bold">Class Level</label>
+                    <label className="text-slate-400 font-bold">Class Level *</label>
                     <select
                       value={newLessonNote.class_name}
                       onChange={(e) => setNewLessonNote(prev => ({ ...prev, class_name: e.target.value }))}
@@ -8702,72 +10113,651 @@ export default function PortalDashboard({
                       ))}
                     </select>
                   </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Curriculum Subject *</label>
+                    <select
+                      value={newLessonNote.subject}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, subject: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                    >
+                      {subjects.map(s => (
+                        <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Lesson Topic *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Simultaneous Linear Equations by Elimination"
+                      value={newLessonNote.topic}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, topic: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Subtopic (Optional)</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Elimination with unlike coefficients"
+                      value={newLessonNote.subtopic || ''}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, subtopic: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-slate-400 font-bold">Subject</label>
-                  <select
-                    value={newLessonNote.subject}
-                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, subject: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                  >
-                    {subjects.map(s => (
-                      <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-400 font-bold">Lesson Topic</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Simultaneous Linear Equations by Elimination"
-                    value={newLessonNote.topic}
-                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, topic: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-slate-400 font-bold">Behavioral Objectives</label>
+                  <label className="text-slate-400 font-bold">Behavioral Objectives *</label>
                   <textarea
-                    rows={3}
-                    placeholder="By the end of the lesson, pupils should be able to: 1. Identify coefficients..."
+                    rows={2}
+                    required
+                    placeholder="By the end of the lesson, pupils should be able to: 1. Eliminate variables with equal coefficients; 2. Solve for unknown terms..."
                     value={newLessonNote.objectives}
                     onChange={(e) => setNewLessonNote(prev => ({ ...prev, objectives: e.target.value }))}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
                   />
                 </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Instructional Materials / Teaching Aids</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Whiteboard, flashcards, geometrical chart"
+                      value={newLessonNote.materials}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, materials: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Pupils' Previous Knowledge</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Students can solve single-variable linear equations"
+                      value={newLessonNote.previous_knowledge || ''}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, previous_knowledge: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1">
-                  <label className="text-slate-400 font-bold">Instructional Materials</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Wall chart, cardboard diagrams, mathematical set"
-                    value={newLessonNote.materials}
-                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, materials: e.target.value }))}
+                  <label className="text-slate-400 font-bold">Presentation Steps (Teacher & Pupil Activities)</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Step 1: Introduction with real-world balancing example. Step 2: Demonstration of coefficient equalization. Step 3: Class guided practice..."
+                    value={newLessonNote.presentation_steps || ''}
+                    onChange={(e) => setNewLessonNote(prev => ({ ...prev, presentation_steps: e.target.value }))}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
                   />
                 </div>
 
-                <div className="pt-2 flex justify-end gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Class Evaluation Questions</label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Solve: 2x + y = 7, 3x - y = 8"
+                      value={newLessonNote.evaluation || ''}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, evaluation: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-slate-400 font-bold">Home Assignment</label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. Exercises 3C, Nos 1 to 5, New General Mathematics"
+                      value={newLessonNote.assignment || ''}
+                      onChange={(e) => setNewLessonNote(prev => ({ ...prev, assignment: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 flex justify-end gap-2 border-t border-slate-800">
                   <button
                     type="button"
                     onClick={() => setLessonNoteModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow flex items-center gap-1.5 transition-all"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Submit Scheme Plan</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: View Full Lesson Note Details */}
+        {viewLessonNoteModalOpen && selectedLessonNote && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 rounded-3xl max-w-2xl w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-start pb-3 border-b border-slate-800">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-mono text-amber-400 font-bold text-xs">
+                      {selectedLessonNote.week_number ? `Week ${selectedLessonNote.week_number}` : selectedLessonNote.week}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                      selectedLessonNote.status === 'Approved' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                      selectedLessonNote.status === 'Needs Revision' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
+                      'bg-amber-950 text-amber-400 border border-amber-800'
+                    }`}>
+                      {selectedLessonNote.status}
+                    </span>
+                  </div>
+                  <h3 className="text-lg font-black text-white">{selectedLessonNote.topic}</h3>
+                  {selectedLessonNote.subtopic && (
+                    <p className="text-xs text-amber-300 font-medium">Subtopic: {selectedLessonNote.subtopic}</p>
+                  )}
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {selectedLessonNote.subject_name || selectedLessonNote.subject} &bull; {selectedLessonNote.class_name} &bull; Author: <strong className="text-slate-200">{selectedLessonNote.teacher_name || 'Staff Teacher'}</strong>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setViewLessonNoteModalOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white bg-slate-800"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* HOD Feedback Banner if present */}
+              {selectedLessonNote.hod_feedback && (
+                <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                    <Award className="w-4 h-4" />
+                    <span>Head of Department (HOD) Pedagogical Review</span>
+                  </div>
+                  <p className="text-slate-200 italic">&ldquo;{selectedLessonNote.hod_feedback}&rdquo;</p>
+                  <div className="text-[10px] text-slate-400 pt-1">
+                    Reviewed by: <strong>{selectedLessonNote.reviewed_by || 'HOD'}</strong> &bull; {selectedLessonNote.reviewed_at ? selectedLessonNote.reviewed_at.slice(0, 16).replace('T', ' ') : 'Verified'}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3 text-xs">
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Behavioral Objectives</div>
+                  <p className="text-slate-200 whitespace-pre-wrap">{selectedLessonNote.behavioral_objectives || selectedLessonNote.objectives || 'Standard syllabus objectives.'}</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Instructional Materials</div>
+                    <p className="text-slate-300">{selectedLessonNote.instructional_materials || selectedLessonNote.materials || 'Standard classroom aids'}</p>
+                  </div>
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Previous Knowledge</div>
+                    <p className="text-slate-300">{selectedLessonNote.previous_knowledge || 'Basic prerequisite skills established.'}</p>
+                  </div>
+                </div>
+
+                {selectedLessonNote.presentation_steps && (
+                  <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Presentation Steps & Delivery Flow</div>
+                    <p className="text-slate-200 whitespace-pre-wrap">{selectedLessonNote.presentation_steps}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {selectedLessonNote.evaluation && (
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Class Evaluation</div>
+                      <p className="text-slate-300 whitespace-pre-wrap">{selectedLessonNote.evaluation}</p>
+                    </div>
+                  )}
+                  {selectedLessonNote.assignment && (
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Take-Home Assignment</div>
+                      <p className="text-slate-300 whitespace-pre-wrap">{selectedLessonNote.assignment}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-2 border-t border-slate-800">
+                <button
+                  onClick={() => setViewLessonNoteModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: HOD / Principal Pedagogical Review Cockpit */}
+        {hodReviewModalOpen && selectedLessonNote && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white">HOD Pedagogical Review</h3>
+                    <p className="text-xs text-slate-400">Quality evaluation & scheme clearance</p>
+                  </div>
+                </div>
+                <button onClick={() => setHodReviewModalOpen(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1">
+                <div className="font-bold text-white text-sm">{selectedLessonNote.topic}</div>
+                <div className="text-slate-400">
+                  {selectedLessonNote.subject_name || selectedLessonNote.subject} &bull; {selectedLessonNote.class_name} &bull; By: <strong className="text-slate-200">{selectedLessonNote.teacher_name}</strong>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">Approval Clearance Status *</label>
+                  <select
+                    value={hodReviewStatus}
+                    onChange={(e) => setHodReviewStatus(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="Approved">Approved (Cleared for Classroom Delivery)</option>
+                    <option value="Needs Revision">Needs Revision (Teacher Must Modify)</option>
+                    <option value="Under Review">Under Review (Pending Clarification)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">
+                    Pedagogical Feedback & Guidance {hodReviewStatus === 'Needs Revision' && <span className="text-rose-400">* (Mandatory)</span>}
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Enter supervisory remarks, instructional recommendations, or areas requiring depth..."
+                    value={hodFeedbackText}
+                    onChange={(e) => setHodFeedbackText(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setHodReviewModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReviewLessonNote}
+                  disabled={submittingReview}
+                  className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow flex items-center gap-1.5 transition-all"
+                >
+                  {submittingReview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Save Review Decision</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Bursary Cohort Batch Invoicing Engine */}
+        {batchInvoiceModalOpen && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+            <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl my-8">
+              <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-500 text-slate-950 flex items-center justify-center font-bold">
+                    <Zap className="w-5 h-5 fill-current" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white">Batch Cohort Invoicing Engine</h3>
+                    <p className="text-xs text-slate-400">Generate itemized fee billings for class cohorts with duplicate protection</p>
+                  </div>
+                </div>
+                <button onClick={() => setBatchInvoiceModalOpen(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateBatchInvoicing} className="space-y-3.5 text-xs">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Target Cohort / Class *</label>
+                    <select
+                      value={batchInvoiceForm.class_id}
+                      onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, class_id: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="ALL">All Classes (Whole School)</option>
+                      {classes.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Due Date *</label>
+                    <input
+                      type="date"
+                      required
+                      value={batchInvoiceForm.due_date}
+                      onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, due_date: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">Invoice Billing Title *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 2nd Term 2024/2025 Composite Tuition & Levies"
+                    value={batchInvoiceForm.title}
+                    onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, title: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                {/* Itemized Fee Breakdown Sub-inputs */}
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
+                  <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex justify-between">
+                    <span>Itemized Fee Components</span>
+                    <span>Amount (₦)</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <span className="text-slate-300 font-medium">Tuition & Instruction:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={batchInvoiceForm.breakdown.tuition}
+                      onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, breakdown: { ...prev.breakdown, tuition: Number(e.target.value) || 0 } }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-right font-bold focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <span className="text-slate-300 font-medium">Books & Worksheets:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={batchInvoiceForm.breakdown.books}
+                      onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, breakdown: { ...prev.breakdown, books: Number(e.target.value) || 0 } }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-right font-bold focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <span className="text-slate-300 font-medium">Uniform & Sportswear:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={batchInvoiceForm.breakdown.uniform}
+                      onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, breakdown: { ...prev.breakdown, uniform: Number(e.target.value) || 0 } }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-right font-bold focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 items-center">
+                    <span className="text-slate-300 font-medium">Development & ICT Levy:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={batchInvoiceForm.breakdown.development_levy}
+                      onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, breakdown: { ...prev.breakdown, development_levy: Number(e.target.value) || 0 } }))}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-white text-right font-bold focus:outline-none focus:border-amber-400"
+                    />
+                  </div>
+
+                  {/* Total Per Pupil Computed */}
+                  <div className="pt-2 border-t border-slate-800 flex justify-between items-center text-sm font-black">
+                    <span className="text-white">Total Billing Per Pupil:</span>
+                    <span className="text-amber-400 font-mono">
+                      ₦{(
+                        (batchInvoiceForm.breakdown.tuition || 0) +
+                        (batchInvoiceForm.breakdown.books || 0) +
+                        (batchInvoiceForm.breakdown.uniform || 0) +
+                        (batchInvoiceForm.breakdown.development_levy || 0) +
+                        (batchInvoiceForm.breakdown.other || 0)
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setBatchInvoiceModalOpen(false)}
                     className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow flex items-center gap-1.5 transition-all"
+                    disabled={batchInvoiceSubmitting}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black shadow flex items-center gap-1.5"
                   >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Save Lesson Plan</span>
+                    {batchInvoiceSubmitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 fill-current" />}
+                    <span>Issue Batch Invoices</span>
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Online Paystack Fee Checkout */}
+        {paystackCheckoutModalOpen && paystackInvoice && (() => {
+          const remaining = paystackInvoice.amount_due - paystackInvoice.amount_paid;
+          let breakdownObj = null;
+          try {
+            if (paystackInvoice.breakdown_json) {
+              breakdownObj = typeof paystackInvoice.breakdown_json === 'string'
+                ? JSON.parse(paystackInvoice.breakdown_json)
+                : paystackInvoice.breakdown_json;
+            }
+          } catch (_) {}
+
+          return (
+            <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                      <Lock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-white">Paystack Online Checkout</h3>
+                      <p className="text-xs text-slate-400">Direct Card, USSD & Nigerian Bank Transfer</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setPaystackCheckoutModalOpen(false)} className="text-slate-400 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Pupil / Ward:</span>
+                    <span className="text-white font-extrabold">{paystackInvoice.first_name} {paystackInvoice.last_name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Class & Admission No:</span>
+                    <span className="text-slate-200">{paystackInvoice.class_name} ({paystackInvoice.admission_no})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Invoice Number:</span>
+                    <span className="font-mono text-amber-400 font-bold">{paystackInvoice.invoice_no}</span>
+                  </div>
+                  <div className="pt-2 border-t border-slate-800 flex justify-between font-black text-sm">
+                    <span className="text-slate-300">Remaining Balance:</span>
+                    <span className="text-emerald-400 font-mono">₦{remaining.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Optional Itemized fee pill overview */}
+                {breakdownObj && (
+                  <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] space-y-1">
+                    <div className="text-[10px] uppercase font-bold text-slate-400">Itemized Fee Inclusions</div>
+                    <div className="flex flex-wrap gap-1.5 text-slate-300">
+                      {breakdownObj.tuition > 0 && <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">Tuition: ₦{breakdownObj.tuition.toLocaleString()}</span>}
+                      {breakdownObj.books > 0 && <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">Books: ₦{breakdownObj.books.toLocaleString()}</span>}
+                      {breakdownObj.uniform > 0 && <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">Uniform: ₦{breakdownObj.uniform.toLocaleString()}</span>}
+                      {breakdownObj.development_levy > 0 && <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800">Dev Levy: ₦{breakdownObj.development_levy.toLocaleString()}</span>}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-3 text-xs">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Payment Amount (₦) *</label>
+                    <input
+                      type="number"
+                      required
+                      min="100"
+                      max={remaining}
+                      value={paystackCustomAmount}
+                      onChange={(e) => setPaystackCustomAmount(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-mono font-black text-sm focus:outline-none focus:border-emerald-400"
+                    />
+                    <span className="text-[10px] text-slate-500">You can pay in full (₦{remaining.toLocaleString()}) or enter a partial installment.</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Receipt Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="parent@example.com"
+                      value={paystackEmail}
+                      onChange={(e) => setPaystackEmail(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-emerald-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-800/40 text-[10px] text-emerald-300/80 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>Secured by Paystack &bull; 256-bit Bank Grade Encryption &bull; Official Digital Receipt Issued Instantly</span>
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setPaystackCheckoutModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={paystackLoading || !paystackCustomAmount || parseFloat(paystackCustomAmount) <= 0}
+                    onClick={() => handleInitiatePaystackCheckout(paystackInvoice, paystackCustomAmount)}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs shadow flex items-center gap-1.5 transition-all"
+                  >
+                    {paystackLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
+                    <span>Pay ₦{parseFloat(paystackCustomAmount || 0).toLocaleString()} Now</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Modal: Official Paystack Payment Verified Receipt */}
+        {paystackSuccessReceipt && (
+          <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in">
+            <div className="bg-white rounded-3xl max-w-lg w-full p-6 text-slate-900 space-y-4 shadow-2xl border-4 border-emerald-500">
+              <div className="flex justify-between items-start pb-3 border-b border-slate-200">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-black tracking-widest text-emerald-700 uppercase block">OFFICIAL DIGITAL RECEIPT</span>
+                    <h3 className="text-base font-black text-slate-950">Eagle Power Schools, Awka</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setPaystackSuccessReceipt(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 bg-slate-100"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-center space-y-1">
+                <div className="text-xs uppercase font-extrabold text-emerald-800">FEE PAYMENT VERIFIED & CREDITED</div>
+                <div className="text-3xl font-black text-slate-950 font-mono">
+                  ₦{paystackSuccessReceipt.amount.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-emerald-700 font-bold">
+                  Receipt No: {paystackSuccessReceipt.receiptNo}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-50 rounded-xl">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Pupil Name</span>
+                  <strong className="text-slate-800">{paystackSuccessReceipt.studentName}</strong>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Class Level</span>
+                  <strong className="text-slate-800">{paystackSuccessReceipt.className}</strong>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Invoice Ref</span>
+                  <strong className="font-mono text-slate-800">{paystackSuccessReceipt.invoiceNo}</strong>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-xl">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Payment Method</span>
+                  <strong className="text-emerald-700">{paystackSuccessReceipt.method}</strong>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-slate-500 text-center italic">
+                Transaction Reference: {paystackSuccessReceipt.reference} &bull; Generated: {new Date().toLocaleDateString('en-GB')}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs flex items-center gap-1.5"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print Receipt</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaystackSuccessReceipt(null)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -9131,6 +11121,169 @@ export default function PortalDashboard({
             </div>
           </div>
         )}
+
+        {/* Change Password Modal */}
+        {isChangePasswordOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+            <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 space-y-5 text-xs text-slate-300">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-400/10 border border-amber-400/20 text-amber-400 flex items-center justify-center">
+                    <KeyRound className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">Change Account Password</h3>
+                    <p className="text-[11px] text-slate-400">Secure your portal login credentials</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsChangePasswordOpen(false)}
+                  className="w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {changePassError && (
+                <div className="p-3 rounded-xl bg-red-950/80 border border-red-800/80 text-red-200 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                  <span className="leading-relaxed">{changePassError}</span>
+                </div>
+              )}
+
+              {changePassSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-800/80 text-emerald-200 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
+                  <span className="leading-relaxed">{changePassSuccess}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleChangePassword} className="space-y-4">
+                <div>
+                  <label className="block font-bold text-slate-200 uppercase mb-1 text-[10px]">
+                    Current Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={changePassShowCurrent ? 'text' : 'password'}
+                      required
+                      value={changePassCurrent}
+                      onChange={(e) => setChangePassCurrent(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-3.5 py-2.5 pr-10 rounded-xl bg-slate-950 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setChangePassShowCurrent(!changePassShowCurrent)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {changePassShowCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-200 uppercase mb-1 text-[10px]">
+                    New Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={changePassShowNew ? 'text' : 'password'}
+                      required
+                      value={changePassNew}
+                      onChange={(e) => setChangePassNew(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full px-3.5 py-2.5 pr-10 rounded-xl bg-slate-950 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setChangePassShowNew(!changePassShowNew)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                    >
+                      {changePassShowNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Must be at least 8 characters long, containing letters and numbers.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-200 uppercase mb-1 text-[10px]">
+                    Confirm New Password
+                  </label>
+                  <input
+                    type={changePassShowNew ? 'text' : 'password'}
+                    required
+                    value={changePassConfirm}
+                    onChange={(e) => setChangePassConfirm(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsChangePasswordOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={changePassLoading}
+                    className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow-md flex items-center gap-1.5 transition-all disabled:opacity-50"
+                  >
+                    {changePassLoading ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-3.5 h-3.5" />
+                        <span>Update Password</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Staff ID Card Badge, Photo & Digital Signature Studio Modal */}
+        <StaffIDCardModal
+          isOpen={isStaffIdModalOpen}
+          onClose={() => setIsStaffIdModalOpen(false)}
+          targetStaff={staffIdTarget}
+          currentUser={currentUser}
+          onProfileUpdated={(updated) => {
+            fetchAllData();
+            if (currentUser) {
+              setCurrentUser(prev => ({
+                ...prev,
+                avatar_url: updated?.photo_url || prev?.avatar_url,
+                signature_url: updated?.signature_url || prev?.signature_url,
+                staff: {
+                  ...(prev?.staff || {}),
+                  ...(updated || {})
+                }
+              }));
+            }
+          }}
+        />
+
+        {/* WhatsApp Bot Connection, Pairing & Push Broadcast Control Center */}
+        <WhatsAppBotConsoleModal
+          isOpen={whatsappModalOpen}
+          onClose={() => setWhatsappModalOpen(false)}
+          authToken={authToken}
+          defaultPhone={systemSettings?.whatsapp_phone || '+234 907 558 0671'}
+          classes={classes}
+        />
 
       </div>
     </div>

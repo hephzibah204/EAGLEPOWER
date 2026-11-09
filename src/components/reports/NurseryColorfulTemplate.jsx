@@ -132,7 +132,7 @@ export const NurseryColorfulTemplate = ({ data }) => {
         </div>
         <div>
           <div className="h-8 border-b-2 border-amber-300 flex items-center justify-center font-serif italic text-sm text-amber-900 font-bold">
-            {school.principal || 'Dr. (Mrs) N. Okoye'}
+            {school.principal || 'Revd Nnamdi Nathaniel'}
           </div>
           <span className="text-[9px] font-black uppercase text-gray-500">School Head</span>
         </div>

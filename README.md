@@ -1,5 +1,16 @@
 # Eagle Power Schools — Official Website Redesign 🦅
 
+> **Production audit, 17 October 2026:** release is blocked pending the items in
+> [DEPLOYMENT_AUDIT.md](DEPLOYMENT_AUDIT.md), [BACKEND_AUDIT.md](BACKEND_AUDIT.md),
+> and [frontend audit](docs/AUDIT-FRONTEND.md). Historical demo credentials and
+> institutional database snapshots must not be used for a production deployment.
+> This project now builds a Next.js static export in `out/`; `npm start` serves it
+> with the Express API after installing dependencies in both the root and `server/`.
+> Pages deployments require `API_ORIGIN` pointing to the persistent HTTPS backend.
+> Database-to-frontend exports have been disabled to prevent disclosure of private records.
+> Portal sessions now survive refresh using HttpOnly cookies. Deploy the backend and frontend together;
+> see [cookie session configuration](docs/COOKIE-SESSIONS.md).
+
 > **Citadel of Academic & Moral Excellence**  
 > *Eagle Power School of Excellence & Eagle Power College of Excellence*  
 > Location: 2 & 9 Amikwo Road, Awka, Awka-South LGA, Anambra State, Nigeria  

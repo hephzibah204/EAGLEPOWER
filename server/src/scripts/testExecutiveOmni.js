@@ -64,7 +64,7 @@ async function runTests() {
     body: JSON.stringify({
       student_id: student.id,
       subject_id: subject.id,
-      session: '2024/2025',
+      session: '2026/2027',
       term: 'Second Term',
       ca1: 14,
       ca2: 15,

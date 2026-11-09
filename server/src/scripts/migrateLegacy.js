@@ -279,7 +279,7 @@ for (const student of allStudents) {
     insertMark.run(
       student.id,
       sub.id,
-      '2024/2025',
+      '2026/2027',
       'Second Term',
       ca,
       exam,
@@ -318,7 +318,7 @@ for (let i = 0; i < studentsForFees.length; i++) {
   const res = insertInvoice.run(
     invNo,
     std.id,
-    '2024/2025',
+    '2026/2027',
     'Second Term',
     'Term 2 Tuition & Development Levy',
     amountDue,
@@ -422,7 +422,7 @@ for (const cl of callsData) {
 
 // 11.4 Postal / Courier Dispatch & Receive
 const dispatchData = [
-  { dispatch_type: 'Received', reference_no: 'REC-2025-045', to_title: 'Office of the Principal', from_title: 'Anambra State Ministry of Education', document_title: '2024/2025 Academic Calendar Harmonization Circular', date: '2025-01-21', handled_by: 'Frontdesk Secretary' },
+  { dispatch_type: 'Received', reference_no: 'REC-2025-045', to_title: 'Office of the Principal', from_title: 'Anambra State Ministry of Education', document_title: '2026/2027 Academic Calendar Harmonization Circular', date: '2025-01-21', handled_by: 'Frontdesk Secretary' },
   { dispatch_type: 'Dispatched', reference_no: 'DIS-2025-018', to_title: 'National Examinations Council (NECO)', from_title: 'Eagle Power College of Excellence', document_title: 'Official BECE Candidate Continuous Assessment Dossier', date: '2025-01-23', handled_by: 'ICT & Records Officer' }
 ];
 

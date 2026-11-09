@@ -1,10 +1,12 @@
+import { canTeacherAccessClass } from './academicAccess.js';
 import jwt from 'jsonwebtoken';
 import db from '../config/db.js';
+import { readSessionCookie, requireSessionRequest } from './session.js';
 
 export const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? null : 'eaglepower_secure_jwt_token_secret_key_2025_amikwo');
 
 if (process.env.NODE_ENV === 'production') {
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET.includes('eaglepower_secure_jwt')) {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || /eaglepower_secure_jwt|replace_with|change[_-]?me|placeholder/i.test(process.env.JWT_SECRET)) {
     throw new Error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing, too short (< 32 characters), or using default development secret in production.');
   }
 }
@@ -13,22 +15,19 @@ if (process.env.NODE_ENV === 'production') {
  * Authentication Middleware: Verifies Bearer JWT token
  */
 export function authenticate(req, res, next) {
+  const cookieToken = readSessionCookie(req);
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required. No Bearer token provided.'
-    });
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const token = cookieToken || bearerToken;
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Authentication required.' });
   }
-
-  const token = authHeader.split(' ')[1];
-
   try {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
     
     // Check if user is still active in DB
-    const user = db.prepare('SELECT id, username, email, role, full_name, reference_id, is_active FROM users WHERE id = ?').get(decoded.id);
-    if (!user || !user.is_active) {
+    const user = db.prepare('SELECT id, username, email, role, full_name, reference_id, is_active, token_version FROM users WHERE id = ?').get(decoded.id);
+    if (!user || !user.is_active || (decoded.token_version || 0) !== user.token_version) {
       return res.status(401).json({
         success: false,
         message: 'User account is deactivated or no longer exists.'
@@ -36,6 +35,10 @@ export function authenticate(req, res, next) {
     }
 
     req.user = user;
+    req.sessionAuth = cookieToken ? 'cookie' : 'bearer';
+    if (cookieToken && !['GET', 'HEAD', 'OPTIONS'].includes(req.method || 'GET')) {
+      return requireSessionRequest(req, res, next);
+    }
     next();
   } catch (err) {
     return res.status(401).json({
@@ -87,7 +90,7 @@ export function requireStudentAccess(paramKey = 'id', lookupType = 'auto') {
     const { role, reference_id, username, email } = req.user;
 
     // 1. SuperAdmin, Admin, Bursar, and Faculty have institutional clearance
-    if (['superadmin', 'admin', 'bursar', 'teacher'].includes(role)) {
+    if (['superadmin', 'admin', 'bursar'].includes(role)) {
       return next();
     }
 
@@ -101,13 +104,19 @@ export function requireStudentAccess(paramKey = 'id', lookupType = 'auto') {
     let student = null;
     const isNumeric = /^\d+$/.test(String(targetValue).trim());
     if (lookupType === 'id' || (lookupType === 'auto' && isNumeric)) {
-      student = db.prepare('SELECT id, admission_no, guardian_phone, guardian_email FROM students WHERE id = ?').get(parseInt(targetValue));
+      student = db.prepare('SELECT id, admission_no, class_id, guardian_phone, guardian_email FROM students WHERE id = ?').get(parseInt(targetValue));
     } else {
-      student = db.prepare('SELECT id, admission_no, guardian_phone, guardian_email FROM students WHERE UPPER(admission_no) = UPPER(?)').get(String(targetValue).trim());
+      student = db.prepare('SELECT id, admission_no, class_id, guardian_phone, guardian_email FROM students WHERE UPPER(admission_no) = UPPER(?)').get(String(targetValue).trim());
     }
 
     if (!student) {
       return res.status(404).json({ success: false, message: 'Target student record was not found.' });
+    }
+
+    if (role === 'teacher') {
+      if (!canTeacherAccessClass(req.user, student.class_id)) return res.status(403).json({ success: false, message: 'This student is not in a class assigned to you.' });
+      req.targetStudent = student;
+      return next();
     }
 
     // 2. Student Self-Access Check
@@ -157,3 +166,4 @@ export function requireStudentAccess(paramKey = 'id', lookupType = 'auto') {
     });
   };
 }
+

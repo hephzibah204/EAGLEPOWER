@@ -5,19 +5,19 @@ import { AlQalamClassicTemplate } from './AlQalamClassicTemplate';
 import { ClassicProfessionalTemplate } from './ClassicProfessionalTemplate';
 import { PrimarySchoolTemplate } from './PrimarySchoolTemplate';
 import { NurseryColorfulTemplate } from './NurseryColorfulTemplate';
-import { Layout, CheckCircle, Sparkles, Check, RefreshCw } from 'lucide-react';
-import { getApiBase } from '../../config/api';
+import { Layout, CheckCircle, Sparkles, Check, RefreshCw, Info } from 'lucide-react';
+import { getApiBase, getSessionToken, apiFetch as fetch } from '../../config/api';
 
 const sampleData = {
   school: {
     name: "Eagle Power Schools",
     motto: "Love, Truth & Service",
-    principal: "Dr. (Mrs) N. Okoye",
+    principal: "Revd Nnamdi Nathaniel",
     address: "2 & 9 Amikwo Road, Awka, Awka-South LGA, Anambra State",
-    session: "2024/2025",
-    term: "Second Term",
+    session: "2026/2027",
+    term: "First Term",
     contact: "+234 803 542 8910",
-    email: "info@eaglepowerschools.sch.ng",
+    email: "info@eaglepowerschools.com.ng",
     logoUrl: "/assets/official-logo.jpg"
   },
   student: {
@@ -102,7 +102,7 @@ export const TemplateGallery = ({ selectedTemplate = 'ELITE', onSelectTemplate, 
     setIsActivating(true);
     setActivationStatus(null);
     try {
-      const token = authToken || (typeof window !== 'undefined' ? localStorage.getItem('eagle_token') : null);
+      const token = authToken || getSessionToken();
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
@@ -112,14 +112,14 @@ export const TemplateGallery = ({ selectedTemplate = 'ELITE', onSelectTemplate, 
         headers,
         body: JSON.stringify({
           template: activeTab,
-          session: '2024/2025',
+          session: '2026/2027',
           term: 'Second Term'
         })
       });
       const result = await res.json();
       if (res.ok && result.success) {
         const tplName = templates.find(t => t.id === activeTab)?.name || activeTab;
-        setActivationStatus({ type: 'success', message: `Template "${tplName}" successfully activated school-wide for 2024/2025 Second Term!` });
+        setActivationStatus({ type: 'success', message: `Template "${tplName}" successfully activated school-wide for 2026/2027 Second Term!` });
       } else {
         setActivationStatus({ type: 'error', message: result.message || 'Failed to activate template.' });
       }
@@ -160,18 +160,25 @@ export const TemplateGallery = ({ selectedTemplate = 'ELITE', onSelectTemplate, 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={handleActivateSchoolWide}
-              disabled={isActivating}
-              className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
-            >
-              {isActivating ? (
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              )}
-              <span>Activate School-Wide</span>
-            </button>
+            <div className="relative group inline-flex items-center">
+              <button
+                onClick={handleActivateSchoolWide}
+                disabled={isActivating}
+                className="px-4 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50"
+              >
+                {isActivating ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                )}
+                <span>Activate School-Wide</span>
+              </button>
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-200 w-72 shadow-xl z-50 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 leading-relaxed">
+                <span className="font-bold text-amber-400">School-Wide Activation:</span> Applies this template to <span className="font-bold text-white">all</span> student report cards school-wide. Individual students can still be previewed with any template, but print output uses the active template.
+                <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-slate-700" />
+              </div>
+            </div>
           </div>
         </div>
 

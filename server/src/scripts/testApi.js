@@ -1,4 +1,7 @@
-const BASE_URL = 'http://127.0.0.1:5050/api';
+if (process.env.ALLOW_MUTATING_TESTS !== 'true' || !process.env.API_URL) {
+  throw new Error('This suite changes school records. Start an isolated test database, then set ALLOW_MUTATING_TESTS=true and API_URL to its API.');
+}
+const BASE_URL = process.env.API_URL;
 
 async function runTests() {
   console.log('🧪 Starting EaglePower EduCore Backend API Test Suite...\n');
@@ -23,12 +26,18 @@ async function runTests() {
     if (!res.ok || data.status !== 'healthy') throw new Error(`Unexpected: ${JSON.stringify(data)}`);
   });
 
-  // 2. Admin Login
+  const AUTH_HEADERS = {
+    'Content-Type': 'application/json',
+    'Origin': 'http://localhost:5050',
+    'x-eagle-request': '1'
+  };
+
+  // 2. Admin Login (Username, Email & Phone Multi-Identifier Test)
   let adminToken = '';
-  await test('Admin Authentication (Bcrypt + JWT)', async () => {
+  await test('Admin Authentication (Bcrypt + JWT via Username)', async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ username: 'admin', password: 'EagleAdmin2025!' })
     });
     const data = await res.json();
@@ -36,12 +45,32 @@ async function runTests() {
     adminToken = data.token;
   });
 
+  await test('Admin Authentication via Email (adaeze3011@gmail.com)', async () => {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: AUTH_HEADERS,
+      body: JSON.stringify({ email: 'adaeze3011@gmail.com', password: 'EagleAdmin2025!' })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token) throw new Error(data.message || 'Email login failed');
+  });
+
+  await test('Admin Authentication via Phone (08033591058 & +2348033591058)', async () => {
+    const res = await fetch(`${BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: AUTH_HEADERS,
+      body: JSON.stringify({ phone: '+2348033591058', password: 'EagleAdmin2025!' })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.token) throw new Error(data.message || 'Phone login failed');
+  });
+
   // 2b. SuperAdmin Login
   let superadminToken = '';
   await test('SuperAdmin Authentication (Bcrypt + JWT)', async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ username: 'superadmin', password: 'EagleSuperAdmin2025!' })
     });
     const data = await res.json();
@@ -54,7 +83,7 @@ async function runTests() {
   await test('Student Portal Login (Admission No: ESE2009012)', async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({ username: 'ESE2009012', password: 'Eagle2025!' })
     });
     const data = await res.json();
@@ -277,7 +306,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         student_id: testStudentRealId,
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term',
         attendance: { opened: 120, present: 118, absent: 2 },
         traits: { politeness: 5, neatness: 5, punctuality: 4 },
@@ -324,7 +353,7 @@ async function runTests() {
       body: JSON.stringify(payload)
     });
     const data = await authRes.json();
-    if (!authRes.ok || !data.token || data.user.role !== 'parent') {
+    if (!authRes.ok || data.user?.role !== 'parent') {
       throw new Error(data.message || 'Admin parent provisioning failed');
     }
   });
@@ -361,7 +390,7 @@ async function runTests() {
   await test('Login with Newly Onboarded Staff Credentials', async () => {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: AUTH_HEADERS,
       body: JSON.stringify({
         username: newStaffUsername,
         password: 'EnglishTeacher2025!'
@@ -462,7 +491,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         template: 'CHERITH',
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term'
       })
     });
@@ -554,6 +583,21 @@ async function runTests() {
     }
   });
 
+  // 37b. Puter AI (Primary) & In-House Fallback Telemetry (GET /api/progress/ai-status)
+  await test('Puter AI: Telemetry & Model Listing (GET /api/progress/ai-status)', async () => {
+    const res = await fetch(`${BASE_URL}/progress/ai-status`);
+    const data = await res.json();
+    if (!res.ok || !data.success || data.engines?.primary?.name !== 'Puter AI') {
+      throw new Error('Puter AI status check failed');
+    }
+    if (!Array.isArray(data.engines?.primary?.available_models) || !data.engines.primary.available_models.includes('gpt-4o-mini')) {
+      throw new Error('Puter AI available models missing gpt-4o-mini');
+    }
+    if (data.engines?.secondary?.status !== 'active') {
+      throw new Error('In-House AI secondary fallback is not active');
+    }
+  });
+
   // 37. Payroll: Get Nigerian Banks Directory
   await test('Payroll: Get Nigerian Banks Directory (GET /api/payroll/banks)', async () => {
     const res = await fetch(`${BASE_URL}/payroll/banks`, {
@@ -631,7 +675,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         admission_no: 'ESE2009012',
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term'
       })
     });
@@ -651,7 +695,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         class_id: 2,
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term',
         overwrite: true
       })
@@ -731,14 +775,14 @@ async function runTests() {
         Authorization: `Bearer ${superadminToken}`
       },
       body: JSON.stringify({
-        current_session: '2024/2025',
+        current_session: '2026/2027',
         current_term: 'Second Term',
         next_resumption_date: '2025-05-05',
         school_motto: 'Love, Truth & Service'
       })
     });
     const data = await res.json();
-    if (!res.ok || data.data?.current_session !== '2024/2025') {
+    if (!res.ok || data.data?.current_session !== '2026/2027') {
       throw new Error(data.message || 'Failed to update system settings');
     }
   });
@@ -1012,6 +1056,288 @@ async function runTests() {
     const listData = await listRes.json();
     if (!listRes.ok || !Array.isArray(listData.data) || listData.data.length === 0) {
       throw new Error('Failed to list backups archive');
+    }
+  });
+
+  // 60. Division-Specific Dynamic Grading Scales API
+  await test('Grading Scales: Retrieve Division-Specific Scales (GET /api/exams/grading-scales)', async () => {
+    const res = await fetch(`${BASE_URL}/exams/grading-scales`);
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.scales) {
+      throw new Error(data.message || 'Failed to retrieve grading scales');
+    }
+    if (!data.scales['Senior College'] || !data.scales['Primary School'] || !data.scales['Nursery']) {
+      throw new Error('Missing core division scale definitions');
+    }
+    if (data.scales['Senior College'].grades[0].grade !== 'A1') {
+      throw new Error('Senior College scale does not match WAEC standard');
+    }
+  });
+
+  // 61. Multi-Component Continuous Assessment Recording (CA1 + CA2 + Project + Exam)
+  await test('Multi-Component CA: Save Individual Student Mark (POST /api/exams/marks)', async () => {
+    const res = await fetch(`${BASE_URL}/exams/marks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        student_id: testStudentRealId,
+        subject_id: testSubjectRealId,
+        session: '2026/2027',
+        term: 'Second Term',
+        ca1_score: 9.5,
+        ca2_score: 8.5,
+        project_score: 9.0,
+        exam_score: 64.0
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.result) {
+      throw new Error(data.message || 'Failed to record multi-component mark');
+    }
+    const mark = data.result;
+    if (Math.round(mark.ca_score) !== 27 || Math.round(mark.total_score) !== 91) {
+      throw new Error(`Unexpected computed scores: ca=${mark.ca_score}, total=${mark.total_score}`);
+    }
+    if (!mark.division) {
+      throw new Error('Missing division-specific grade computation');
+    }
+  });
+
+  // 62. Multi-Component Batch Marks Recording (POST /api/exams/marks/batch)
+  await test('Multi-Component CA: Batch Marks Recording (POST /api/exams/marks/batch)', async () => {
+    const res = await fetch(`${BASE_URL}/exams/marks/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        subject_id: testSubjectRealId,
+        session: '2026/2027',
+        term: 'Second Term',
+        entries: [
+          { student_id: testStudentRealId, ca1_score: 10, ca2_score: 10, project_score: 10, exam_score: 68 }
+        ]
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success || data.processed !== 1) {
+      throw new Error(data.message || 'Failed to record batch marks');
+    }
+  });
+
+  // 63. 3-Term Annual Cumulative Progression & Promotion Engine
+  await test('Annual Engine: 3-Term Cumulative Aggregation & Promotion (GET /api/exams/annual-broadsheet)', async () => {
+    const classIdToTest = testStudentClassId || 2;
+    const res = await fetch(`${BASE_URL}/exams/annual-broadsheet?class_id=${classIdToTest}&session=2026/2027`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.students || data.students.length === 0) {
+      throw new Error(data.message || 'Failed to generate annual cumulative broadsheet');
+    }
+    const student = data.students[0];
+    if (student.rank !== 1 || !student.position) {
+      throw new Error('Missing annual rank or position in cumulative matrix');
+    }
+    if (!student.promotion || !student.promotion.decision || !student.promotion.status) {
+      throw new Error('Missing statutory promotion decision object');
+    }
+    if (!['PROMOTED', 'TRIAL', 'REPEAT'].includes(student.promotion.status)) {
+      throw new Error(`Unexpected promotion status: ${student.promotion.status}`);
+    }
+    if (!data.statistics || !data.statistics.promotion_summary) {
+      throw new Error('Missing annual promotion summary statistics');
+    }
+  });
+
+  // 64. Persistent Lesson Notes & Scheme of Work: Create and List
+  let createdLessonNoteId = null;
+  await test('Lesson Notes: Create & Retrieve Scheme (POST & GET /api/lesson-notes)', async () => {
+    const res = await fetch(`${BASE_URL}/lesson-notes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        class_id: testStudentClassId || 2,
+        subject_id: testSubjectRealId || 1,
+        session: '2026/2027',
+        term: 'Second Term',
+        week_number: '5',
+        topic: 'Algebraic Factorization & Quadratic Expansion',
+        subtopic: 'Expanding perfect squares and difference of two squares',
+        behavioral_objectives: 'Students will factorize quadratic binomials with 95% accuracy.',
+        instructional_materials: 'Algebra tiles, smartboard grapher, worksheet 5B',
+        previous_knowledge: 'Pupils understand basic polynomial multiplication.',
+        introduction: 'Recall FOIL method for binomial multiplication.',
+        presentation_steps: 'Step 1: Difference of two squares rule. Step 2: Worked examples. Step 3: Peer group exercise.',
+        evaluation: 'Factorize: 4x² - 9 and (2x + 3)²',
+        conclusion: 'Summary of algebraic rules and formula sheet distribution.',
+        assignment: 'Page 54, Exercise 5C, questions 1-10.',
+        status: 'Under Review'
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success || !data.data?.id) {
+      throw new Error(data.message || 'Failed to create lesson note');
+    }
+    createdLessonNoteId = data.data.id;
+
+    // Verify GET list
+    const listRes = await fetch(`${BASE_URL}/lesson-notes?week_number=5`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const listData = await listRes.json();
+    if (!listRes.ok || !listData.success || listData.count === 0) {
+      throw new Error('Created lesson note not found in list');
+    }
+  });
+
+  // 65. Persistent Lesson Notes: HOD Pedagogical Review Workflow
+  await test('Lesson Notes: HOD Pedagogical Review & Feedback (PATCH /api/lesson-notes/:id/review)', async () => {
+    if (!createdLessonNoteId) throw new Error('No lesson note ID from previous test');
+
+    // 1. Mark as Needs Revision
+    const revRes = await fetch(`${BASE_URL}/lesson-notes/${createdLessonNoteId}/review`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        status: 'Needs Revision',
+        hod_feedback: 'Please include more real-world contextual word problems in the presentation steps.'
+      })
+    });
+    const revData = await revRes.json();
+    if (!revRes.ok || !revData.success || revData.data?.status !== 'Needs Revision') {
+      throw new Error(revData.message || 'Failed to submit HOD revision request');
+    }
+
+    // 2. Clear and Approve
+    const appRes = await fetch(`${BASE_URL}/lesson-notes/${createdLessonNoteId}/review`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        status: 'Approved',
+        hod_feedback: 'Revisions verified. Excellent instructional structure and clear objectives.'
+      })
+    });
+    const appData = await appRes.json();
+    if (!appRes.ok || !appData.success || appData.data?.status !== 'Approved') {
+      throw new Error(appData.message || 'Failed to approve lesson note');
+    }
+  });
+
+  // 66. Bursary: Cohort Batch Invoicing with Itemized Breakdown
+  await test('Bursary: Cohort Batch Invoicing with Breakdown (POST /api/finance/invoices/batch)', async () => {
+    const classIdToTest = testStudentClassId || 2;
+    const batchTitle = `Term 2 Automated Test Fee Batch ${Date.now()}`;
+    const res = await fetch(`${BASE_URL}/finance/invoices/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        class_id: classIdToTest,
+        session: '2026/2027',
+        term: 'Second Term',
+        title: batchTitle,
+        due_date: '2025-03-31',
+        breakdown: {
+          tuition: 50000,
+          books: 15000,
+          uniform: 10000,
+          development_levy: 5000,
+          other: 0
+        }
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success || data.count_created < 1) {
+      throw new Error(data.message || 'Batch invoicing failed');
+    }
+    if (data.total_amount_billed !== data.count_created * 80000) {
+      throw new Error(`Total amount billed mismatch: expected ${data.count_created * 80000}, got ${data.total_amount_billed}`);
+    }
+
+    // Duplicate prevention check: running again should skip all duplicates
+    const dupRes = await fetch(`${BASE_URL}/finance/invoices/batch`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        class_id: classIdToTest,
+        session: '2026/2027',
+        term: 'Second Term',
+        title: batchTitle,
+        amount_due: 80000
+      })
+    });
+    const dupData = await dupRes.json();
+    if (!dupRes.ok || dupData.count_created !== 0 || dupData.count_skipped < 1) {
+      throw new Error('Duplicate prevention failed to skip existing batch invoices');
+    }
+  });
+
+  // 67. Bursary: Paystack Online Fee Checkout & Verification
+  await test('Paystack: Online Fee Checkout & Verification Flow (POST /checkout/initialize & GET /verify)', async () => {
+    // 1. Find an unpaid invoice
+    const invRes = await fetch(`${BASE_URL}/finance/invoices?status=Unpaid&limit=1`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const invData = await invRes.json();
+    if (!invRes.ok || !invData.data || invData.data.length === 0) {
+      throw new Error('No unpaid invoice available to test Paystack checkout');
+    }
+    const invoice = invData.data[0];
+
+    // 2. Initialize Paystack checkout
+    const initRes = await fetch(`${BASE_URL}/finance/checkout/initialize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${adminToken}`
+      },
+      body: JSON.stringify({
+        invoice_id: invoice.id,
+        amount: invoice.amount_due,
+        email: 'parent.test@eaglepower.edu.ng'
+      })
+    });
+    const initData = await initRes.json();
+    if (!initRes.ok || !initData.success || !initData.data?.reference) {
+      throw new Error(initData.message || 'Paystack checkout initialize failed');
+    }
+    const reference = initData.data.reference;
+
+    // 3. Verify transaction and credit invoice
+    const verifyRes = await fetch(`${BASE_URL}/finance/checkout/verify/${reference}`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const verifyData = await verifyRes.json();
+    if (!verifyRes.ok || !verifyData.success || !verifyData.receipt_no || verifyData.invoice?.status !== 'Paid') {
+      throw new Error(verifyData.message || 'Paystack payment verification failed');
+    }
+
+    // 4. Idempotency test (calling verify again should return already_processed without duplicate charging)
+    const idemRes = await fetch(`${BASE_URL}/finance/checkout/verify/${reference}`, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const idemData = await idemRes.json();
+    if (!idemRes.ok || !idemData.already_processed) {
+      throw new Error('Paystack idempotency failed');
     }
   });
 

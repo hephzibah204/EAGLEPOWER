@@ -1,6 +1,6 @@
 # Multi-stage production build for Eagle Power Schools EduCore
 # Stage 1: Build Frontend
-FROM node:22-alpine AS frontend-builder
+FROM node:24-alpine AS frontend-builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --no-audit --no-fund
@@ -9,14 +9,14 @@ RUN npm run build:vite
 RUN npm run build
 
 # Stage 2: Production Server Runtime
-FROM node:22-alpine AS production
+FROM node:24-alpine AS production
 WORKDIR /app/server
 ENV NODE_ENV=production
 ENV PORT=5050
 
 # Copy server dependencies
 COPY server/package*.json ./
-RUN npm ci --only=production --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # Copy server code
 COPY server/src ./src
@@ -28,6 +28,9 @@ COPY --from=frontend-builder /app/out /app/out
 
 # Expose port
 EXPOSE 5050
+
+RUN mkdir -p /app/server/data /app/server/backups && chown -R node:node /app/server
+USER node
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

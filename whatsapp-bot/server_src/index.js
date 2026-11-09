@@ -45,6 +45,7 @@ import payrollRoutes from './routes/payroll.js';
 import executiveRoutes from './routes/executive.js';
 import systemRoutes from './routes/system.js';
 import usersRoutes from './routes/users.js';
+import lessonNotesRoutes from './routes/lessonNotes.js';
 
 // Security Middlewares
 import { threatDefense } from './middleware/threatDefense.js';
@@ -179,6 +180,7 @@ app.use('/api/payroll', payrollRoutes);
 app.use('/api/executive', executiveRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/lesson-notes', lessonNotesRoutes);
 
 const publicPath = path.resolve(__dirname, '../../public');
 if (fs.existsSync(publicPath)) {

@@ -198,7 +198,7 @@ router.get('/invoices/:id', authenticate, (req, res, next) => {
  */
 router.post('/invoices', authenticate, requireRoles('bursar', 'admin', 'superadmin'), (req, res, next) => {
   try {
-    const { student_id, title, amount_due, session = '2024/2025', term = 'Second Term', due_date } = req.body;
+    const { student_id, title, amount_due, session = '2026/2027', term = 'Second Term', due_date } = req.body;
 
     if (!student_id || !title || !amount_due) {
       return res.status(400).json({

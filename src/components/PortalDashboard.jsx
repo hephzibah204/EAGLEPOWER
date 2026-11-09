@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Menu,
   X,
+  Bell,
   Shield,
   ShieldCheck,
   Users,
@@ -88,6 +89,8 @@ import CurriculumArchitect from './superadmin/modules/CurriculumArchitect';
 import SystemGovernanceConsole from './superadmin/modules/SystemGovernanceConsole';
 import StaffIDCardModal from './staff/StaffIDCardModal';
 import WhatsAppBotConsoleModal from './superadmin/modules/WhatsAppBotConsoleModal';
+import StaffNotificationBell from './staff/StaffNotificationBell';
+import StaffCommunicationConsole from './staff/StaffCommunicationConsole';
 
 export default function PortalDashboard({
   isOpen = true,
@@ -303,7 +306,7 @@ export default function PortalDashboard({
   // Teacher Gradebook States
   const [selectedClassId, setSelectedClassId] = useState(2); // JSS2 (has 14 students)
   const [selectedSubjectId, setSelectedSubjectId] = useState(1); // Mathematics
-  const [gradebookSession, setGradebookSession] = useState('2024/2025');
+  const [gradebookSession, setGradebookSession] = useState('2026/2027');
   const [gradebookTerm, setGradebookTerm] = useState('Second Term');
   const [gradebookMode, setGradebookMode] = useState('standard'); // 'standard' (30/70) | 'multi' (10/10/10/70)
   const [gradebookClassInfo, setGradebookClassInfo] = useState(null);
@@ -443,9 +446,9 @@ export default function PortalDashboard({
   const [batchInvoiceSubmitting, setBatchInvoiceSubmitting] = useState(false);
   const [batchInvoiceForm, setBatchInvoiceForm] = useState({
     class_id: 'ALL',
-    session: '2024/2025',
+    session: '2026/2027',
     term: 'Second Term',
-    title: 'Second Term 2024/2025 Composite Tuition & Levies',
+    title: '1st Term 2026/2027 Composite Tuition & Levies',
     due_date: '2025-02-28',
     breakdown: {
       tuition: 45000,
@@ -729,7 +732,7 @@ export default function PortalDashboard({
   const [systemSettings, setSystemSettings] = useState({
     school_name: 'Eagle Power Schools Awka',
     school_motto: 'Love, Truth & Service',
-    current_session: '2024/2025',
+    current_session: '2026/2027',
     current_term: 'Second Term',
     next_resumption_date: '2025-05-05',
     active_report_template: 'classic_british',
@@ -1087,7 +1090,7 @@ export default function PortalDashboard({
         body: JSON.stringify({
           class_id: targetClass?.id || 1,
           subject_id: targetSubject?.id || 1,
-          session: '2024/2025',
+          session: '2026/2027',
           term: 'Second Term',
           week_number: newLessonNote.week,
           topic: newLessonNote.topic.trim(),
@@ -2766,6 +2769,14 @@ export default function PortalDashboard({
                 <span className="hidden sm:inline">My Staff ID</span>
               </button>
             )}
+            {currentUser && ['superadmin', 'admin', 'teacher', 'bursar', 'frontdesk'].includes(activeRole) && (
+              <StaffNotificationBell
+                currentUser={currentUser}
+                onNavigateTab={(tab) => {
+                  if (tab) setActiveTab(tab);
+                }}
+              />
+            )}
             {currentUser && (
               <button
                 onClick={() => {
@@ -3218,6 +3229,15 @@ export default function PortalDashboard({
                           <span className="truncate">Bulk Staff Payroll</span>
                         </button>
                         <button
+                          onClick={() => setActiveTab('staff_communication')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'staff_communication' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Bell className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          <span className="truncate">Staff Alerts & Automations</span>
+                        </button>
+                        <button
                           onClick={() => setActiveTab('visitors')}
                           className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
                             activeTab === 'visitors' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
@@ -3350,6 +3370,15 @@ export default function PortalDashboard({
                       >
                         <Landmark className="w-3.5 h-3.5 text-emerald-400" />
                         <span>Staff Payroll</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('staff_communication')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'staff_communication' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Bell className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Staff Alerts & Automations</span>
                       </button>
                       <button
                         onClick={() => setActiveTab('admissions')}
@@ -4258,7 +4287,7 @@ export default function PortalDashboard({
                               type="text"
                               value={systemSettings.current_session || ''}
                               onChange={(e) => setSystemSettings({ ...systemSettings, current_session: e.target.value })}
-                              placeholder="e.g. 2024/2025"
+                              placeholder="e.g. 2026/2027"
                               className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white font-mono focus:outline-none focus:border-amber-400"
                             />
                           </div>
@@ -5347,7 +5376,7 @@ export default function PortalDashboard({
                           Welcome, {currentUser?.name || 'Educator'}
                         </h2>
                         <p className="text-xs text-slate-400 max-w-xl">
-                          Assigned Form Class: <span className="text-amber-400 font-bold">{classes.find(c => c.id === attendanceClassId)?.name || 'Junior College (JSS 1)'}</span> • 1st Term 2025/2026 Academic Session. Manage roll-calls, enter continuous assessments, coordinate homework, and prepare lesson schemes.
+                          Assigned Form Class: <span className="text-amber-400 font-bold">{classes.find(c => c.id === attendanceClassId)?.name || 'Junior College (JSS 1)'}</span> • 1st Term 2026/2027 Academic Session. Manage roll-calls, enter continuous assessments, coordinate homework, and prepare lesson schemes.
                         </p>
                         <div className="flex items-center gap-2 mt-2">
                           <Info className="w-3.5 h-3.5 text-slate-500" />
@@ -6086,8 +6115,8 @@ export default function PortalDashboard({
                           onChange={(e) => setGradebookSession(e.target.value)}
                           className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
                         >
-                          <option value="2024/2025">2024/2025</option>
-                          <option value="2025/2026">2025/2026</option>
+                          <option value="2026/2027">2026/2027 Academic Session</option>
+
                         </select>
                         <Tooltip text="Always confirm the session matches the current academic year before entering marks. Scores are stored per-session and cannot be moved across sessions." wide>
                           <HelpCircle className="w-3.5 h-3.5 text-slate-600 hover:text-amber-400 cursor-help" />
@@ -6786,12 +6815,12 @@ export default function PortalDashboard({
                                 <td className="p-3 font-mono font-bold text-amber-400 whitespace-nowrap">
                                   <div>{note.week_number ? `Week ${note.week_number}` : note.week}</div>
                                   <div className="text-[10px] text-slate-400 font-medium">{note.teacher_name || 'Staff Teacher'}</div>
-                                  <div className="text-[10px] text-slate-500 font-normal">{note.created_at ? note.created_at.slice(0, 10) : (note.date || '2025/2026')}</div>
+                                  <div className="text-[10px] text-slate-500 font-normal">{note.created_at ? note.created_at.slice(0, 10) : (note.date || '2026/2027')}</div>
                                 </td>
                                 <td className="p-3">
                                   <div className="font-bold text-white">{note.subject_name || note.subject}</div>
                                   <div className="text-[11px] text-slate-400">{note.class_name}</div>
-                                  <span className="text-[10px] text-slate-500">{note.session || '2024/2025'} &bull; {note.term || 'Second Term'}</span>
+                                  <span className="text-[10px] text-slate-500">{note.session || '2026/2027'} &bull; {note.term || 'First Term'}</span>
                                 </td>
                                 <td className="p-3">
                                   <div className="font-bold text-white">{note.topic}</div>
@@ -7824,7 +7853,7 @@ export default function PortalDashboard({
                           </h2>
 
                           <p className="text-xs text-slate-300">
-                            Class: <strong className="text-amber-300">{targetStudent.class_name || 'Assigned Form'}</strong> &bull; Campus: <span className="text-white font-medium">Awka Main Campus</span> &bull; Academic Session: <span className="font-mono text-amber-300">{targetStudent.enrolled_session || '2024/2025'}</span>
+                            Class: <strong className="text-amber-300">{targetStudent.class_name || 'Assigned Form'}</strong> &bull; Campus: <span className="text-white font-medium">Awka Main Campus</span> &bull; Academic Session: <span className="font-mono text-amber-300">{targetStudent.enrolled_session || '2026/2027'}</span>
                           </p>
 
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 text-xs">
@@ -8302,6 +8331,11 @@ export default function PortalDashboard({
             </main>
           </div>
         )}
+
+        {/* STAFF COMMUNICATION & AUTOMATED NOTIFICATIONS CONSOLE */}
+              {activeTab === 'staff_communication' && ['admin', 'superadmin'].includes(activeRole) && (
+                <StaffCommunicationConsole currentUser={currentUser} />
+              )}
 
         {/* Modal: Bursar Record Payment */}
         {paymentModalOpen && selectedInvoice && (
@@ -10483,7 +10517,7 @@ export default function PortalDashboard({
                   <input
                     type="text"
                     required
-                    placeholder="e.g. 2nd Term 2024/2025 Composite Tuition & Levies"
+                    placeholder="e.g. 1st Term 2026/2027 Composite Tuition & Levies"
                     value={batchInvoiceForm.title}
                     onChange={(e) => setBatchInvoiceForm(prev => ({ ...prev, title: e.target.value }))}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"

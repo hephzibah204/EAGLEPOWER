@@ -277,7 +277,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         student_id: testStudentRealId,
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term',
         attendance: { opened: 120, present: 118, absent: 2 },
         traits: { politeness: 5, neatness: 5, punctuality: 4 },
@@ -448,7 +448,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         template: 'CHERITH',
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term'
       })
     });
@@ -617,7 +617,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         admission_no: 'ESE2009012',
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term'
       })
     });
@@ -637,7 +637,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         class_id: 2,
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term',
         overwrite: true
       })
@@ -717,14 +717,14 @@ async function runTests() {
         Authorization: `Bearer ${superadminToken}`
       },
       body: JSON.stringify({
-        current_session: '2024/2025',
+        current_session: '2026/2027',
         current_term: 'Second Term',
         next_resumption_date: '2025-05-05',
         school_motto: 'Love, Truth & Service'
       })
     });
     const data = await res.json();
-    if (!res.ok || data.data?.current_session !== '2024/2025') {
+    if (!res.ok || data.data?.current_session !== '2026/2027') {
       throw new Error(data.message || 'Failed to update system settings');
     }
   });

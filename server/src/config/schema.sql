@@ -7,10 +7,13 @@ CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   username TEXT UNIQUE NOT NULL,
   email TEXT,
+  phone TEXT,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL CHECK(role IN ('superadmin', 'admin', 'teacher', 'bursar', 'student', 'parent')),
   reference_id TEXT,
   full_name TEXT NOT NULL,
+  avatar_url TEXT,
+  signature_url TEXT,
   is_active INTEGER DEFAULT 1,
   last_login DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -63,6 +66,18 @@ CREATE TABLE IF NOT EXISTS staff (
   phone TEXT,
   qualification TEXT,
   assigned_class TEXT,
+  photo_url TEXT,
+  signature_url TEXT,
+  blood_group TEXT DEFAULT 'O+',
+  emergency_contact TEXT,
+  gender TEXT,
+  dob TEXT,
+  date_employed TEXT,
+  employment_type TEXT DEFAULT 'Full time',
+  address TEXT,
+  emergency_contact_name TEXT,
+  salary REAL DEFAULT 0,
+  form_responsibility TEXT,
   is_active INTEGER DEFAULT 1,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -71,7 +86,7 @@ CREATE TABLE IF NOT EXISTS marks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
   subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-  session TEXT DEFAULT '2024/2025',
+  session TEXT DEFAULT '2026/2027',
   term TEXT DEFAULT 'Second Term',
   ca_score REAL DEFAULT 0 CHECK(ca_score >= 0 AND ca_score <= 30),
   exam_score REAL DEFAULT 0 CHECK(exam_score >= 0 AND exam_score <= 70),
@@ -86,7 +101,7 @@ CREATE TABLE IF NOT EXISTS marks (
 CREATE TABLE IF NOT EXISTS report_extras (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  session TEXT DEFAULT '2024/2025',
+  session TEXT DEFAULT '2026/2027',
   term TEXT DEFAULT 'Second Term',
   attendance TEXT DEFAULT '{"opened":120,"present":116,"absent":4}',
   traits TEXT DEFAULT '{"politeness":5,"neatness":5,"punctuality":4,"attentiveness":5,"honesty":5,"initiative":4,"selfControl":5,"cooperation":4}',
@@ -105,13 +120,16 @@ CREATE TABLE IF NOT EXISTS invoices (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   invoice_no TEXT UNIQUE NOT NULL,
   student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  session TEXT DEFAULT '2024/2025',
+  session TEXT DEFAULT '2026/2027',
   term TEXT DEFAULT 'Second Term',
   title TEXT NOT NULL,
   amount_due REAL NOT NULL,
   amount_paid REAL DEFAULT 0,
   status TEXT DEFAULT 'Unpaid' CHECK(status IN ('Paid', 'Partial', 'Unpaid')),
   due_date TEXT,
+  breakdown_json TEXT,
+  paystack_reference TEXT,
+  paystack_access_code TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -421,7 +439,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   school_name TEXT DEFAULT 'Eagle Power Schools Awka',
   school_motto TEXT DEFAULT 'Love, Truth & Service',
-  current_session TEXT DEFAULT '2024/2025',
+  current_session TEXT DEFAULT '2026/2027',
   current_term TEXT DEFAULT 'Second Term',
   next_resumption_date TEXT DEFAULT '2025-05-05',
   active_report_template TEXT DEFAULT 'classic_british',
@@ -435,7 +453,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
 
 -- Seed initial configuration if not present
 INSERT OR IGNORE INTO system_settings (id, current_session, current_term, next_resumption_date)
-VALUES (1, '2024/2025', 'Second Term', '2025-05-05');
+VALUES (1, '2026/2027', 'Second Term', '2025-05-05');
 
 -- WhatsApp Broadcast & Notification Log
 CREATE TABLE IF NOT EXISTS whatsapp_broadcast_logs (
@@ -450,4 +468,92 @@ CREATE TABLE IF NOT EXISTS whatsapp_broadcast_logs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Persistent Curriculum Lesson Notes & Scheme of Work with HOD Review
+CREATE TABLE IF NOT EXISTS lesson_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  teacher_id INTEGER REFERENCES staff(id),
+  teacher_name TEXT NOT NULL,
+  class_id INTEGER NOT NULL REFERENCES classes(id),
+  subject_id INTEGER NOT NULL REFERENCES subjects(id),
+  session TEXT DEFAULT '2026/2027',
+  term TEXT DEFAULT 'Second Term',
+  week_number TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  subtopic TEXT,
+  behavioral_objectives TEXT,
+  instructional_materials TEXT,
+  previous_knowledge TEXT,
+  introduction TEXT,
+  presentation_steps TEXT,
+  evaluation TEXT,
+  conclusion TEXT,
+  assignment TEXT,
+  status TEXT DEFAULT 'Under Review' CHECK(status IN ('Draft', 'Under Review', 'Approved', 'Needs Revision')),
+  hod_feedback TEXT,
+  reviewed_by TEXT,
+  reviewed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
+
+
+
+CREATE TABLE IF NOT EXISTS fee_reminders (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL REFERENCES invoices(id), phone TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, provider_message_id TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, sent_at TEXT, delivered_at TEXT);
+CREATE TRIGGER IF NOT EXISTS preserve_student_finance BEFORE DELETE ON students WHEN EXISTS (SELECT 1 FROM invoices WHERE student_id = OLD.id) BEGIN SELECT RAISE(ABORT, 'Archive students with financial history instead of deleting'); END;
+CREATE TRIGGER IF NOT EXISTS preserve_invoice_finance BEFORE DELETE ON invoices BEGIN SELECT RAISE(ABORT, 'Financial invoices must be retained'); END;
+CREATE TRIGGER IF NOT EXISTS preserve_payment_finance BEFORE DELETE ON payments BEGIN SELECT RAISE(ABORT, 'Financial receipts must be retained'); END;
+
+CREATE TABLE IF NOT EXISTS fee_adjustments (id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL REFERENCES invoices(id), kind TEXT NOT NULL, amount REAL NOT NULL CHECK(amount > 0), reason TEXT NOT NULL, reference TEXT NOT NULL UNIQUE, actor TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TRIGGER IF NOT EXISTS preserve_adjustments BEFORE DELETE ON fee_adjustments BEGIN SELECT RAISE(ABORT, 'Financial corrections must be retained'); END;
+CREATE TRIGGER IF NOT EXISTS immutable_payments BEFORE UPDATE ON payments BEGIN SELECT RAISE(ABORT, 'Use a financial correction instead of editing receipts'); END;
+
+CREATE TABLE IF NOT EXISTS fee_contact_preferences (student_id INTEGER PRIMARY KEY REFERENCES students(id), phone TEXT NOT NULL, verified INTEGER NOT NULL DEFAULT 0, opted_out INTEGER NOT NULL DEFAULT 0, updated_by TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+
+-- Staff Communication & Automated Messaging System
+CREATE TABLE IF NOT EXISTS staff_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  staff_id INTEGER REFERENCES staff(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'ANNOUNCEMENT',
+  priority TEXT NOT NULL DEFAULT 'NORMAL',
+  action_url TEXT,
+  is_read INTEGER DEFAULT 0,
+  read_at DATETIME,
+  sender_name TEXT DEFAULT 'Administration',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_broadcast_campaigns (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  target_group TEXT NOT NULL,
+  channels TEXT NOT NULL DEFAULT 'IN_APP,WHATSAPP',
+  trigger_type TEXT NOT NULL DEFAULT 'MANUAL',
+  recipient_count INTEGER DEFAULT 0,
+  delivered_count INTEGER DEFAULT 0,
+  dispatched_by TEXT NOT NULL,
+  status TEXT DEFAULT 'COMPLETED',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS staff_automation_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  rule_key TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_enabled INTEGER DEFAULT 1,
+  schedule_time TEXT DEFAULT '07:45',
+  schedule_days TEXT DEFAULT 'MON,TUE,WED,THU,FRI',
+  template_title TEXT NOT NULL,
+  template_body TEXT NOT NULL,
+  target_audience TEXT NOT NULL DEFAULT 'TEACHERS',
+  channels TEXT NOT NULL DEFAULT 'IN_APP,WHATSAPP',
+  priority TEXT DEFAULT 'HIGH',
+  action_url TEXT,
+  last_run_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);

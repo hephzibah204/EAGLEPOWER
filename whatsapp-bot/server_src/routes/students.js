@@ -289,7 +289,7 @@ router.post('/', authenticate, requireRoles('admin', 'superadmin'), (req, res, n
       class_id ? parseInt(class_id) : null,
       section_id ? parseInt(section_id) : null,
       entry_mode || 'Fresh Admission',
-      enrolled_session || '2024/2025',
+      enrolled_session || '2026/2027',
       enrolled_term || 'Second Term',
       admission_date || new Date().toISOString().split('T')[0],
       religion || 'Christianity',
@@ -621,7 +621,7 @@ router.post('/bulk-promote', authenticate, requireRoles('superadmin'), (req, res
       req.user.id,
       'BULK_PROMOTE_STUDENTS',
       'STUDENTS',
-      `Bulk promoted ${promotedCount} students to ${targetClass.name} for session ${academic_session || '2025/2026'}`,
+      `Bulk promoted ${promotedCount} students to ${targetClass.name} for session ${academic_session || '2026/2027'}`,
       req.ip
     );
 

@@ -72,7 +72,7 @@ export default function FaqSection() {
               <span>Call Us</span>
             </a>
             <a
-              href="https://wa.me/2348035428910?text=Hello%20Eagle%20Power%20Schools,%20I%20would%20like%20to%20inquire%20about%20admissions"
+              href="https://wa.me/2349075580671?text=Hello%20Eagle%20Power%20Schools,%20I%20would%20like%20to%20inquire%20about%20admissions"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors shadow-sm"

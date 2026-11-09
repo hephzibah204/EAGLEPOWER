@@ -265,7 +265,7 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
               boarding_status, transport_mode, bus_route, is_active
             ) VALUES (
               ?, ?, ?, ?, ?, ?,
-              ?, ?, '2024/2025', 'Second Term', ?,
+              ?, ?, '2026/2027', 'Second Term', ?,
               ?, ?, ?, ?,
               ?, ?, ?, ?, ?,
               ?, ?, ?,
@@ -363,7 +363,7 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
             db.prepare(`
               INSERT INTO invoices (
                 invoice_no, student_id, session, term, title, amount_due, amount_paid, status
-              ) VALUES (?, ?, '2024/2025', 'Second Term', 'First Termly Tuition & Admission Registration', ?, 0, 'Unpaid')
+              ) VALUES (?, ?, '2026/2027', 'Second Term', 'First Termly Tuition & Admission Registration', ?, 0, 'Unpaid')
             `).run(invNo, sRes.lastInsertRowid, tuitionAmt);
 
             generatedInvoice = {

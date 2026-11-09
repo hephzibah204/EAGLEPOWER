@@ -1,17 +1,35 @@
+import { canTeacherAccessClass } from '../middleware/academicAccess.js';
 import express from 'express';
 import { z } from 'zod';
 import db from '../config/db.js';
-import { authenticate, requireRoles } from '../middleware/auth.js';
+import { authenticate, requireRoles, requireStudentAccess } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 import { evaluateHomeworkSubmission } from '../services/inHouseAi.js';
+import { evaluateHomeworkWithPuterOrInHouse } from '../services/puterAi.js';
 
 const router = express.Router();
+function canReadAssignment(user, assignment) {
+  if (['admin', 'superadmin'].includes(user.role)) return true;
+  if (user.role === 'teacher') return canTeacherAccessClass(user, assignment.class_id);
+  const reference = String(user.reference_id || '').trim().toUpperCase();
+  const username = String(user.username || '').trim();
+  const phone = username.replace(/\D/g, '');
+  const email = String(user.email || '').trim().toLowerCase();
+  return db.prepare('SELECT * FROM students WHERE class_id = ? AND is_active = 1').all(assignment.class_id).some(student => {
+    if (user.role === 'student') return String(student.admission_no).toUpperCase() === (reference || username.toUpperCase());
+    if (user.role !== 'parent') return false;
+    const guardianPhone = String(student.guardian_phone || '').replace(/\D/g, '');
+    return (reference && reference === String(student.admission_no).toUpperCase()) ||
+      (email && email === String(student.guardian_email || '').trim().toLowerCase()) ||
+      (phone.length >= 10 && guardianPhone.length >= 10 && phone.slice(-10) === guardianPhone.slice(-10));
+  });
+}
 
 /**
  * 1. GET /api/homework
  * List homework assignments with optional class_id or subject_id filters
  */
-router.get('/', authenticate, (req, res, next) => {
+router.get('/', authenticate, requireRoles('teacher', 'admin', 'superadmin', 'parent', 'student'), (req, res, next) => {
   try {
     const { class_id, subject_id, status = 'Active' } = req.query;
     let conditions = [];
@@ -46,7 +64,7 @@ router.get('/', authenticate, (req, res, next) => {
       JOIN staff st ON h.teacher_id = st.id
       ${where}
       ORDER BY h.id DESC
-    `).all(...params);
+    `).all(...params).filter(assignment => canReadAssignment(req.user, assignment));
 
     res.json({
       success: true,
@@ -62,7 +80,7 @@ router.get('/', authenticate, (req, res, next) => {
  * 2. GET /api/homework/:id
  * Retrieve a specific assignment with scoped student submissions
  */
-router.get('/:id', authenticate, (req, res, next) => {
+router.get('/:id', authenticate, requireRoles('teacher', 'admin', 'superadmin', 'parent', 'student'), (req, res, next) => {
   try {
     const assignment = db.prepare(`
       SELECT 
@@ -81,6 +99,8 @@ router.get('/:id', authenticate, (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
 
+    if (!canReadAssignment(req.user, assignment)) return res.status(403).json({ success: false, message: 'This assignment is not for your class or child.' });
+
     // Determine submissions visibility based on role
     let submissionsWhere = 'WHERE sub.assignment_id = ?';
     const subParams = [req.params.id];
@@ -92,7 +112,7 @@ router.get('/:id', authenticate, (req, res, next) => {
     } else if (req.user.role === 'parent') {
       const cleanUser = (req.user.username || '').replace(/\D/g, '');
       const last10 = cleanUser.length >= 7 ? cleanUser.slice(-10) : '___none___';
-      const cleanEmail = (req.user.email || '').trim().toLowerCase();
+      const cleanEmail = (req.user.email || '').trim().toLowerCase() || '___no_guardian_email___';
       const cleanRef = (req.user.reference_id || '').trim().toUpperCase();
 
       const children = db.prepare(`
@@ -153,16 +173,13 @@ router.post('/', authenticate, requireRoles('teacher', 'admin', 'superadmin'), (
   try {
     const validated = createHomeworkSchema.parse(req.body);
     
-    // Resolve teacher_id from session if omitted
-    let teacherId = validated.teacher_id;
-    if (!teacherId) {
-      const staffRecord = db.prepare('SELECT id FROM staff WHERE email = ? OR phone = ? OR id = ?').get(
-        req.user.email || '',
-        req.user.phone || '',
-        req.user.id || 0
-      );
-      const fallbackStaff = db.prepare('SELECT id FROM staff LIMIT 1').get();
-      teacherId = staffRecord ? staffRecord.id : (fallbackStaff ? fallbackStaff.id : 1);
+    const ownStaff = db.prepare('SELECT id FROM staff WHERE UPPER(staff_no) = UPPER(?) AND is_active = 1').get(req.user.reference_id || '');
+    if (req.user.role === 'teacher' && (!ownStaff || (validated.teacher_id !== undefined && validated.teacher_id !== ownStaff.id))) {
+      return res.status(403).json({ success: false, message: 'Teachers may only create homework under their own active staff account.' });
+    }
+    const teacherId = req.user.role === 'teacher' ? ownStaff.id : (validated.teacher_id ?? ownStaff?.id);
+    if (!teacherId || !db.prepare('SELECT id FROM staff WHERE id = ? AND is_active = 1').get(teacherId)) {
+      return res.status(400).json({ success: false, message: 'An active teacher_id is required for homework assignment.' });
     }
 
     const assignmentCode = `HW-${Date.now().toString().slice(-6)}`;
@@ -223,7 +240,7 @@ const submitHomeworkSchema = z.object({
   attachment_path: z.string().optional()
 });
 
-router.post('/:id/submit', authenticate, (req, res, next) => {
+router.post('/:id/submit', authenticate, requireStudentAccess('student_id', 'id'), async (req, res, next) => {
   try {
     const assignment = db.prepare(`
       SELECT h.*, c.name as class_name, s.name as subject_name 
@@ -252,8 +269,8 @@ router.post('/:id/submit', authenticate, (req, res, next) => {
       }
     }
 
-    // In-House AI Evaluation
-    const aiResult = evaluateHomeworkSubmission({
+    // Puter AI (Primary) -> In-House AI (Fallback) Evaluation
+    const aiResult = await evaluateHomeworkWithPuterOrInHouse({
       assignment,
       submissionText: validated.submission_text,
       studentName: `${student.first_name} ${student.last_name}`

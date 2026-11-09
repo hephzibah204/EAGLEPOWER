@@ -1,0 +1,1453 @@
+{
+  "name": "Parent portal onboarding",
+  "status": "HOLD_DEPLOYMENT_REQUIRED",
+  "timezone": "Africa/Lagos",
+  "audience": "Verified opted-in parent/guardian contacts only; one message per normalized phone",
+  "local_parent_accounts": 279,
+  "local_distinct_guardian_phone_entries": 279,
+  "proposed_dates": [
+    "2026-11-10",
+    "2026-11-11",
+    "2026-11-12"
+  ],
+  "daily_limit": 93,
+  "first_send": "09:00",
+  "last_send": "16:40",
+  "interval_minutes": 5,
+  "notes": "Spacing is a scheduling choice, not a guarantee against account restrictions. Recalculate dates and recipient counts at activation. No catch-up bursts.",
+  "transport": "Official WhatsApp Business Platform using an approved template",
+  "activation_requirements": [
+    "Verify deployed portal login and parent record linkage",
+    "Verify WhatsApp Business sender and approved onboarding template",
+    "Verify communication permission and exclude opt-outs",
+    "Reconcile normalized phone numbers to parent accounts; exclude shared or ambiguous account matches",
+    "Approve a fresh start date if proposed dates pass"
+  ],
+  "message_template": "EAGLE POWER SCHOOLS — PARENT PORTAL\n\nDear {{parent_name}}, our portal helps you view your linked child’s fee statements, report cards, homework and academic profile.\n\nLogin: https://eaglepowerschools.com.ng/portal/login\nYour username: {{username}}\nUse the private password already issued by the school. If you have not received it or cannot sign in, contact the school office for secure account assistance. Never share passwords or login codes.\n\nWHATSAPP HELP\nMessage the school WhatsApp number +2349075580671 and type Hello to start. Follow the login instructions, then reply with a menu number or ask one question in plain English, such as “How much is my child owing?”, “What homework does my child have?” or “When is school resuming?” Personal records are available only after account verification. If the bot cannot help, ask to contact the school office.\n\nTo stop school broadcasts, reply STOP. For help, reply HELP.",
+  "readiness_rule": "Describe only features verified end-to-end immediately before activation. No password extraction, no shared passwords, no automatic password resets.",
+  "delivery_rules": [
+    "Recheck opt-out before each send",
+    "Persist claim before sending and provider message identifier after acknowledgement",
+    "Do not repeat completed recipients after restarts",
+    "Hold ambiguous or failed sends for review; do not retry blindly",
+    "Pause on provider restrictions, template rejection, recipient complaints, or delivery-quality warnings",
+    "Use only verified, authorized parent account mappings; never infer a login from a phone alone"
+  ],
+  "slots": [
+    {
+      "sequence": 1,
+      "scheduled_at": "2026-11-10T09:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 2,
+      "scheduled_at": "2026-11-10T09:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 3,
+      "scheduled_at": "2026-11-10T09:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 4,
+      "scheduled_at": "2026-11-10T09:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 5,
+      "scheduled_at": "2026-11-10T09:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 6,
+      "scheduled_at": "2026-11-10T09:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 7,
+      "scheduled_at": "2026-11-10T09:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 8,
+      "scheduled_at": "2026-11-10T09:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 9,
+      "scheduled_at": "2026-11-10T09:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 10,
+      "scheduled_at": "2026-11-10T09:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 11,
+      "scheduled_at": "2026-11-10T09:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 12,
+      "scheduled_at": "2026-11-10T09:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 13,
+      "scheduled_at": "2026-11-10T10:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 14,
+      "scheduled_at": "2026-11-10T10:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 15,
+      "scheduled_at": "2026-11-10T10:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 16,
+      "scheduled_at": "2026-11-10T10:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 17,
+      "scheduled_at": "2026-11-10T10:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 18,
+      "scheduled_at": "2026-11-10T10:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 19,
+      "scheduled_at": "2026-11-10T10:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 20,
+      "scheduled_at": "2026-11-10T10:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 21,
+      "scheduled_at": "2026-11-10T10:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 22,
+      "scheduled_at": "2026-11-10T10:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 23,
+      "scheduled_at": "2026-11-10T10:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 24,
+      "scheduled_at": "2026-11-10T10:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 25,
+      "scheduled_at": "2026-11-10T11:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 26,
+      "scheduled_at": "2026-11-10T11:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 27,
+      "scheduled_at": "2026-11-10T11:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 28,
+      "scheduled_at": "2026-11-10T11:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 29,
+      "scheduled_at": "2026-11-10T11:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 30,
+      "scheduled_at": "2026-11-10T11:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 31,
+      "scheduled_at": "2026-11-10T11:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 32,
+      "scheduled_at": "2026-11-10T11:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 33,
+      "scheduled_at": "2026-11-10T11:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 34,
+      "scheduled_at": "2026-11-10T11:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 35,
+      "scheduled_at": "2026-11-10T11:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 36,
+      "scheduled_at": "2026-11-10T11:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 37,
+      "scheduled_at": "2026-11-10T12:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 38,
+      "scheduled_at": "2026-11-10T12:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 39,
+      "scheduled_at": "2026-11-10T12:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 40,
+      "scheduled_at": "2026-11-10T12:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 41,
+      "scheduled_at": "2026-11-10T12:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 42,
+      "scheduled_at": "2026-11-10T12:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 43,
+      "scheduled_at": "2026-11-10T12:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 44,
+      "scheduled_at": "2026-11-10T12:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 45,
+      "scheduled_at": "2026-11-10T12:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 46,
+      "scheduled_at": "2026-11-10T12:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 47,
+      "scheduled_at": "2026-11-10T12:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 48,
+      "scheduled_at": "2026-11-10T12:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 49,
+      "scheduled_at": "2026-11-10T13:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 50,
+      "scheduled_at": "2026-11-10T13:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 51,
+      "scheduled_at": "2026-11-10T13:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 52,
+      "scheduled_at": "2026-11-10T13:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 53,
+      "scheduled_at": "2026-11-10T13:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 54,
+      "scheduled_at": "2026-11-10T13:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 55,
+      "scheduled_at": "2026-11-10T13:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 56,
+      "scheduled_at": "2026-11-10T13:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 57,
+      "scheduled_at": "2026-11-10T13:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 58,
+      "scheduled_at": "2026-11-10T13:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 59,
+      "scheduled_at": "2026-11-10T13:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 60,
+      "scheduled_at": "2026-11-10T13:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 61,
+      "scheduled_at": "2026-11-10T14:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 62,
+      "scheduled_at": "2026-11-10T14:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 63,
+      "scheduled_at": "2026-11-10T14:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 64,
+      "scheduled_at": "2026-11-10T14:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 65,
+      "scheduled_at": "2026-11-10T14:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 66,
+      "scheduled_at": "2026-11-10T14:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 67,
+      "scheduled_at": "2026-11-10T14:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 68,
+      "scheduled_at": "2026-11-10T14:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 69,
+      "scheduled_at": "2026-11-10T14:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 70,
+      "scheduled_at": "2026-11-10T14:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 71,
+      "scheduled_at": "2026-11-10T14:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 72,
+      "scheduled_at": "2026-11-10T14:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 73,
+      "scheduled_at": "2026-11-10T15:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 74,
+      "scheduled_at": "2026-11-10T15:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 75,
+      "scheduled_at": "2026-11-10T15:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 76,
+      "scheduled_at": "2026-11-10T15:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 77,
+      "scheduled_at": "2026-11-10T15:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 78,
+      "scheduled_at": "2026-11-10T15:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 79,
+      "scheduled_at": "2026-11-10T15:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 80,
+      "scheduled_at": "2026-11-10T15:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 81,
+      "scheduled_at": "2026-11-10T15:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 82,
+      "scheduled_at": "2026-11-10T15:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 83,
+      "scheduled_at": "2026-11-10T15:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 84,
+      "scheduled_at": "2026-11-10T15:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 85,
+      "scheduled_at": "2026-11-10T16:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 86,
+      "scheduled_at": "2026-11-10T16:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 87,
+      "scheduled_at": "2026-11-10T16:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 88,
+      "scheduled_at": "2026-11-10T16:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 89,
+      "scheduled_at": "2026-11-10T16:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 90,
+      "scheduled_at": "2026-11-10T16:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 91,
+      "scheduled_at": "2026-11-10T16:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 92,
+      "scheduled_at": "2026-11-10T16:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 93,
+      "scheduled_at": "2026-11-10T16:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 94,
+      "scheduled_at": "2026-11-11T09:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 95,
+      "scheduled_at": "2026-11-11T09:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 96,
+      "scheduled_at": "2026-11-11T09:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 97,
+      "scheduled_at": "2026-11-11T09:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 98,
+      "scheduled_at": "2026-11-11T09:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 99,
+      "scheduled_at": "2026-11-11T09:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 100,
+      "scheduled_at": "2026-11-11T09:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 101,
+      "scheduled_at": "2026-11-11T09:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 102,
+      "scheduled_at": "2026-11-11T09:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 103,
+      "scheduled_at": "2026-11-11T09:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 104,
+      "scheduled_at": "2026-11-11T09:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 105,
+      "scheduled_at": "2026-11-11T09:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 106,
+      "scheduled_at": "2026-11-11T10:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 107,
+      "scheduled_at": "2026-11-11T10:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 108,
+      "scheduled_at": "2026-11-11T10:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 109,
+      "scheduled_at": "2026-11-11T10:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 110,
+      "scheduled_at": "2026-11-11T10:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 111,
+      "scheduled_at": "2026-11-11T10:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 112,
+      "scheduled_at": "2026-11-11T10:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 113,
+      "scheduled_at": "2026-11-11T10:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 114,
+      "scheduled_at": "2026-11-11T10:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 115,
+      "scheduled_at": "2026-11-11T10:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 116,
+      "scheduled_at": "2026-11-11T10:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 117,
+      "scheduled_at": "2026-11-11T10:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 118,
+      "scheduled_at": "2026-11-11T11:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 119,
+      "scheduled_at": "2026-11-11T11:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 120,
+      "scheduled_at": "2026-11-11T11:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 121,
+      "scheduled_at": "2026-11-11T11:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 122,
+      "scheduled_at": "2026-11-11T11:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 123,
+      "scheduled_at": "2026-11-11T11:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 124,
+      "scheduled_at": "2026-11-11T11:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 125,
+      "scheduled_at": "2026-11-11T11:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 126,
+      "scheduled_at": "2026-11-11T11:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 127,
+      "scheduled_at": "2026-11-11T11:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 128,
+      "scheduled_at": "2026-11-11T11:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 129,
+      "scheduled_at": "2026-11-11T11:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 130,
+      "scheduled_at": "2026-11-11T12:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 131,
+      "scheduled_at": "2026-11-11T12:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 132,
+      "scheduled_at": "2026-11-11T12:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 133,
+      "scheduled_at": "2026-11-11T12:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 134,
+      "scheduled_at": "2026-11-11T12:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 135,
+      "scheduled_at": "2026-11-11T12:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 136,
+      "scheduled_at": "2026-11-11T12:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 137,
+      "scheduled_at": "2026-11-11T12:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 138,
+      "scheduled_at": "2026-11-11T12:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 139,
+      "scheduled_at": "2026-11-11T12:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 140,
+      "scheduled_at": "2026-11-11T12:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 141,
+      "scheduled_at": "2026-11-11T12:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 142,
+      "scheduled_at": "2026-11-11T13:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 143,
+      "scheduled_at": "2026-11-11T13:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 144,
+      "scheduled_at": "2026-11-11T13:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 145,
+      "scheduled_at": "2026-11-11T13:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 146,
+      "scheduled_at": "2026-11-11T13:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 147,
+      "scheduled_at": "2026-11-11T13:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 148,
+      "scheduled_at": "2026-11-11T13:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 149,
+      "scheduled_at": "2026-11-11T13:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 150,
+      "scheduled_at": "2026-11-11T13:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 151,
+      "scheduled_at": "2026-11-11T13:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 152,
+      "scheduled_at": "2026-11-11T13:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 153,
+      "scheduled_at": "2026-11-11T13:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 154,
+      "scheduled_at": "2026-11-11T14:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 155,
+      "scheduled_at": "2026-11-11T14:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 156,
+      "scheduled_at": "2026-11-11T14:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 157,
+      "scheduled_at": "2026-11-11T14:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 158,
+      "scheduled_at": "2026-11-11T14:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 159,
+      "scheduled_at": "2026-11-11T14:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 160,
+      "scheduled_at": "2026-11-11T14:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 161,
+      "scheduled_at": "2026-11-11T14:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 162,
+      "scheduled_at": "2026-11-11T14:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 163,
+      "scheduled_at": "2026-11-11T14:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 164,
+      "scheduled_at": "2026-11-11T14:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 165,
+      "scheduled_at": "2026-11-11T14:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 166,
+      "scheduled_at": "2026-11-11T15:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 167,
+      "scheduled_at": "2026-11-11T15:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 168,
+      "scheduled_at": "2026-11-11T15:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 169,
+      "scheduled_at": "2026-11-11T15:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 170,
+      "scheduled_at": "2026-11-11T15:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 171,
+      "scheduled_at": "2026-11-11T15:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 172,
+      "scheduled_at": "2026-11-11T15:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 173,
+      "scheduled_at": "2026-11-11T15:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 174,
+      "scheduled_at": "2026-11-11T15:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 175,
+      "scheduled_at": "2026-11-11T15:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 176,
+      "scheduled_at": "2026-11-11T15:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 177,
+      "scheduled_at": "2026-11-11T15:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 178,
+      "scheduled_at": "2026-11-11T16:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 179,
+      "scheduled_at": "2026-11-11T16:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 180,
+      "scheduled_at": "2026-11-11T16:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 181,
+      "scheduled_at": "2026-11-11T16:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 182,
+      "scheduled_at": "2026-11-11T16:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 183,
+      "scheduled_at": "2026-11-11T16:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 184,
+      "scheduled_at": "2026-11-11T16:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 185,
+      "scheduled_at": "2026-11-11T16:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 186,
+      "scheduled_at": "2026-11-11T16:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 187,
+      "scheduled_at": "2026-11-12T09:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 188,
+      "scheduled_at": "2026-11-12T09:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 189,
+      "scheduled_at": "2026-11-12T09:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 190,
+      "scheduled_at": "2026-11-12T09:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 191,
+      "scheduled_at": "2026-11-12T09:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 192,
+      "scheduled_at": "2026-11-12T09:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 193,
+      "scheduled_at": "2026-11-12T09:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 194,
+      "scheduled_at": "2026-11-12T09:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 195,
+      "scheduled_at": "2026-11-12T09:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 196,
+      "scheduled_at": "2026-11-12T09:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 197,
+      "scheduled_at": "2026-11-12T09:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 198,
+      "scheduled_at": "2026-11-12T09:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 199,
+      "scheduled_at": "2026-11-12T10:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 200,
+      "scheduled_at": "2026-11-12T10:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 201,
+      "scheduled_at": "2026-11-12T10:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 202,
+      "scheduled_at": "2026-11-12T10:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 203,
+      "scheduled_at": "2026-11-12T10:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 204,
+      "scheduled_at": "2026-11-12T10:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 205,
+      "scheduled_at": "2026-11-12T10:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 206,
+      "scheduled_at": "2026-11-12T10:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 207,
+      "scheduled_at": "2026-11-12T10:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 208,
+      "scheduled_at": "2026-11-12T10:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 209,
+      "scheduled_at": "2026-11-12T10:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 210,
+      "scheduled_at": "2026-11-12T10:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 211,
+      "scheduled_at": "2026-11-12T11:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 212,
+      "scheduled_at": "2026-11-12T11:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 213,
+      "scheduled_at": "2026-11-12T11:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 214,
+      "scheduled_at": "2026-11-12T11:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 215,
+      "scheduled_at": "2026-11-12T11:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 216,
+      "scheduled_at": "2026-11-12T11:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 217,
+      "scheduled_at": "2026-11-12T11:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 218,
+      "scheduled_at": "2026-11-12T11:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 219,
+      "scheduled_at": "2026-11-12T11:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 220,
+      "scheduled_at": "2026-11-12T11:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 221,
+      "scheduled_at": "2026-11-12T11:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 222,
+      "scheduled_at": "2026-11-12T11:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 223,
+      "scheduled_at": "2026-11-12T12:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 224,
+      "scheduled_at": "2026-11-12T12:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 225,
+      "scheduled_at": "2026-11-12T12:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 226,
+      "scheduled_at": "2026-11-12T12:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 227,
+      "scheduled_at": "2026-11-12T12:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 228,
+      "scheduled_at": "2026-11-12T12:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 229,
+      "scheduled_at": "2026-11-12T12:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 230,
+      "scheduled_at": "2026-11-12T12:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 231,
+      "scheduled_at": "2026-11-12T12:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 232,
+      "scheduled_at": "2026-11-12T12:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 233,
+      "scheduled_at": "2026-11-12T12:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 234,
+      "scheduled_at": "2026-11-12T12:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 235,
+      "scheduled_at": "2026-11-12T13:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 236,
+      "scheduled_at": "2026-11-12T13:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 237,
+      "scheduled_at": "2026-11-12T13:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 238,
+      "scheduled_at": "2026-11-12T13:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 239,
+      "scheduled_at": "2026-11-12T13:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 240,
+      "scheduled_at": "2026-11-12T13:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 241,
+      "scheduled_at": "2026-11-12T13:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 242,
+      "scheduled_at": "2026-11-12T13:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 243,
+      "scheduled_at": "2026-11-12T13:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 244,
+      "scheduled_at": "2026-11-12T13:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 245,
+      "scheduled_at": "2026-11-12T13:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 246,
+      "scheduled_at": "2026-11-12T13:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 247,
+      "scheduled_at": "2026-11-12T14:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 248,
+      "scheduled_at": "2026-11-12T14:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 249,
+      "scheduled_at": "2026-11-12T14:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 250,
+      "scheduled_at": "2026-11-12T14:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 251,
+      "scheduled_at": "2026-11-12T14:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 252,
+      "scheduled_at": "2026-11-12T14:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 253,
+      "scheduled_at": "2026-11-12T14:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 254,
+      "scheduled_at": "2026-11-12T14:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 255,
+      "scheduled_at": "2026-11-12T14:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 256,
+      "scheduled_at": "2026-11-12T14:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 257,
+      "scheduled_at": "2026-11-12T14:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 258,
+      "scheduled_at": "2026-11-12T14:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 259,
+      "scheduled_at": "2026-11-12T15:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 260,
+      "scheduled_at": "2026-11-12T15:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 261,
+      "scheduled_at": "2026-11-12T15:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 262,
+      "scheduled_at": "2026-11-12T15:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 263,
+      "scheduled_at": "2026-11-12T15:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 264,
+      "scheduled_at": "2026-11-12T15:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 265,
+      "scheduled_at": "2026-11-12T15:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 266,
+      "scheduled_at": "2026-11-12T15:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 267,
+      "scheduled_at": "2026-11-12T15:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 268,
+      "scheduled_at": "2026-11-12T15:45:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 269,
+      "scheduled_at": "2026-11-12T15:50:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 270,
+      "scheduled_at": "2026-11-12T15:55:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 271,
+      "scheduled_at": "2026-11-12T16:00:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 272,
+      "scheduled_at": "2026-11-12T16:05:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 273,
+      "scheduled_at": "2026-11-12T16:10:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 274,
+      "scheduled_at": "2026-11-12T16:15:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 275,
+      "scheduled_at": "2026-11-12T16:20:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 276,
+      "scheduled_at": "2026-11-12T16:25:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 277,
+      "scheduled_at": "2026-11-12T16:30:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 278,
+      "scheduled_at": "2026-11-12T16:35:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    },
+    {
+      "sequence": 279,
+      "scheduled_at": "2026-11-12T16:40:00+01:00",
+      "recipient_assignment": "PENDING_VERIFICATION"
+    }
+  ],
+  "permission": {
+    "confirmed_by": "School administrator in this chat",
+    "scope": "Parent portal onboarding announcement",
+    "record": "User confirmed permission granted; exclude any individual opt-outs"
+  },
+  "readiness": {
+    "checked_at": "2026-11-07T19:22:14.739Z",
+    "live_bot_connected": true,
+    "live_portal_health": true,
+    "login_verified": false,
+    "protected_delivery_endpoint_deployed": false,
+    "protected_delivery_endpoint_status": 404,
+    "service_credentials_configured_locally": false
+  },
+  "remaining_blockers": [
+    "Deploy and configure authenticated campaign sending controls; live bot does not expose the protected delivery endpoint",
+    "Verify a real parent can sign in and access only linked children",
+    "Verify deployed recipient/account mappings and individual opt-outs before assigning slots"
+  ],
+  "start_date_confirmed_by_user": true
+}

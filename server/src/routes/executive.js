@@ -1,3 +1,4 @@
+import { recordFeePayment } from '../services/feeWorkflow.js';
 import express from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -44,6 +45,8 @@ db.exec(`
   );
 `);
 
+
+db.prepare("UPDATE whatsapp_broadcast_logs SET status = 'UNVERIFIED' WHERE status = 'SENT'").run();
 
 /**
  * Helper: Perform atomic database backup snapshot
@@ -953,7 +956,7 @@ router.get('/all-modules-data', (req, res, next) => {
  */
 router.post('/scores/override', (req, res, next) => {
   try {
-    const { student_id, subject_id, session = '2024/2025', term = 'Second Term', ca1, ca2, exam } = req.body;
+    const { student_id, subject_id, session = '2026/2027', term = 'First Term', ca1, ca2, exam } = req.body;
     if (!student_id || !subject_id) {
       return res.status(400).json({ success: false, message: 'Student ID and Subject ID are required.' });
     }
@@ -1055,47 +1058,9 @@ router.post('/promote-students', (req, res, next) => {
  */
 router.post('/finance/record-payment', (req, res, next) => {
   try {
-    const { invoice_id, amount, payment_method = 'Bank Transfer', reference = '' } = req.body;
-    if (!invoice_id || !amount || Number(amount) <= 0) {
-      return res.status(400).json({ success: false, message: 'Invoice ID and valid positive amount required.' });
-    }
-
-    const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoice_id);
-    if (!invoice) {
-      return res.status(404).json({ success: false, message: 'Target invoice not found.' });
-    }
-
-    const payAmt = Number(amount);
-    const newPaid = Number(invoice.amount_paid || 0) + payAmt;
-    const newStatus = newPaid >= invoice.amount_due ? 'Paid' : 'Partial';
-
-    db.prepare('UPDATE invoices SET amount_paid = ?, status = ? WHERE id = ?').run(newPaid, newStatus, invoice_id);
-
-    const receiptNo = `REC-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
-    db.prepare(`
-      INSERT INTO payments (invoice_id, receipt_no, amount, payment_method, reference, recorded_by, payment_date)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `).run(invoice_id, receiptNo, payAmt, payment_method, reference || `ROOT-PAY-${Date.now()}`, req.user.username);
-
-    logAudit(
-      req.user.id,
-      'EXECUTIVE_PAYMENT_RECORDED',
-      'FINANCE',
-      `SuperAdmin recorded payment of NGN ${payAmt.toLocaleString()} for Invoice ${invoice.invoice_no}. New status: ${newStatus}`,
-      req.ip
-    );
-
-    res.json({
-      success: true,
-      message: `Payment of ₦${payAmt.toLocaleString()} recorded. Invoice is now ${newStatus}.`,
-      invoice: {
-        id: invoice.id,
-        invoice_no: invoice.invoice_no,
-        amount_due: invoice.amount_due,
-        amount_paid: newPaid,
-        status: newStatus
-      }
-    });
+    const result = recordFeePayment({...req.body, actor:req.user.username});
+    logAudit(req.user.id, 'EXECUTIVE_PAYMENT_RECORDED', 'FINANCE', 'Recorded receipt ' + result.receipt_no, req.ip);
+    res.status(201).json({success:true, ...result});
   } catch (err) {
     next(err);
   }
@@ -1426,7 +1391,7 @@ router.get('/whatsapp/status', (req, res, next) => {
         platform: 'Fly.io',
         machineId: '8d999d0ce54368',
         region: 'lhr (London, UK)',
-        status: 'DEPLOYED & OPERATIONAL',
+        status: 'UNKNOWN — check the live bot connection',
         authStorage: 'Persistent Volume /data (Mounted)',
         nodeVersion: 'Node 22-alpine',
         naturalLanguageBrain: 'In-House Deterministic Bayesian AI'
@@ -1491,14 +1456,14 @@ router.post('/whatsapp/broadcast', (req, res, next) => {
 
     const result = db.prepare(`
       INSERT INTO whatsapp_broadcast_logs (broadcast_type, target_audience, title, message, recipient_count, dispatched_by, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'SENT')
+      VALUES (?, ?, ?, ?, ?, ?, 'NOT_DISPATCHED')
     `).run(broadcast_type, audienceDescription, title.trim(), message.trim(), recipientCount, req.user.username || 'SuperAdmin');
 
     logAudit(
       req.user.id,
-      'WHATSAPP_BROADCAST_DISPATCHED',
+      'WHATSAPP_BROADCAST_RECORDED',
       'COMMUNICATION',
-      `SuperAdmin dispatched broadcast "${title}" to ${audienceDescription} (${recipientCount} recipient phones)`,
+      `SuperAdmin recorded broadcast "${title}" to ${audienceDescription} (${recipientCount} recipient phones)`,
       req.ip
     );
 
@@ -1506,7 +1471,7 @@ router.post('/whatsapp/broadcast', (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: `Broadcast message queued & dispatched to ${recipientCount} verified recipients.`,
+      message: `Broadcast recorded, not sent. Intended contacts: ${recipientCount} contacts; delivery not attempted.`,
       broadcast: logEntry
     });
   } catch (err) {
@@ -1566,7 +1531,7 @@ router.get('/settings', (req, res, next) => {
     if (!settings) {
       db.prepare(`
         INSERT OR IGNORE INTO system_settings (id, current_session, current_term, next_resumption_date)
-        VALUES (1, '2024/2025', 'Second Term', '2025-05-05')
+        VALUES (1, '2026/2027', 'Second Term', '2025-05-05')
       `).run();
       settings = db.prepare('SELECT * FROM system_settings WHERE id = 1').get();
     }

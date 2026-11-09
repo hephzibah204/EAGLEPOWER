@@ -46,6 +46,9 @@ export default function NewsSection() {
               className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm hover:shadow-xl hover:border-amber-400 transition-all duration-300 flex flex-col justify-between cursor-pointer group text-left"
             >
               <div>
+                {item.image && (
+                  <img src={item.image} alt={item.imageAlt} loading="lazy" width="1080" height="810" className="w-full h-40 rounded-2xl object-cover mb-4" />
+                )}
                 <div className="flex items-center justify-between mb-4">
                   <span className="text-[11px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
                     {item.badge}
@@ -96,9 +99,7 @@ export default function NewsSection() {
 
               <div className="text-sm text-slate-600 space-y-3 leading-relaxed">
                 <p>{activeArticle.summary}</p>
-                <p>
-                  Eagle Power Schools continues to elevate benchmarks for academic rigor and moral uprightness in Awka South LGA. For further media or parental inquiries regarding this update, kindly connect with the administrative secretariat.
-                </p>
+                {activeArticle.body && <p>{activeArticle.body}</p>}
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">

@@ -33,19 +33,7 @@ router.get('/overview', authenticate, requireRoles('bursar', 'admin', 'superadmi
     let structureCount = db.prepare('SELECT COUNT(*) as c FROM staff_salary_structures').get().c;
     const verifiedBanksCount = db.prepare('SELECT COUNT(*) as c FROM staff_bank_accounts WHERE is_verified = 1').get().c;
 
-    // Auto-seed default salary structure for active staff if missing
-    if (structureCount === 0 && staffCount > 0) {
-      const activeStaff = db.prepare('SELECT id FROM staff WHERE is_active = 1').all();
-      const insertDefaultStructure = db.prepare(`
-        INSERT OR IGNORE INTO staff_salary_structures 
-        (staff_id, base_salary, housing_allowance, transport_allowance, teaching_allowance, tax_deduction, pension_deduction, other_deductions, net_salary)
-        VALUES (?, 70000, 15000, 10000, 10000, 5000, 3500, 0, 96500)
-      `);
-      for (const st of activeStaff) {
-        insertDefaultStructure.run(st.id);
-      }
-      structureCount = db.prepare('SELECT COUNT(*) as c FROM staff_salary_structures').get().c;
-    }
+    // Reporting must never create unapproved salary obligations.
 
     const totals = db.prepare(`
       SELECT 
@@ -164,6 +152,9 @@ router.put('/staff/:id/salary', authenticate, requireRoles('bursar', 'admin', 's
     const gross = parsed.base_salary + parsed.housing_allowance + parsed.transport_allowance + parsed.teaching_allowance;
     const deductions = parsed.tax_deduction + parsed.pension_deduction + parsed.other_deductions;
     const net = gross - deductions;
+    if (!Number.isFinite(net) || net <= 0) {
+      return res.status(400).json({ success: false, message: 'Salary deductions must leave a positive net salary.' });
+    }
 
     const stmt = db.prepare(`
       INSERT INTO staff_salary_structures (
@@ -282,7 +273,7 @@ router.post('/batches/generate', authenticate, requireRoles('bursar', 'admin', '
 
     // Ensure not already generated
     const existing = db.prepare('SELECT id, batch_code, status FROM payroll_batches WHERE month_year = ?').get(targetMonth);
-    if (existing && existing.status === 'Disbursed') {
+    if (existing) {
       return res.status(400).json({
         success: false,
         message: `Payroll batch for ${targetMonth} has already been disbursed (${existing.batch_code}).`
@@ -291,7 +282,7 @@ router.post('/batches/generate', authenticate, requireRoles('bursar', 'admin', '
 
     const staffWithDetails = db.prepare(`
       SELECT 
-        s.id as staff_id, s.name, s.staff_no,
+        s.id as staff_id, s.name, s.staff_no, sss.id as salary_structure_id, sba.is_verified,
         COALESCE(sss.base_salary, 70000) as base_salary,
         COALESCE(sss.housing_allowance, 15000) as housing_allowance,
         COALESCE(sss.transport_allowance, 10000) as transport_allowance,
@@ -309,6 +300,10 @@ router.post('/batches/generate', authenticate, requireRoles('bursar', 'admin', '
 
     if (staffWithDetails.length === 0) {
       return res.status(400).json({ success: false, message: 'No active staff members found to generate payroll.' });
+    }
+
+    if (staffWithDetails.some(s => !s.salary_structure_id || !s.is_verified || !s.paystack_recipient_code || !s.account_number || !Number.isFinite(s.net_salary) || s.net_salary <= 0)) {
+      return res.status(400).json({ success: false, message: 'Configure a positive salary and a verified bank recipient for every active staff member before generating payroll.' });
     }
 
     let totalGross = 0;
@@ -455,25 +450,31 @@ router.post('/batches/:id/disburse', authenticate, requireRoles('bursar', 'admin
       return res.status(404).json({ success: false, message: 'Payroll batch not found.' });
     }
 
-    if (batch.status === 'Disbursed') {
+    if (!['Draft', 'Approved'].includes(batch.status)) {
       return res.status(400).json({ success: false, message: 'This payroll batch has already been disbursed.' });
     }
 
     const items = db.prepare(`
-      SELECT pi.*, sba.paystack_recipient_code
+      SELECT pi.*, sba.paystack_recipient_code, sba.is_verified, sba.account_number as current_account_number
       FROM payroll_items pi
       LEFT JOIN staff_bank_accounts sba ON pi.staff_id = sba.staff_id
       WHERE pi.batch_id = ?
     `).all(req.params.id);
 
+    if (!items.length || items.some(item => !item.is_verified || item.account_number !== item.current_account_number || !item.paystack_recipient_code || !Number.isFinite(item.net_amount) || item.net_amount <= 0)) {
+      return res.status(400).json({ success: false, message: 'Every payroll item requires a verified recipient and a positive net amount.' });
+    }
     // Prepare transfer payload
     const transfers = items.map(item => ({
       amount: item.net_amount,
-      recipient: item.paystack_recipient_code || `RCP_MOCK_${item.staff_id}`,
+      recipient: item.paystack_recipient_code,
       reference: item.transfer_reference,
       reason: `Eagle Power Schools Salary: ${batch.month_year}`
     }));
 
+    const claimed = db.prepare("UPDATE payroll_batches SET status = 'Processing' WHERE id = ? AND status IN ('Draft', 'Approved')").run(batch.id);
+    if (!claimed.changes) return res.status(409).json({ success: false, message: 'Payroll batch is already being processed.' });
+    // Uncertain gateway failures remain Processing until reconciled, preventing duplicate sends.
     // Call Paystack Bulk Transfer Gateway
     const transferResult = await initiateBulkTransfer({
       batchCode: batch.batch_code,
@@ -485,20 +486,20 @@ router.post('/batches/:id/disburse', authenticate, requireRoles('bursar', 'admin
       // Update batch
       db.prepare(`
         UPDATE payroll_batches
-        SET status = 'Disbursed',
+        SET status = ?,
             approved_by = ?,
             disbursed_at = CURRENT_TIMESTAMP,
             paystack_batch_code = ?
         WHERE id = ?
-      `).run(req.user.full_name || 'Bursar / Admin', transferResult.batch_code, req.params.id);
+      `).run(transferResult.is_simulated ? 'Disbursed' : 'Processing', req.user.full_name || 'Bursar / Admin', transferResult.batch_code, req.params.id);
 
       // Update all items
       db.prepare(`
         UPDATE payroll_items
-        SET status = 'Success',
+        SET status = ?,
             disbursed_at = CURRENT_TIMESTAMP
         WHERE batch_id = ?
-      `).run(req.params.id);
+      `).run(transferResult.is_simulated ? 'Success' : 'Queued', req.params.id);
 
       db.exec('COMMIT;');
     } catch (txErr) {
@@ -516,7 +517,7 @@ router.post('/batches/:id/disburse', authenticate, requireRoles('bursar', 'admin
 
     res.json({
       success: true,
-      message: `Bulk payroll for ${batch.month_year} disbursed successfully!`,
+      message: transferResult.is_simulated ? 'Sandbox payroll completed.' : 'Payroll submitted for processing. Settlement requires reconciliation.',
       gateway_batch_code: transferResult.batch_code,
       total_payout: batch.total_net_payout,
       is_simulated: transferResult.is_simulated
@@ -530,14 +531,14 @@ router.post('/batches/:id/disburse', authenticate, requireRoles('bursar', 'admin
  * 9. GET /api/payroll/payslip/:staffId
  * View individual printable pay slip
  */
-router.get('/payslip/:staffId', authenticate, (req, res, next) => {
+router.get('/payslip/:staffId', authenticate, requireRoles('teacher', 'bursar', 'admin'), (req, res, next) => {
   try {
     const staffId = parseInt(req.params.staffId);
     const { batch_id } = req.query;
 
     // Security: Teachers can only view their own pay slip
-    if (req.user.role === 'teacher' && req.user.reference_id) {
-      const selfStaff = db.prepare('SELECT id FROM staff WHERE UPPER(staff_no) = ?').get(req.user.reference_id.toUpperCase());
+    if (req.user.role === 'teacher') {
+      const selfStaff = db.prepare('SELECT id FROM staff WHERE UPPER(staff_no) = ?').get(String(req.user.reference_id || '').toUpperCase());
       if (!selfStaff || selfStaff.id !== staffId) {
         return res.status(403).json({ success: false, message: 'Access denied: You may only view your own pay slip.' });
       }

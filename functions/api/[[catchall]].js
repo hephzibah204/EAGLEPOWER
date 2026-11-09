@@ -28,7 +28,7 @@ const whatsappBroadcastStore = [
     broadcast_type: 'ALL',
     target_audience: 'Entire School Community (Parents + Staff)',
     title: 'Resumption of Second Term Academic Activities',
-    message: 'Welcome back to Second Term 2024/2025. Classes commence at 7:45 AM prompt.',
+    message: 'Welcome back to Second Term 2026/2027. Classes commence at 7:45 AM prompt.',
     recipient_count: 119,
     dispatched_by: 'SuperAdmin',
     status: 'SENT',
@@ -543,6 +543,24 @@ export async function onRequest(context) {
     }
 
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Dispatch OTP immediately to user's WhatsApp via the Fly.io WhatsApp Bot Companion Gateway
+    try {
+      const dispatchPromise = fetch('https://eaglepower-whatsapp-bot.fly.dev/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: cleanDigits || phone,
+          code: otpCode,
+          recipientName: matchedUser.full_name || matchedUser.username || 'Staff/Parent'
+        })
+      }).catch(err => console.warn('WhatsApp OTP dispatch error:', err.message));
+
+      if (context && typeof context.waitUntil === 'function') {
+        context.waitUntil(dispatchPromise);
+      }
+    } catch (_e) {}
+
     return jsonResponse({
       success: true,
       message: `A 6-digit secure login code has been sent to your WhatsApp number. Valid for 5 minutes.`,
@@ -927,7 +945,7 @@ export async function onRequest(context) {
         id: 1,
         school_name: dbData.system?.name || 'Eagle Power Schools',
         motto: dbData.system?.motto || 'Love, Truth & Service',
-        current_session: dbData.system?.current_session || '2024/2025',
+        current_session: dbData.system?.current_session || '2026/2027',
         current_term: dbData.system?.current_term || 'Second Term',
         next_resumption_date: dbData.system?.next_resumption_date || '2025-05-05',
         phone: dbData.system?.admin_contact || '+234 803 359 1058',
@@ -1514,7 +1532,7 @@ export async function onRequest(context) {
       success: true,
       class_id: classId,
       class_name: cls.name,
-      session: '2024/2025',
+      session: '2026/2027',
       term: 'Second Term',
       student_count: rows.length,
       broadsheet: rows
@@ -1524,7 +1542,7 @@ export async function onRequest(context) {
   if (path === '/api/exams/class-sheet') {
     const classId = url.searchParams.get('class_id') || '2';
     const subjectId = url.searchParams.get('subject_id') || '1';
-    const session = url.searchParams.get('session') || '2024/2025';
+    const session = url.searchParams.get('session') || '2026/2027';
     const term = url.searchParams.get('term') || 'Second Term';
 
     const cls = (dbData.classes || []).find(c => String(c.id) === String(classId)) || { id: classId, name: 'JSS2', division: 'Junior College' };
@@ -1587,7 +1605,7 @@ export async function onRequest(context) {
   }
 
   if (path === '/api/exams/marks/batch' && method === 'POST') {
-    const { subject_id, class_id, session = '2024/2025', term = 'Second Term', entries = [] } = body;
+    const { subject_id, class_id, session = '2026/2027', term = 'Second Term', entries = [] } = body;
 
     // Academic Permission Verification for Teachers
     const authHeader = request.headers.get('Authorization') || '';
@@ -1761,7 +1779,7 @@ export async function onRequest(context) {
           division: student.division || 'Junior College',
           photo_url: student.photo_url || null
         },
-        session: '2024/2025',
+        session: '2026/2027',
         term: 'Second Term',
         academic_records: grades,
         summary: {
@@ -1878,7 +1896,7 @@ export async function onRequest(context) {
 
     return jsonResponse({
       success: true,
-      session: url.searchParams.get('session') || '2024/2025',
+      session: url.searchParams.get('session') || '2026/2027',
       class_info: cls,
       subjects: ["Mathematics", "English Language", "Basic Science"],
       statistics: {
@@ -1905,7 +1923,7 @@ export async function onRequest(context) {
     return jsonResponse({
       success: true,
       data: {
-        session: dbData.system?.current_session || '2024/2025',
+        session: dbData.system?.current_session || '2026/2027',
         term: dbData.system?.current_term || 'Second Term',
         enrollment: {
           total: studentList.length,
@@ -2065,8 +2083,8 @@ export async function onRequest(context) {
         inHouseAnswer = "🦅 *Eagle Power Schools Motto:* Love, Truth & Service.\n*Mission:* To nurture disciplined, academically formidable, and morally sound future leaders.";
       } else if (/address|location|where/i.test(qLower)) {
         inHouseAnswer = "🏫 *Campus Address:* 2 & 9 Amikwo Road, Awka, Anambra State, Nigeria.\n📞 Administrative Desk: +234 803 542 8910";
-      } else if (/principal|okoye/i.test(qLower)) {
-        inHouseAnswer = "🎓 *Principal / Head of School:* Dr. (Mrs) N. Okoye, seasoned educational administrator dedicated to academic excellence.";
+      } else if (/principal|school manager|leadership/i.test(qLower)) {
+        inHouseAnswer = "🎓 *Principal & School Manager:* Revd Nnamdi Nathaniel, supported by the management team across academic administration, primary education, and nursery.\n• *Current Academic Session:* 2026/2027 Session (First Term)";
       } else if (/quadratic/i.test(qLower)) {
         inHouseAnswer = "📐 *Quadratic Equations:* Standard form is ax² + bx + c = 0.\nRoots: x = (-b ± √(b² - 4ac)) / (2a).\nDiscriminant D = b² - 4ac determines nature of roots (D > 0: two real roots, D = 0: equal roots, D < 0: complex roots).";
       }
@@ -2344,7 +2362,7 @@ export async function onRequest(context) {
       success: true,
       data: {
         school_name: 'Eagle Power Schools Awka',
-        current_session: '2024/2025',
+        current_session: '2026/2027',
         current_term: 'Second Term',
         active_report_template: 'ELITE',
         term_locked: 0
@@ -2368,7 +2386,7 @@ export async function onRequest(context) {
       studentName: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
       className: 'JSS 1 Gold',
       term: 'Second Term',
-      session: '2024/2025',
+      session: '2026/2027',
       scores: {
         'Mathematics': { ca1: 8, ca2: 8, exam: 55, total: 71, grade: 'B2', remark: 'Very Good' },
         'English Language': { ca1: 9, ca2: 9, exam: 60, total: 78, grade: 'A1', remark: 'Distinction' }

@@ -6,6 +6,12 @@
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
 const PAYSTACK_BASE = 'https://api.paystack.co';
 
+function requireSandbox() {
+  if (process.env.NODE_ENV === 'production' || process.env.PAYSTACK_SANDBOX !== 'true') {
+    throw new Error('Paystack operation failed or is not configured. Sandbox simulation requires PAYSTACK_SANDBOX=true outside production.');
+  }
+}
+
 export const NIGERIAN_BANKS_DIRECTORY = [
   { name: 'Guaranty Trust Bank (GTBank)', code: '058', slug: 'gtb' },
   { name: 'Zenith Bank', code: '057', slug: 'zenith' },
@@ -54,6 +60,7 @@ export async function resolveBankAccount({ accountNumber, bankCode }) {
     }
   }
 
+  requireSandbox();
   // High-fidelity sandbox resolution
   const bank = NIGERIAN_BANKS_DIRECTORY.find(b => b.code === bankCode) || { name: 'Commercial Bank', code: bankCode };
   return {
@@ -95,7 +102,7 @@ export async function createTransferRecipient({ name, accountNumber, bankCode })
   }
 
   return {
-    recipient_code: `RCP_${Date.now().toString().slice(-6)}_${Math.floor(100 + Math.random() * 900)}`,
+    recipient_code: (requireSandbox(), `RCP_${Date.now().toString().slice(-6)}_${Math.floor(100 + Math.random() * 900)}`),
     details: { name, account_number: accountNumber, bank_code: bankCode },
     is_simulated: true
   };
@@ -139,6 +146,7 @@ export async function initiateBulkTransfer({ batchCode, transfers }) {
     }
   }
 
+  requireSandbox();
   // Sandbox simulation
   return {
     success: true,
@@ -148,3 +156,106 @@ export async function initiateBulkTransfer({ batchCode, transfers }) {
     is_simulated: true
   };
 }
+
+/**
+ * 4. Initialize Online Fee Checkout Transaction (/transaction/initialize)
+ * Amount in Naira converted to Kobo (multiply by 100)
+ */
+export async function initializeFeePayment({ email, amount, reference, callback_url, metadata = {} }) {
+  const koboAmount = Math.round(amount * 100);
+
+  if (PAYSTACK_SECRET && PAYSTACK_SECRET.startsWith('sk_')) {
+    try {
+      const res = await fetch(`${PAYSTACK_BASE}/transaction/initialize`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${PAYSTACK_SECRET}`
+        },
+        body: JSON.stringify({
+          email,
+          amount: koboAmount,
+          reference,
+          callback_url,
+          metadata
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.status) {
+        return {
+          success: true,
+          authorization_url: data.data.authorization_url,
+          access_code: data.data.access_code,
+          reference: data.data.reference,
+          is_simulated: false
+        };
+      }
+    } catch (err) {
+      if (!process.env.PAYSTACK_ALLOW_FALLBACK && process.env.NODE_ENV === 'production') {
+        throw err;
+      }
+    }
+  }
+
+  requireSandbox();
+  // High-fidelity sandbox fallback
+  const mockUrl = `${callback_url || '/portal'}?reference=${reference}&paystack_status=success`;
+  return {
+    success: true,
+    authorization_url: mockUrl,
+    access_code: `mock_code_${Date.now()}`,
+    reference,
+    is_simulated: true
+  };
+}
+
+/**
+ * 5. Verify Online Fee Payment Transaction (/transaction/verify/:reference)
+ */
+export async function verifyFeePayment(reference) {
+  if (!reference) {
+    throw new Error('Transaction reference is required for Paystack verification.');
+  }
+
+  if (PAYSTACK_SECRET && PAYSTACK_SECRET.startsWith('sk_')) {
+    try {
+      const res = await fetch(`${PAYSTACK_BASE}/transaction/verify/${encodeURIComponent(reference)}`, {
+        headers: {
+          Authorization: `Bearer ${PAYSTACK_SECRET}`
+        }
+      });
+
+      const data = await res.json();
+      if (res.ok && data.status) {
+        return {
+          success: data.data.status === 'success',
+          status: data.data.status,
+          amount: data.data.amount / 100, // back to Naira
+          reference: data.data.reference,
+          paid_at: data.data.paid_at || new Date().toISOString(),
+          customer_email: data.data.customer?.email,
+          metadata: data.data.metadata,
+          raw: data.data,
+          is_simulated: false
+        };
+      }
+    } catch (err) {
+      if (!process.env.PAYSTACK_ALLOW_FALLBACK && process.env.NODE_ENV === 'production') {
+        throw err;
+      }
+    }
+  }
+
+  requireSandbox();
+  // Sandbox verification
+  return {
+    success: true,
+    status: 'success',
+    amount: null,
+    reference,
+    paid_at: new Date().toISOString(),
+    is_simulated: true
+  };
+}
+

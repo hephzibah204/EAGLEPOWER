@@ -11,43 +11,44 @@ const targetFile = path.resolve(__dirname, '../../../src/data/portalDbData.json'
 console.log('🔄 Exporting SQLite database to portalDbData.json...');
 
 const classes = db.prepare(`
-  SELECT c.*, (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id AND s.is_active = 1) as student_count 
-  FROM classes c 
+  SELECT c.*, (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id AND s.is_active = 1) as student_count
+  FROM classes c
   ORDER BY c.id ASC
 `).all();
 
 const sections = db.prepare('SELECT * FROM sections ORDER BY id ASC').all();
 const subjects = db.prepare('SELECT * FROM subjects ORDER BY id ASC').all();
 const students = db.prepare(`
-  SELECT s.*, c.name as class_name, c.division 
-  FROM students s 
-  LEFT JOIN classes c ON s.class_id = c.id 
-  WHERE s.is_active = 1 
+  SELECT s.*, c.name as class_name, c.division
+  FROM students s
+  LEFT JOIN classes c ON s.class_id = c.id
+  WHERE s.is_active = 1
   ORDER BY s.id ASC
 `).all();
 
 const staff = db.prepare(`
-  SELECT s.*, u.username, u.role as user_role 
-  FROM staff s 
-  LEFT JOIN users u ON u.reference_id = s.staff_no 
-  WHERE s.is_active = 1 
+  SELECT s.*,
+    (SELECT u.username FROM users u WHERE u.reference_id = s.staff_no ORDER BY u.id DESC LIMIT 1) as username,
+    (SELECT u.role FROM users u WHERE u.reference_id = s.staff_no ORDER BY u.id DESC LIMIT 1) as user_role
+  FROM staff s
+  WHERE s.is_active = 1
   ORDER BY s.id ASC
 `).all();
 
 const invoices = db.prepare(`
-  SELECT i.*, s.admission_no, s.first_name || ' ' || s.last_name as student_name, c.name as class_name 
-  FROM invoices i 
-  JOIN students s ON i.student_id = s.id 
-  LEFT JOIN classes c ON s.class_id = c.id 
+  SELECT i.*, s.admission_no, s.first_name || ' ' || s.last_name as student_name, c.name as class_name
+  FROM invoices i
+  JOIN students s ON i.student_id = s.id
+  LEFT JOIN classes c ON s.class_id = c.id
   ORDER BY i.id DESC
 `).all();
 
 const payments = db.prepare('SELECT * FROM payments ORDER BY id DESC').all();
 
 const staff_salary_structures = db.prepare(`
-  SELECT sss.*, st.name as staff_name, st.role as staff_role, st.staff_no 
-  FROM staff_salary_structures sss 
-  JOIN staff st ON sss.staff_id = st.id 
+  SELECT sss.*, st.name as staff_name, st.role as staff_role, st.staff_no
+  FROM staff_salary_structures sss
+  JOIN staff st ON sss.staff_id = st.id
   ORDER BY sss.id ASC
 `).all();
 
@@ -65,7 +66,7 @@ const marks = db.prepare(`
   JOIN subjects sub ON m.subject_id = sub.id
   ORDER BY m.id ASC
 `).all();
-const users = db.prepare('SELECT id, username, email, role, reference_id, full_name, is_active, last_login, created_at FROM users ORDER BY id ASC').all();
+const users = db.prepare('SELECT id, username, email, role, reference_id, full_name, avatar_url, signature_url, is_active, last_login, created_at FROM users ORDER BY id ASC').all();
 const audit_logs = db.prepare('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100').all();
 const system_settings = db.prepare('SELECT * FROM system_settings WHERE id = 1').get() || {};
 
@@ -77,7 +78,7 @@ const exportData = {
     admin_contact: system_settings.phone || "+234 803 359 1058",
     admin_email: system_settings.email || "adaeze3011@gmail.com",
     address: system_settings.address || "2 & 9 Amikwo Road, Awka, Anambra State",
-    current_session: system_settings.session || system_settings.current_session || "2024/2025",
+    current_session: system_settings.session || system_settings.current_session || "2026/2027",
     current_term: system_settings.term || system_settings.current_term || "Second Term",
     next_resumption_date: system_settings.next_resumption_date || "2025-05-05"
   },

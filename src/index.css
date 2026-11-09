@@ -1,4 +1,10 @@
+/* Hallmark · shape: settled-hero · genre: editorial · theme: brand
+ * paper: oklch(97.5% 0.008 85) · accent: oklch(27% 0.11 260) · display: Libre Caslon Display · body: Hanken Grotesk · hero: stage · nav: edge-aligned · footer: mast · signature: real photography of scholars & academic leadership
+ * axes: light/roman-serif/cool · posture: prestigious-warm · contrast: pass · fold: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P9 H9 E9 S9 R8 V9 · weakest: R, unified tokens with Tailwind v4 */
 @import "tailwindcss";
+@import "./tokens.css";
+@import "./base.css" layer(base);
 
 @layer base {
   :root {

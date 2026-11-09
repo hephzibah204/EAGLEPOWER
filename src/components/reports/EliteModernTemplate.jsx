@@ -182,7 +182,7 @@ export const EliteModernTemplate = ({ data }) => {
             <div className="p-1.5 bg-slate-50 rounded-lg text-center"><span className="text-slate-400 block text-[8px]">Politeness</span><b className="text-indigo-700">4 / 5</b></div>
           </div>
           <div className="grid grid-cols-2 gap-1 text-[9px]">
-            {grades.slice(0, 6).map((g) => (
+            {(grades || []).slice(0, 6).map((g) => (
               <div key={g.grade} className="flex items-center justify-between p-1 px-2 rounded-lg bg-indigo-50/40 border border-indigo-100/50">
                 <span className="font-black text-indigo-700">{g.grade}</span>
                 <span className="text-[8px] font-bold text-slate-500">{g.min}–{g.max}%</span>
@@ -203,7 +203,7 @@ export const EliteModernTemplate = ({ data }) => {
         </div>
         <div className="text-center">
           <div className="h-10 flex items-center justify-center mb-1 border-b border-indigo-200">
-            <span className="font-serif italic text-sm text-indigo-900 font-bold">{school.principal || 'Dr. (Mrs) N. Okoye'}</span>
+            <span className="font-serif italic text-sm text-indigo-900 font-bold">{school.principal || 'Revd Nnamdi Nathaniel'}</span>
           </div>
           <div className="text-[9px] font-black text-slate-500 uppercase tracking-widest">School Principal</div>
         </div>

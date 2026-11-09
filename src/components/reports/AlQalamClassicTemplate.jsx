@@ -186,7 +186,7 @@ export const AlQalamClassicTemplate = ({ data }) => {
         </div>
         <div>
           <div className="h-6 border-b border-emerald-400 flex items-center justify-center font-serif italic text-[10px] text-emerald-900 font-bold">
-            {school.principal || 'Dr. (Mrs) N. Okoye'}
+            {school.principal || 'Revd Nnamdi Nathaniel'}
           </div>
           <span className="text-[8px] font-black uppercase text-emerald-900">School Principal</span>
         </div>

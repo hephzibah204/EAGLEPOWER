@@ -1,4 +1,8 @@
-import db from '../config/db.js';
+import '../config/env.js';
+if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DESTRUCTIVE_DEMO_PURGE !== 'true' || !process.env.DB_PATH) {
+  throw new Error('Demo purge deletes entire tables. It requires a non-production isolated DB_PATH and ALLOW_DESTRUCTIVE_DEMO_PURGE=true.');
+}
+const { default: db } = await import('../config/db.js');
 
 console.log('🧹 Clearing test and demo transactions from Eagle Power EduCore...');
 

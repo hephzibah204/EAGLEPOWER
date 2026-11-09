@@ -13,7 +13,7 @@ Allow: /#testimonials
 Allow: /#faq
 Allow: /#contact
 Allow: /assets/
-Allow: /favicon.svg
+Allow: /assets/official-logo.jpg
 Allow: /site.webmanifest
 
 # Disallow internal backend APIs and authenticated portal dashboards from public crawler indexing

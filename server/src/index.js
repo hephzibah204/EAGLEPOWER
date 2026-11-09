@@ -1,6 +1,10 @@
+import { startFeeReminderScheduler } from './services/feeReminderScheduler.js';
+import './config/env.js';
+import { logSafeError } from './middleware/safeLogging.js';
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import { createCorsOptions } from './config/cors.js';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import path from 'node:path';
@@ -45,6 +49,9 @@ import payrollRoutes from './routes/payroll.js';
 import executiveRoutes from './routes/executive.js';
 import systemRoutes from './routes/system.js';
 import usersRoutes from './routes/users.js';
+import lessonNotesRoutes from './routes/lessonNotes.js';
+import staffCommunicationRoutes from './routes/staffCommunication.js';
+import { startStaffCommunicationScheduler } from './services/staffCommunicationService.js';
 
 // Security Middlewares
 import { threatDefense } from './middleware/threatDefense.js';
@@ -71,11 +78,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", ...(process.env.NODE_ENV === 'production' ? [] : ["'unsafe-eval'"])],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:", "blob:", "https:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-      connectSrc: ["'self'", "http://localhost:*", "ws:", "wss:", "https://api.paystack.co"],
+      connectSrc: ["'self'", "https://api.paystack.co", ...(process.env.NODE_ENV === 'production' ? [] : ["http://localhost:*", "ws:", "wss:"])],
       frameAncestors: ["'none'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
@@ -92,35 +99,13 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' }
 }));
 
-// CORS Configuration - Restrict to authorized client origins
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:4173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
-
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow non-browser requests (mobile apps, server-side fetch, CLI tests)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*') || origin.endsWith('.pages.dev')) {
-      return callback(null, true);
-    }
-
-    // In non-production, permit standard local dev origins
-    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error(`CORS origin '${origin}' is not permitted.`));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// Exact configured origins only; production never trusts arbitrary preview sites.
+app.use(cors(createCorsOptions()));
 
 // Strict Rate Limiting to prevent brute-force attacks and credential stuffing
 const authLimiter = rateLimit({
+  // Refresh recovery is not a credential attempt; the general API limit still applies.
+  skip: req => req.method === 'GET' && req.path === '/me',
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: process.env.NODE_ENV === 'production' ? 30 : 1000, // 30 in production, 1000 in dev/test
   message: {
@@ -179,6 +164,8 @@ app.use('/api/payroll', payrollRoutes);
 app.use('/api/executive', executiveRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/lesson-notes', lessonNotesRoutes);
+app.use('/api/staff-communication', staffCommunicationRoutes);
 
 const publicPath = path.resolve(__dirname, '../../public');
 if (fs.existsSync(publicPath)) {
@@ -231,6 +218,8 @@ app.use(errorHandler);
 
 // Start Server
 const server = app.listen(PORT, () => {
+  startFeeReminderScheduler();
+  startStaffCommunicationScheduler();
   console.log(`🦅 ========================================================`);
   console.log(`🦅 Eagle Power EduCore Backend API is running!`);
   console.log(`🌐 Server URL: http://localhost:${PORT}`);
@@ -246,7 +235,7 @@ server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`❌ Port ${PORT} is already in use by another process.`);
   } else {
-    console.error('❌ Server startup error:', err);
+    logSafeError('Server startup error', err);
   }
   process.exit(1);
 });
@@ -267,10 +256,10 @@ function gracefulShutdown(signal) {
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
+  logSafeError('Uncaught exception', err);
 });
 process.on('unhandledRejection', (reason) => {
-  console.error('❌ Unhandled Rejection:', reason);
+  logSafeError('Unhandled rejection', reason);
 });
 
 export default app;

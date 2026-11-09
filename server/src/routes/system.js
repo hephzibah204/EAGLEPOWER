@@ -20,19 +20,19 @@ db.exec(`
     id INTEGER PRIMARY KEY CHECK (id = 1),
     school_name TEXT DEFAULT 'Eagle Power Schools Awka',
     school_motto TEXT DEFAULT 'Love, Truth & Service',
-    current_session TEXT DEFAULT '2024/2025',
-    current_term TEXT DEFAULT 'Second Term',
-    next_resumption_date TEXT DEFAULT '2025-05-05',
+    current_session TEXT DEFAULT '2026/2027',
+    current_term TEXT DEFAULT 'First Term',
+    next_resumption_date TEXT DEFAULT '2027-01-11',
     active_report_template TEXT DEFAULT 'classic_british',
-    principal_name TEXT DEFAULT 'Adaeze Uzoefuna',
+    principal_name TEXT DEFAULT 'Revd Nnamdi Nathaniel',
     logo_url TEXT DEFAULT '/assets/official-logo.jpg',
-    contact_phone TEXT DEFAULT '+234 803 359 1058',
+    contact_phone TEXT DEFAULT '+234 803 542 8910',
     contact_email TEXT DEFAULT 'info@eaglepowerschools.com.ng',
     address TEXT DEFAULT '2 & 9 Amikwo Road, Awka, Anambra State',
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-  INSERT OR IGNORE INTO system_settings (id, current_session, current_term, next_resumption_date)
-  VALUES (1, '2024/2025', 'Second Term', '2025-05-05');
+  INSERT OR IGNORE INTO system_settings (id, current_session, current_term, next_resumption_date, principal_name)
+  VALUES (1, '2026/2027', 'First Term', '2027-01-11', 'Revd Nnamdi Nathaniel');
 `);
 
 try {
@@ -50,6 +50,7 @@ const settingsSchema = z.object({
   active_report_template: z.string().optional(),
   principal_name: z.string().optional(),
   contact_phone: z.string().optional(),
+  whatsapp_phone: z.string().optional(),
   contact_email: z.string().email().optional().or(z.literal('')),
   address: z.string().optional()
 });
@@ -64,7 +65,7 @@ router.get('/settings', (req, res, next) => {
     if (!settings) {
       db.prepare(`
         INSERT INTO system_settings (id, current_session, current_term, next_resumption_date)
-        VALUES (1, '2024/2025', 'Second Term', '2025-05-05')
+        VALUES (1, '2026/2027', 'Second Term', '2025-05-05')
       `).run();
       settings = db.prepare('SELECT * FROM system_settings WHERE id = 1').get();
     }
@@ -103,6 +104,7 @@ router.put('/settings', authenticate, requireRoles('superadmin'), (req, res, nex
           active_report_template = COALESCE(?, active_report_template),
           principal_name = COALESCE(?, principal_name),
           contact_phone = COALESCE(?, contact_phone),
+          whatsapp_phone = COALESCE(?, whatsapp_phone),
           contact_email = COALESCE(?, contact_email),
           address = COALESCE(?, address),
           updated_at = CURRENT_TIMESTAMP
@@ -116,6 +118,7 @@ router.put('/settings', authenticate, requireRoles('superadmin'), (req, res, nex
       d.active_report_template || null,
       d.principal_name || null,
       d.contact_phone || null,
+      d.whatsapp_phone || null,
       d.contact_email || null,
       d.address || null
     );

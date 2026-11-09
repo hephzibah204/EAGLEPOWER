@@ -1,211 +1,163 @@
 import React from 'react';
 import { 
-  Sparkles, 
   ArrowRight, 
-  CheckCircle2, 
-  BookOpen, 
-  Compass,
-  Star
+  GraduationCap, 
+  Award,
+  CheckCircle2,
+  ShieldCheck
 } from 'lucide-react';
-import { schoolInfo } from '../data/schoolData';
 
 export default function Hero({ onOpenAdmission }) {
-  const scrollTo = (id) => {
-    const el = document.querySelector(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
-
   return (
-    <section id="home" className="relative overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-blue-950 text-white pt-12 pb-20 lg:pt-20 lg:pb-28">
-      {/* Background Decorative Glow & Grid */}
-      <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
-      <div className="absolute -top-40 -right-40 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/2 -left-40 w-96 h-96 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+    <section id="home" className="relative bg-[#092347] bg-navy text-slate-100 pt-10 pb-16 lg:pt-16 lg:pb-24 border-b border-amber-500/20">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        
+        {/* Main 12-Column Stage */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
           
-          {/* Left Column: Headline and CTAs */}
-          <div className="lg:col-span-7 text-left space-y-6">
+          {/* Left Column: Prestigious Statement, Credibility & Dual Gateways */}
+          <div className="lg:col-span-7 space-y-6">
             
-            {/* Accreditation Badge */}
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/20 to-blue-500/20 border border-amber-400/40 text-amber-300 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm backdrop-blur-sm">
-              <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span>Government Approved &bull; Awka South, Anambra State</span>
+            {/* Accreditation Line */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-400/30 text-amber-300 rounded text-xs font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+              <span>Government Approved: Awka South, Anambra State</span>
             </div>
 
-            {/* Main Title */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.15] text-white">
-              Nurturing <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-200">Eagles</span> Destined to Soar in Knowledge & Moral Excellence.
+            {/* Headline in Roman Serif (Libre Caslon Display) */}
+            <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-normal tracking-tight text-white leading-[1.08]">
+              Where Dedicated Scholars Learn to Soar.
             </h1>
 
-            {/* Subheading */}
-            <p className="text-base sm:text-lg text-slate-300 max-w-2xl leading-relaxed">
-              Welcome to <span className="text-white font-semibold">Eagle Power Schools</span> — home to <em>Eagle Power School of Excellence</em> and <em>Eagle Power College of Excellence</em> in Awka. We blend academic rigor, moral character, and 21st-century STEM education to unlock every child's full potential.
+            {/* Concise Mission Sentence */}
+            <p className="text-base sm:text-lg text-slate-200 max-w-2xl leading-relaxed font-sans">
+              Welcome to Eagle Power Schools, Awka, nurturing dedicated scholars in character and modern inquiry.
             </p>
 
-            {/* Action Buttons */}
+            {/* Dual Core Actions: Admission & Portal */}
             <div className="pt-2 flex flex-wrap items-center gap-4">
               <button
+                type="button"
                 onClick={onOpenAdmission}
-                className="inline-flex items-center justify-center gap-2.5 px-7 py-3.5 text-base font-bold text-slate-950 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-400 hover:from-amber-300 hover:to-amber-500 rounded-xl shadow-lg shadow-amber-500/25 hover:shadow-xl hover:shadow-amber-500/35 transition-all transform hover:-translate-y-0.5"
+                className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 text-sm font-bold text-slate-950 bg-amber-400 hover:bg-amber-500 active:bg-amber-600 bg-gold hover:bg-gold-hover disabled:opacity-50 disabled:cursor-not-allowed rounded transition-all whitespace-nowrap shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300"
               >
-                <span>Enroll for 2026/2027 Session</span>
-                <ArrowRight className="w-5 h-5" />
+                <span className="whitespace-nowrap">Apply for Admission</span>
+                <ArrowRight className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={() => scrollTo('#academics')}
-                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-bold text-white bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl backdrop-blur-sm transition-all"
+              <a
+                href="/portal/overview"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 text-sm font-semibold text-white bg-white/10 hover:bg-white/15 active:bg-white/20 rounded border border-white/25 transition-colors whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
               >
-                <Compass className="w-4 h-4 text-amber-400" />
-                <span>Explore Academic Wings</span>
-              </button>
+                <GraduationCap className="w-4 h-4 text-amber-300" />
+                <span className="whitespace-nowrap">Access Web Portal</span>
+              </a>
             </div>
 
-            {/* Trust Badges */}
-            <div className="pt-4 flex flex-wrap items-center gap-6 text-xs text-slate-300 border-t border-slate-800/80">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-amber-400" />
-                <span>100% WAEC/NECO Distinction Record</span>
+            {/* Verified Achievements & Distinctions Banner */}
+            <div className="pt-4 border-t border-slate-700/80 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-slate-300">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>2026 National Spelling Bee 2nd Runner-up</span>
               </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-amber-400" />
-                <span>Anambra State Spelling Bee Champions</span>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>State Spelling Champions, 14 Feb 2026</span>
               </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-amber-400" />
-                <span>Modern STEM & Computer Labs</span>
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <span>Children’s Day March-Past 1st Place</span>
               </div>
             </div>
 
           </div>
 
-          {/* Right Column: Visual Showcase & Spotlight Card */}
+          {/* Right Column: Authentic Photography & School Spotlight */}
           <div className="lg:col-span-5 space-y-4">
             
-            {/* Main Showcase Card */}
-            <div className="relative rounded-3xl bg-gradient-to-b from-slate-900/95 via-slate-900/90 to-blue-950/90 border border-slate-700/80 p-6 sm:p-7 shadow-2xl backdrop-blur-md overflow-hidden">
+            {/* Real Photography Card */}
+            <div className="bg-[#0e2a54] bg-navy-surface border border-slate-700/80 rounded-xl p-5 sm:p-6 shadow-2xl">
               
-              {/* Crest Badge Floating */}
-              <div className="flex items-center justify-between pb-5 border-b border-slate-700/60">
+              {/* Header with Crest */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-700/80">
                 <div className="flex items-center gap-3">
                   <img
                     src="/assets/official-logo.jpg"
                     alt="Official Eagle Power Logo"
-                    className="w-13 h-13 rounded-2xl object-cover border-2 border-amber-400 bg-white p-0.5 shadow-md"
+                    className="w-11 h-11 rounded border border-amber-400/60 bg-white p-0.5"
                   />
                   <div>
-                    <h2 className="text-white font-extrabold text-base sm:text-lg leading-tight">Eagle Power Schools</h2>
-                    <p className="text-xs text-amber-400 font-semibold">Love, Truth &amp; Service &bull; Awka</p>
+                    <h2 className="text-white font-bold text-base leading-tight font-sans">
+                      Eagle Power Schools
+                    </h2>
+                    <p className="text-xs text-amber-400">Love, Truth &amp; Service, Awka</p>
                   </div>
                 </div>
-                <div className="bg-amber-400/20 text-amber-300 border border-amber-400/40 text-[11px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
-                  State Champions
+                <span className="text-[11px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-400/30 px-2.5 py-0.5 rounded">
+                  2026/2027 Term 1
+                </span>
+              </div>
+
+              {/* Real Champion Photography */}
+              <figure className="mt-4 border border-slate-700 overflow-hidden rounded bg-slate-950">
+                <img 
+                  src="/assets/school-updates/state-spelling-bee-2026.jpeg" 
+                  alt="Eagle Power scholars with championship trophy at 2026 Anambra State competition" 
+                  width="800" 
+                  height="600" 
+                  className="w-full aspect-[4/3] object-cover" 
+                  fetchPriority="high"
+                />
+                <figcaption className="p-3 bg-[#051429] bg-navy-dark border-t border-slate-800 text-xs text-slate-300 flex items-center justify-between">
+                  <span>Anambra State Champions and National Finalists</span>
+                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                </figcaption>
+              </figure>
+
+              {/* Programs Hierarchy */}
+              <div className="mt-4 pt-3 border-t border-slate-700/80 space-y-2 text-xs">
+                <div className="flex items-center justify-between py-1 text-slate-200">
+                  <span className="font-medium">Early Years &amp; Nursery</span>
+                  <span className="text-amber-300 text-[11px]">Creche, Nursery 1 to 3</span>
+                </div>
+                <div className="flex items-center justify-between py-1 text-slate-200 border-t border-slate-800">
+                  <span className="font-medium">School of Excellence (Primary)</span>
+                  <span className="text-amber-300 text-[11px]">Basic 1 to 6</span>
+                </div>
+                <div className="flex items-center justify-between py-1 text-slate-200 border-t border-slate-800">
+                  <span className="font-medium">College of Excellence (Secondary)</span>
+                  <span className="text-amber-300 text-[11px]">JSS 1 to 3 and SSS 1 to 3</span>
                 </div>
               </div>
 
-              {/* Champion Spotlight & Real Photo Ribbon */}
-              <div className="my-5 p-4 rounded-2xl bg-gradient-to-r from-amber-500/15 to-blue-500/15 border border-amber-400/30 flex items-center gap-4">
-                <div className="w-16 h-20 rounded-xl overflow-hidden bg-slate-800 shrink-0 border border-amber-400/50">
-                  <img
-                    src="/assets/spelling-champion.png"
-                    alt="Nigeria Spelling Bee Champion from Eagle Power College"
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div>
-                  <span className="text-[10px] font-extrabold text-amber-400 uppercase tracking-wider block">
-                    Nigeria Spelling Bee Distinction
-                  </span>
-                  <h3 className="text-sm font-bold text-white mt-0.5">
-                    Best Senior Speller (Anambra State)
-                  </h3>
-                  <p className="text-[11px] text-slate-300 mt-1">
-                    Produced by Eagle Power College of Excellence, qualifying for National Finals!
-                  </p>
-                </div>
-              </div>
-
-              {/* Programs preview */}
-              <div className="space-y-2.5 pb-5 border-b border-slate-700/60">
-                <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-amber-400/30 transition-colors">
-                  <div className="w-7 h-7 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold shrink-0 text-xs">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white">Eagle Power Early Years &amp; Nursery</h4>
-                    <p className="text-[11px] text-slate-300">Montessori sensory play, phonics mastery, and warm nurturing care.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-amber-400/30 transition-colors">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold shrink-0 text-xs">
-                    2
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white">Eagle Power School of Excellence (Primary)</h4>
-                    <p className="text-[11px] text-slate-300">Foundational mathematics, English diction, STEM basics &amp; coding.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:border-amber-400/30 transition-colors">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold shrink-0 text-xs">
-                    3
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-bold text-white">Eagle Power College of Excellence (Secondary)</h4>
-                    <p className="text-[11px] text-slate-300">JSS &amp; SSS specialized Science, Commercial &amp; Arts tracks.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Quick Action */}
-              <div className="pt-2">
-                <button
-                  onClick={onOpenAdmission}
-                  className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-slate-700/70 hover:bg-slate-700 text-amber-300 font-bold text-sm border border-amber-400/30 transition-colors"
-                >
-                  <BookOpen className="w-4 h-4 text-amber-400" />
-                  <span>Download Prospectus & Apply Today</span>
-                </button>
-              </div>
-
-            </div>
-
-            {/* Rating or Quick Testimonial Ribbon */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs text-slate-300">
-              <div className="flex items-center gap-1 text-amber-400">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="w-3.5 h-3.5 fill-amber-400" />
-                ))}
-              </div>
-              <span className="font-semibold text-white">100% Parent Satisfaction</span>
-              <span className="text-slate-300">Amikwo, Awka</span>
             </div>
 
           </div>
 
         </div>
 
-        {/* Floating Stat Counters Bar */}
-        <div className="mt-14 sm:mt-20 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-          {schoolInfo.stats.map((stat, idx) => (
-            <div 
-              key={idx} 
-              className="bg-slate-900/60 backdrop-blur-md border border-slate-800 hover:border-amber-500/30 rounded-2xl p-5 text-left transition-all hover:bg-slate-900/80 group"
-            >
-              <div className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-200 group-hover:scale-105 transition-transform duration-300">
-                {stat.value}
-              </div>
-              <div className="text-sm font-bold text-white mt-1">
-                {stat.label}
-              </div>
-              <div className="text-xs text-slate-300 mt-1">
-                {stat.sublabel}
-              </div>
-            </div>
-          ))}
+        {/* Real Numbers Bar (Floor Rule 8: Strictly genuine real numbers) */}
+        <div className="mt-12 pt-8 border-t border-slate-700/80 grid grid-cols-2 md:grid-cols-4 gap-6 text-left">
+          <div>
+            <div className="font-mono text-3xl font-normal text-amber-400">99</div>
+            <div className="text-sm font-semibold text-white mt-1">Enrolled Scholars</div>
+            <div className="text-xs text-slate-300">Active pupil population</div>
+          </div>
+          <div>
+            <div className="font-mono text-3xl font-normal text-amber-400">30</div>
+            <div className="text-sm font-semibold text-white mt-1">Academic Faculty</div>
+            <div className="text-xs text-slate-300">Educators and Directorate</div>
+          </div>
+          <div>
+            <div className="font-mono text-3xl font-normal text-amber-400">18</div>
+            <div className="text-sm font-semibold text-white mt-1">Class Divisions</div>
+            <div className="text-xs text-slate-300">Creche through SSS 3</div>
+          </div>
+          <div>
+            <div className="font-mono text-3xl font-normal text-amber-400">100%</div>
+            <div className="text-sm font-semibold text-white mt-1">Accredited Delivery</div>
+            <div className="text-xs text-slate-300">WAEC, NECO and BECE</div>
+          </div>
         </div>
 
       </div>

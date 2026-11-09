@@ -21,7 +21,7 @@ import {
   Bus,
   MapPin
 } from 'lucide-react';
-import { getApiBase } from '../../../config/api';
+import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
 export default function StudentMasterConsole({ authToken, classes = [] }) {
   const API_BASE = getApiBase();

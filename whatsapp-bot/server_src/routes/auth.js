@@ -311,6 +311,16 @@ router.post('/login', (req, res, next) => {
       });
     }
 
+    // Check if SuperAdmin is attempting to login through public portal
+    const isPublicPortal = req.headers['x-portal-type'] === 'public' || req.body.portal_source === 'public';
+    if (user.role === 'superadmin' && isPublicPortal) {
+      return res.status(403).json({
+        success: false,
+        is_superadmin: true,
+        message: 'SuperAdmin accounts must authenticate via the dedicated Executive Terminal at /executive-login.'
+      });
+    }
+
     // Reset failed attempt counters on successful authentication
     clearFailure(cleanLower);
     clearFailure(req.ip);

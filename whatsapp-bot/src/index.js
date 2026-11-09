@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import makeWASocket, {
+  proto,
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
@@ -23,6 +25,7 @@ import {
   getClassBroadsheetSummary,
   getStudentSummary,
   getStaffPayslipByPhoneOrNumber,
+  generateWeeklyExecutiveReport,
 } from "./smsService.js";
 import { processConversationalMessage } from "./aiBrain.js";
 
@@ -88,7 +91,15 @@ async function startBot() {
     auth: state,
     browser: Browsers.ubuntu("Chrome"),
     syncFullHistory: false,
-    generateHighQualityLinkPreview: true,
+    fireInitQueries: false,
+    markOnlineOnConnect: true,
+    generateHighQualityLinkPreview: false,
+    getMessage: async (key) => {
+      // Required by Baileys to initiate key renegotiation and send retry requests on decryption error
+      return undefined;
+    },
+    maxMsgRetryCount: 5,
+    retryRequestDelayMs: 250,
   });
   activeSocket = sock;
 
@@ -141,6 +152,18 @@ async function startBot() {
     }
   });
 
+  sock.ev.on('messages.update', updates => {
+    const file = path.join(AUTH_DIR,'fee-reminder-journal.json');
+    if (!fs.existsSync(file)) return;
+    try {
+      const journal = JSON.parse(fs.readFileSync(file,'utf8'));
+      for (const {key,update} of updates) {
+        if (!key.fromMe || ![proto.WebMessageInfo.Status.DELIVERY_ACK, proto.WebMessageInfo.Status.READ, proto.WebMessageInfo.Status.PLAYED].includes(update.status)) continue;
+        for (const entry of Object.values(journal)) if (entry.message_id === key.id) {entry.status='delivered';entry.delivered_at=new Date().toISOString();}
+      }
+      fs.writeFileSync(file + '.tmp',JSON.stringify(journal));fs.renameSync(file + '.tmp',file);
+    } catch {console.warn('Fee delivery receipt requires review');}
+  });
   sock.ev.on("creds.update", saveCreds);
 
   // Incoming Message Processor
@@ -172,12 +195,16 @@ async function startBot() {
         if (!cleanText) continue;
 
         // If sent from the connected device itself (self-chat testing):
-        // Only trigger on explicit commands or test phrases, and never loop on bot output
+        // Filter out bot-generated messages to avoid self-reply loops while allowing user test queries
         if (msg.key.fromMe) {
-          const isBotReply = cleanText.startsWith("🦅") || cleanText.startsWith("ℹ️") || cleanText.startsWith("🏓") || cleanText.startsWith("✅") || cleanText.startsWith("⚠️");
+          const isBotReply =
+            /^[🦅ℹ️🏓✅⚠️📋📊❌👋💰🔍👥📝📚💡📅✨🏫👨🎓]/.test(cleanText) ||
+            cleanText.includes("Eagle Power Schools") ||
+            cleanText.startsWith("Nnoo!") ||
+            cleanText.startsWith("Good morning,") ||
+            cleanText.startsWith("Good afternoon,") ||
+            cleanText.startsWith("Good evening,");
           if (isBotReply) continue;
-          const isCommand = cleanText.startsWith("!") || ["hi", "hello", "test", "menu", "fees", "help", "info", "ping"].includes(cleanText.toLowerCase());
-          if (!isCommand) continue;
         }
 
         const senderPhone = (msg.key.participant || senderJid).replace(/@.+/, "");
@@ -703,25 +730,41 @@ _For salary adjustments or account changes, contact the Bursar._`
       // Handles natural conversational inquiries from parents, teachers, and guests
       else {
         try {
+          await sock.sendPresenceUpdate('composing', senderJid).catch(() => {});
           const aiResponse = await processConversationalMessage({
             senderJid,
             senderPhone,
             senderName,
             text: cleanText,
           });
+          await sock.sendPresenceUpdate('paused', senderJid).catch(() => {});
 
           if (aiResponse) {
-            await sock.sendMessage(senderJid, { text: aiResponse }, { quoted: msg });
+            console.log(`[WhatsApp Outbound] Sending reply to ${senderJid} (${senderPhone}): "${aiResponse.slice(0, 50).replace(/\n/g, ' ')}..."`);
+            try {
+              // In self-chat testing, do not quote self-message to prevent cyclic sync decryption errors
+              await sock.sendMessage(senderJid, { text: aiResponse }, msg.key.fromMe ? {} : { quoted: msg });
+              console.log(`[WhatsApp Outbound] Successfully sent reply to ${senderJid}`);
+            } catch (dispatchErr) {
+              console.warn(`[WhatsApp Outbound] Primary send to ${senderJid} failed:`, dispatchErr.message);
+              // Fallback: If LID dispatch fails, attempt sending to international phone JID
+              if (senderPhone && senderPhone.length >= 7 && senderJid.endsWith('@lid')) {
+                const altJid = `${senderPhone}@s.whatsapp.net`;
+                console.log(`[WhatsApp Outbound] Retrying dispatch via alternate phone JID: ${altJid}`);
+                await sock.sendMessage(altJid, { text: aiResponse }).catch(err => console.warn('[WhatsApp Outbound] Alternate dispatch failed:', err.message));
+              }
+            }
           }
         } catch (aiErr) {
+          await sock.sendPresenceUpdate('paused', senderJid).catch(() => {});
           console.error("AI Reasoning Error:", aiErr);
           await sock.sendMessage(
             senderJid,
             {
               text: `🦅 *Eagle Power Assistant*: I had a minor difficulty processing that query. Please ask me again, or type *!menu* for quick actions.`,
             },
-            { quoted: msg }
-          );
+            msg.key.fromMe ? {} : { quoted: msg }
+          ).catch(() => {});
         }
       }
     } catch (msgErr) {
@@ -768,6 +811,41 @@ const httpServer = http.createServer((req, res) => {
       uptime: Math.floor(process.uptime())
     }));
     return;
+  }
+
+  if (url.pathname === '/fee-reminders/status' && req.method === 'GET') {
+    const key = process.env.WHATSAPP_SERVICE_KEY;
+    if (!key || key.length < 32 || req.headers.authorization !== 'Bearer ' + key) {res.writeHead(403);res.end();return;}
+    const file = path.join(AUTH_DIR,'fee-reminder-journal.json');
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(fs.existsSync(file) ? fs.readFileSync(file,'utf8') : '{}');return;
+  }
+  if (url.pathname === '/fee-reminders/send' && req.method === 'POST') {
+    const key = process.env.WHATSAPP_SERVICE_KEY;
+    if (!key || key.length < 32 || req.headers.authorization !== 'Bearer ' + key) {
+      res.writeHead(403); res.end(); return;
+    }
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; if (raw.length > 10000) req.destroy(); });
+    req.on('end', async () => {
+      const reply = (code,data) => {res.writeHead(code, {'Content-Type':'application/json'});res.end(JSON.stringify(data));};
+      try {
+        const {phone,text,id} = JSON.parse(raw);
+        if (!/^[1-9]\d{9,14}$/.test(phone) || typeof text !== 'string' || text.length > 4000 || !/^\d+$/.test(id)) return reply(400,{success:false});
+        const journalPath = path.join(AUTH_DIR,'fee-reminder-journal.json');
+        const journal = fs.existsSync(journalPath) ? JSON.parse(fs.readFileSync(journalPath,'utf8')) : {};
+        const fingerprint = createHash('sha256').update(phone + ':' + text).digest('hex');
+        if (journal[id]) return reply(journal[id].fingerprint === fingerprint && journal[id].message_id ? 200 : 409, journal[id].fingerprint === fingerprint ? journal[id] : {success:false});
+        if (!activeSocket?.user) return reply(503,{success:false});
+        journal[id] = {status:'sending',fingerprint};
+        const persist = () => {const current = fs.existsSync(journalPath) ? JSON.parse(fs.readFileSync(journalPath,'utf8')) : {}; current[id] = journal[id];fs.writeFileSync(journalPath + '.tmp',JSON.stringify(current));fs.renameSync(journalPath + '.tmp',journalPath);};
+        persist();
+        const sent = await activeSocket.sendMessage(phone + '@s.whatsapp.net',{text});
+        if (!sent?.key?.id) throw new Error('Missing acknowledgement');
+        journal[id] = {message_id:sent.key.id,status:'sent',fingerprint}; persist();
+        return reply(200,journal[id]);
+      } catch {return reply(502,{success:false});}
+    }); return;
   }
 
   if (url.pathname === '/qr') {
@@ -830,9 +908,193 @@ const httpServer = http.createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === '/send-otp' && req.method === 'POST') {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', async () => {
+      try {
+        const body = JSON.parse(raw);
+        const { phone, code, recipientName } = body;
+        if (!phone || !code) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Phone number and 6-digit code are required.' }));
+          return;
+        }
+
+        const clean = phone.replace(/\D/g, '');
+        const intlPhone = clean.startsWith('0') ? '234' + clean.slice(1) : (clean.startsWith('234') ? clean : '234' + clean);
+        const targetJid = `${intlPhone}@s.whatsapp.net`;
+
+        const otpMessage = 
+`🦅 *EAGLE POWER SCHOOLS & COLLEGES, AWKA*
+_Motto: Love, Truth & Service_
+
+Hello *${recipientName || 'User'}*! 🔐
+
+Here is your 6-digit WhatsApp Passwordless Login Code for the Web Portal:
+
+👉 *${code}* 👈
+
+⏱️ Valid for: *5 minutes*
+🔒 Never share this verification code with anyone.
+
+Direct One-Click Login:
+https://eaglepower.pages.dev/portal/login?phone=${encodeURIComponent(intlPhone)}&code=${encodeURIComponent(code)}`;
+
+        if (activeSocket) {
+          await activeSocket.sendMessage(targetJid, { text: otpMessage });
+          console.log(`[HTTP /send-otp] Dispatched 6-digit OTP code to ${targetJid}`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: `OTP delivered to WhatsApp (+${intlPhone})` }));
+        } else {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'WhatsApp bot companion socket is initializing.' }));
+        }
+      } catch (err) {
+        console.error('[HTTP /send-otp] Error:', err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Self-Healing Maintenance Endpoint: Purges stale Signal session files causing Bad MAC errors while preserving credentials
+  if (url.pathname === '/fix-sessions' && (req.method === 'POST' || req.method === 'GET')) {
+    try {
+      console.log('[Maintenance] Repairing Signal ratchet session keys...');
+      let removedCount = 0;
+      if (fs.existsSync(AUTH_DIR)) {
+        const files = fs.readdirSync(AUTH_DIR);
+        for (const file of files) {
+          if (file.startsWith('session-') || file.startsWith('app-state-') || file.startsWith('pre-key-')) {
+            try {
+              fs.unlinkSync(path.join(AUTH_DIR, file));
+              removedCount++;
+            } catch (_) {}
+          }
+        }
+      }
+      console.log(`[Maintenance] Removed ${removedCount} stale Signal session files. Restarting socket...`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, removedCount, message: 'Sessions repaired. Reconnecting socket...' }));
+      setTimeout(() => startBot(), 1500);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
+  // Full Auth Reset: Purges the entire auth directory to regenerate a clean QR code
+  if (url.pathname === '/reset-auth' && (req.method === 'POST' || req.method === 'GET')) {
+    try {
+      console.log('[Maintenance] Full Auth Reset requested.');
+      if (fs.existsSync(AUTH_DIR)) {
+        fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+        fs.mkdirSync(AUTH_DIR, { recursive: true });
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Auth wiped. New QR code generating...' }));
+      setTimeout(() => startBot(), 1500);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
+  // Trigger Weekly Executive Report Dispatch to Leadership or custom phone
+  if (url.pathname === '/dispatch-weekly-report' && (req.method === 'POST' || req.method === 'GET')) {
+    let raw = '';
+    req.on('data', chunk => { raw += chunk; });
+    req.on('end', async () => {
+      let targetPhone = url.searchParams.get('phone');
+      if (!targetPhone && raw) {
+        try {
+          const body = JSON.parse(raw);
+          targetPhone = body.phone;
+        } catch (_) {}
+      }
+      const result = await dispatchWeeklyReport(targetPhone || null);
+      res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    });
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not Found' }));
 });
+
+export const LEADERSHIP_RECIPIENTS = [
+  { phone: '2347066397577', name: 'Revd Nnamdi Nathaniel', role: 'Principal & School Manager' },
+  { phone: '2348033591058', name: 'Mrs. Adaeze Uzoefuna', role: 'Vice Principal (Academics)' },
+  { phone: '2348037000456', name: 'Mr. Abiodun Emmanuel', role: 'Director & Executive Administrator' },
+];
+
+let lastWeeklyReportTime = 0;
+
+export async function dispatchWeeklyReport(targetPhone = null) {
+  if (!activeSocket) {
+    console.warn('[Weekly Report] Socket not ready to dispatch report.');
+    return { success: false, reason: 'WhatsApp companion socket not ready.' };
+  }
+
+  // If specific phone requested
+  if (targetPhone && targetPhone !== 'all') {
+    const clean = String(targetPhone).replace(/\D/g, '');
+    const intlPhone = clean.startsWith('0') ? '234' + clean.slice(1) : (clean.startsWith('234') ? clean : '234' + clean);
+    const targetJid = `${intlPhone}@s.whatsapp.net`;
+    const leader = LEADERSHIP_RECIPIENTS.find(l => l.phone === intlPhone || l.phone.slice(-10) === clean.slice(-10));
+    const reportText = generateWeeklyExecutiveReport(leader?.name, leader?.role);
+
+    console.log(`[Weekly Report] Dispatching Executive Weekly Report to ${targetJid}...`);
+    try {
+      await activeSocket.sendMessage(targetJid, { text: reportText });
+      console.log(`[Weekly Report] Successfully delivered Executive Weekly Report to ${targetJid}.`);
+      return { success: true, timestamp: Date.now(), recipient: targetJid };
+    } catch (err) {
+      console.error(`[Weekly Report] Failed to dispatch report to ${targetJid}:`, err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  // Otherwise, broadcast to all executive leadership members
+  const results = [];
+  for (const leader of LEADERSHIP_RECIPIENTS) {
+    const targetJid = `${leader.phone}@s.whatsapp.net`;
+    const reportText = generateWeeklyExecutiveReport(leader.name, leader.role);
+    console.log(`[Weekly Report] Dispatching Executive Weekly Report to ${leader.name} (${targetJid})...`);
+    try {
+      await activeSocket.sendMessage(targetJid, { text: reportText });
+      console.log(`[Weekly Report] Successfully delivered to ${leader.name} (${targetJid}).`);
+      results.push({ success: true, recipient: targetJid, name: leader.name });
+    } catch (err) {
+      console.error(`[Weekly Report] Failed for ${leader.name}:`, err.message);
+      results.push({ success: false, recipient: targetJid, error: err.message });
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  lastWeeklyReportTime = Date.now();
+  return { success: true, timestamp: lastWeeklyReportTime, dispatches: results };
+}
+
+export const dispatchWeeklyReportToLeadership = dispatchWeeklyReport;
+export const dispatchWeeklyReportToPrincipal = dispatchWeeklyReport;
+
+// Background Recurring Weekly Dispatch:
+// Automatically runs every Friday afternoon (16:00 WAT / 15:00 UTC) to all leadership
+setInterval(() => {
+  const now = new Date();
+  const day = now.getUTCDay(); // 5 is Friday
+  const hour = now.getUTCHours(); // 15:00 UTC = 16:00 WAT
+  const sixDaysMs = 6 * 24 * 60 * 60 * 1000;
+
+  if (day === 5 && hour >= 15 && (Date.now() - lastWeeklyReportTime) > sixDaysMs && activeSocket) {
+    dispatchWeeklyReportToLeadership().catch(e => console.warn('[Weekly Cron] Error:', e.message));
+  }
+}, 30 * 60 * 1000);
 
 httpServer.listen(HTTP_PORT, '0.0.0.0', () => {
   console.log(`🌐 Bot HTTP Companion Gateway listening on http://0.0.0.0:${HTTP_PORT}`);

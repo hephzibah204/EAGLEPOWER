@@ -953,7 +953,7 @@ router.get('/all-modules-data', (req, res, next) => {
  */
 router.post('/scores/override', (req, res, next) => {
   try {
-    const { student_id, subject_id, session = '2024/2025', term = 'Second Term', ca1, ca2, exam } = req.body;
+    const { student_id, subject_id, session = '2026/2027', term = 'First Term', ca1, ca2, exam } = req.body;
     if (!student_id || !subject_id) {
       return res.status(400).json({ success: false, message: 'Student ID and Subject ID are required.' });
     }
@@ -1539,7 +1539,7 @@ router.get('/settings', (req, res, next) => {
     if (!settings) {
       db.prepare(`
         INSERT OR IGNORE INTO system_settings (id, current_session, current_term, next_resumption_date)
-        VALUES (1, '2024/2025', 'Second Term', '2025-05-05')
+        VALUES (1, '2026/2027', 'Second Term', '2025-05-05')
       `).run();
       settings = db.prepare('SELECT * FROM system_settings WHERE id = 1').get();
     }
@@ -1563,6 +1563,7 @@ router.put('/settings', (req, res, next) => {
       active_report_template,
       principal_name,
       contact_phone,
+      whatsapp_phone,
       contact_email,
       address
     } = req.body;
@@ -1578,6 +1579,7 @@ router.put('/settings', (req, res, next) => {
     if (active_report_template !== undefined) { updates.push('active_report_template = ?'); params.push(active_report_template.trim()); }
     if (principal_name !== undefined) { updates.push('principal_name = ?'); params.push(principal_name.trim()); }
     if (contact_phone !== undefined) { updates.push('contact_phone = ?'); params.push(contact_phone.trim()); }
+    if (whatsapp_phone !== undefined) { updates.push('whatsapp_phone = ?'); params.push(whatsapp_phone.trim()); }
     if (contact_email !== undefined) { updates.push('contact_email = ?'); params.push(contact_email.trim()); }
     if (address !== undefined) { updates.push('address = ?'); params.push(address.trim()); }
 

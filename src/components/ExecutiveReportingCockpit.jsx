@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   TrendingUp,
   Award,
@@ -20,20 +20,20 @@ import {
   RefreshCw
 } from 'lucide-react';
 
-import { getApiBase } from '../config/api';
+import { getApiBase, getSessionToken, apiFetch as fetch } from '../config/api';
 
 const REPORT_GENERATED_DATE = new Date().toLocaleDateString('en-GB');
 
 export default function ExecutiveReportingCockpit({ authToken }) {
-  const [selectedSession, setSelectedSession] = useState('2024/2025');
-  const [selectedTerm, setSelectedTerm] = useState('Second Term');
+  const [selectedSession, setSelectedSession] = useState('2026/2027');
+  const [selectedTerm, setSelectedTerm] = useState('First Term');
   const [activeSection, setActiveSection] = useState('overview'); // 'overview', 'academics', 'finance', 'operations'
   const [divisionFilter, setDivisionFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
 
   // Fallback token resolution for robustness
-  const effectiveToken = authToken || (typeof window !== 'undefined' ? (localStorage.getItem('eagle_token') || localStorage.getItem('token')) : '');
+  const effectiveToken = authToken || getSessionToken();
 
   // Loaded Reporting Data
   const [summaryData, setSummaryData] = useState(null);
@@ -41,11 +41,30 @@ export default function ExecutiveReportingCockpit({ authToken }) {
   const [financialData, setFinancialData] = useState(null);
   const [operationsData, setOperationsData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const reportRequest = useRef(0);
   const reportDate = REPORT_GENERATED_DATE;
 
   // Fetch reports from backend
+  useEffect(() => {
+    let active = true;
+    fetch(`${getApiBase()}/system/settings`)
+      .then(res => res.ok ? res.json() : null)
+      .then(result => {
+        if (!active || !result?.data) return;
+        if (result.data.current_session) setSelectedSession(result.data.current_session);
+        if (result.data.current_term) setSelectedTerm(result.data.current_term);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   const fetchReports = useCallback(async () => {
+    const requestId = ++reportRequest.current;
     setLoading(true);
+    setSummaryData(null);
+    setAcademicData(null);
+    setFinancialData(null);
+    setOperationsData(null);
     try {
       const apiBase = getApiBase();
       const headers = effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {};
@@ -57,31 +76,23 @@ export default function ExecutiveReportingCockpit({ authToken }) {
         fetch(`${apiBase}/reports/operations-safety`, { headers })
       ]);
 
-      if (sumRes.ok) {
-        const d = await sumRes.json();
-        setSummaryData(d.data);
-      }
-      if (acadRes.ok) {
-        const d = await acadRes.json();
-        setAcademicData(d.data);
-      }
-      if (finRes.ok) {
-        const d = await finRes.json();
-        setFinancialData(d.data);
-      }
-      if (opsRes.ok) {
-        const d = await opsRes.json();
-        setOperationsData(d.data);
-      }
+      const results = await Promise.all([sumRes, acadRes, finRes, opsRes].map(res =>
+        res.ok ? res.json() : null));
+      if (requestId !== reportRequest.current) return;
+      setSummaryData(results[0]?.data || null);
+      setAcademicData(results[1]?.data || null);
+      setFinancialData(results[2]?.data || null);
+      setOperationsData(results[3]?.data || null);
     } catch (err) {
       console.error('Failed to load executive reports:', err);
     } finally {
-      setLoading(false);
+      if (requestId === reportRequest.current) setLoading(false);
     }
   }, [effectiveToken, selectedSession, selectedTerm]);
 
   useEffect(() => {
     fetchReports();
+    return () => { reportRequest.current++; };
   }, [fetchReports]);
 
   // Export Defaulters to CSV
@@ -171,8 +182,7 @@ export default function ExecutiveReportingCockpit({ authToken }) {
             onChange={(e) => setSelectedSession(e.target.value)}
             className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-amber-400"
           >
-            <option value="2024/2025">2024/2025 Session</option>
-            <option value="2025/2026">2025/2026 Session</option>
+                        <option value="2026/2027">2026/2027 Session</option>
           </select>
 
           {/* Term Selector */}

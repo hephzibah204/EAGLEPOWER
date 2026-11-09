@@ -1,3 +1,4 @@
+import { canTeacherAccessClass } from '../middleware/academicAccess.js';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../config/db.js';
@@ -25,6 +26,11 @@ router.get('/', authenticate, requireRoles('superadmin', 'admin', 'teacher', 'bu
 
     let conditions = ['s.is_active = 1'];
     const params = [];
+    if (req.user.role === 'teacher') {
+      const ids = db.prepare('SELECT id FROM classes').all().filter(c => canTeacherAccessClass(req.user, c.id)).map(c => c.id);
+      conditions.push(ids.length ? 's.class_id IN (' + ids.map(() => '?').join(',') + ')' : '1 = 0');
+      params.push(...ids);
+    }
 
     if (q) {
       conditions.push('(s.admission_no LIKE ? OR s.first_name LIKE ? OR s.last_name LIKE ?)');
@@ -76,7 +82,7 @@ router.get('/', authenticate, requireRoles('superadmin', 'admin', 'teacher', 'bu
  * GET /api/students/lookup/:admissionNo
  * Student Portal quick lookup by admission number (Authenticated & ownership checked)
  */
-router.get('/lookup/:admissionNo', authenticate, (req, res, next) => {
+router.get('/lookup/:admissionNo', authenticate, requireStudentAccess('admissionNo', 'admission_no'), (req, res, next) => {
   try {
     const { admissionNo } = req.params;
     const cleanNo = admissionNo.trim().toUpperCase();
@@ -289,7 +295,7 @@ router.post('/', authenticate, requireRoles('admin', 'superadmin'), (req, res, n
       class_id ? parseInt(class_id) : null,
       section_id ? parseInt(section_id) : null,
       entry_mode || 'Fresh Admission',
-      enrolled_session || '2024/2025',
+      enrolled_session || '2026/2027',
       enrolled_term || 'Second Term',
       admission_date || new Date().toISOString().split('T')[0],
       religion || 'Christianity',
@@ -621,7 +627,7 @@ router.post('/bulk-promote', authenticate, requireRoles('superadmin'), (req, res
       req.user.id,
       'BULK_PROMOTE_STUDENTS',
       'STUDENTS',
-      `Bulk promoted ${promotedCount} students to ${targetClass.name} for session ${academic_session || '2025/2026'}`,
+      `Bulk promoted ${promotedCount} students to ${targetClass.name} for session ${academic_session || '2026/2027'}`,
       req.ip
     );
 

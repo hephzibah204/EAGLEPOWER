@@ -1,9 +1,11 @@
 # WhatsApp Bot (Baileys + Fly.io)
 
-Completely free WhatsApp bot running on [Fly.io](https://fly.io) with persistent session storage.
+Production startup is disabled following the 17 October 2026 security audit. Do not deploy this integration or remove its startup guard until the authorization, database sharing, dependency packaging, and messaging workflows listed in [DEPLOYMENT_AUDIT.md](../DEPLOYMENT_AUDIT.md) are repaired and verified. The deployment instructions below are historical and do not establish production readiness.
+
+WhatsApp bot prototype for [Fly.io](https://fly.io) with persistent session storage. Check current hosting terms before relying on free service.
 
 ## Features
-- **Zero Cost**: Runs on Fly.io's free tier with 1 persistent volume.
+- **Persistent storage**: Designed to use a Fly.io persistent volume; hosting and storage may incur charges.
 - **No Meta Approval Required**: Connects to any standard WhatsApp phone number (personal or business).
 - **Persistent Login**: Keeps credentials stored in `/data/auth_info` via Fly.io Volume mounts, so you don't need to re-scan the QR code across restarts or updates.
 - **Pairing Code & QR Code Support**: Supports standard QR code scanning in the terminal or 8-digit WhatsApp pairing codes.

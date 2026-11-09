@@ -74,18 +74,20 @@ Welcome, *${title}*! Select an administrative workflow by typing its *number* or
 
     case 'teacher':
       return `🦅 *EAGLE POWER SCHOOLS — TEACHER PORTAL*
-Hello *${title}*! Choose an action by typing its *number* or just say it in natural words:
+Hello *${title}*! Choose an action by typing its *number* or command in natural words:
 
 1️⃣ *Clock In / Arrival* (e.g. _"I just arrived"_)
 2️⃣ *Clock Out / Departure* (e.g. _"Closing for today"_)
-3️⃣ *Mark Student Attendance* (e.g. _"Mark Chisom absent today"_)
-4️⃣ *Record Test or Exam Scores* (e.g. _"Give Emeka 25 in CA and 60 in Maths"_)
-5️⃣ *View My Class Register* (e.g. _"Show me students in Primary 4"_)
-6️⃣ *Assign Homework* (e.g. _"Give Primary 4 homework on fractions"_)
-7️⃣ *AI Lesson Helper* (e.g. _"Suggest 3 science experiments for Primary 5"_)
+3️⃣ *1-Tap Class Attendance* (e.g. \`!allpresent\` or _"All present in my class"_)
+4️⃣ *Mark Single Student Attendance* (e.g. \`!mark EPS-2024-001 A\`)
+5️⃣ *Record Test or Exam Scores* (e.g. \`!score EPS-2024-001 MTH 25 55\`)
+6️⃣ *View My Class Register & Parents* (e.g. \`!myclass\`)
+7️⃣ *My Monthly Payslip & Salary* (e.g. \`!payslip\`)
+8️⃣ *Class Broadsheet & Averages* (e.g. \`!broadsheet SS2\`)
+9️⃣ *AI Lesson Helper & Teaching Schemes* (e.g. _"Suggest 3 science experiments for JSS2"_)
 0️⃣ *Logout / Switch User*
 
-💡 _Tip: You do NOT need to memorize any codes! Just type the number or speak naturally._`;
+💡 _Tip: You can also use quick commands like \`!allpresent\`, \`!payslip\`, or \`!myclass\` anytime._`;
 
     case 'parent':
       const childList = session.profile?.children?.map(c => `${c.first_name} (${c.class_name || 'Class'})`).join(', ') || 'Your Child';

@@ -1,3 +1,4 @@
+import { requireTeacherClassAccess } from '../middleware/academicAccess.js';
 import express from 'express';
 import db from '../config/db.js';
 import { authenticate, requireRoles } from '../middleware/auth.js';
@@ -5,11 +6,21 @@ import { logAudit } from '../middleware/audit.js';
 
 const router = express.Router();
 
+function requireStaffAttendanceAccess(req, res, next) {
+  if (req.user.role !== 'teacher') return next();
+  const staff = db.prepare('SELECT id FROM staff WHERE UPPER(staff_no) = UPPER(?) AND is_active = 1').get(req.user.reference_id || '');
+  if (!staff || (req.body.staff_id != null && String(req.body.staff_id) !== String(staff.id))) {
+    return res.status(403).json({ success: false, message: 'Teachers may only record their own linked staff attendance.' });
+  }
+  req.body.staff_id = staff.id;
+  next();
+}
+
 /**
  * GET /api/attendance/students
  * Query student attendance by date and class_id
  */
-router.get('/students', authenticate, (req, res, next) => {
+router.get('/students', authenticate, requireRoles('superadmin', 'admin', 'teacher'), requireTeacherClassAccess, (req, res, next) => {
   try {
     const { date = new Date().toISOString().split('T')[0], class_id } = req.query;
 
@@ -54,7 +65,7 @@ router.get('/students', authenticate, (req, res, next) => {
  * POST /api/attendance/students/batch
  * Record or update batch student attendance
  */
-router.post('/students/batch', authenticate, requireRoles('superadmin', 'admin', 'teacher'), (req, res, next) => {
+router.post('/students/batch', authenticate, requireRoles('superadmin', 'admin', 'teacher'), requireTeacherClassAccess, (req, res, next) => {
   try {
     const { class_id, date = new Date().toISOString().split('T')[0], records } = req.body;
 
@@ -62,6 +73,9 @@ router.post('/students/batch', authenticate, requireRoles('superadmin', 'admin',
       return res.status(400).json({ error: 'class_id and records array are required' });
     }
 
+    if (records.some(item => !db.prepare('SELECT id FROM students WHERE id = ? AND class_id = ?').get(Number(item.student_id), Number(class_id)))) {
+      return res.status(403).json({ success: false, message: 'All attendance records must belong to the selected class.' });
+    }
     const recorded_by = req.user?.username || 'admin';
 
     const upsertStmt = db.prepare(`
@@ -152,7 +166,7 @@ router.get('/staff', authenticate, requireRoles('superadmin', 'admin'), (req, re
  * POST /api/attendance/staff/clockin
  * Clock-in for staff
  */
-router.post('/staff/clockin', authenticate, (req, res, next) => {
+router.post('/staff/clockin', authenticate, requireRoles('superadmin', 'admin', 'teacher'), requireStaffAttendanceAccess, (req, res, next) => {
   try {
     const { staff_id, date = new Date().toISOString().split('T')[0], remarks } = req.body;
     const targetStaffId = staff_id || req.user?.reference_id;
@@ -191,7 +205,7 @@ router.post('/staff/clockin', authenticate, (req, res, next) => {
  * POST /api/attendance/staff/clockout
  * Clock-out for staff
  */
-router.post('/staff/clockout', authenticate, (req, res, next) => {
+router.post('/staff/clockout', authenticate, requireRoles('superadmin', 'admin', 'teacher'), requireStaffAttendanceAccess, (req, res, next) => {
   try {
     const { staff_id, date = new Date().toISOString().split('T')[0] } = req.body;
     const targetStaffId = staff_id || req.user?.reference_id;

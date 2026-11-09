@@ -1,3 +1,5 @@
+import { logSafeError } from '../middleware/safeLogging.js';
+
 /**
  * In-House AI Intelligence Engine for Eagle Power Schools (EduCore)
  * Zero external cloud API dependencies. 100% On-Premise, Autonomous, and Deterministic.
@@ -1276,15 +1278,15 @@ export function askSchoolAi(query, context = {}) {
   // 1. School Information, Principal, Address, Motto, Contact
   if (/(address|location|where is the school|amikwo|where are you located|directions|campus)/i.test(q)) {
     return {
-      answer: "🏫 *Eagle Power Schools Campus:*\n2 & 9 Amikwo Road, Awka, Awka-South LGA, Anambra State, Nigeria.\n📞 Administrative Desk: +234 803 542 8910\n🎓 Principal: Dr. (Mrs) N. Okoye\n🦅 Motto: Love, Truth & Service\n_Campus features modern science laboratories, high-speed ICT center, and sports pavilion._",
+      answer: "🏫 *Eagle Power Schools Campus:*\n2 & 9 Amikwo Road, Awka, Awka-South LGA, Anambra State, Nigeria.\n📞 Administrative Desk: +234 803 542 8910\n🎓 Principal & School Manager: Revd Nnamdi Nathaniel\n🦅 Motto: Love, Truth & Service\n_Campus features modern science laboratories, high-speed ICT center, and sports pavilion._",
       intent: 'SCHOOL_LOCATION',
       confidence: 0.98
     };
   }
 
-  if (/(principal|head of school|headmistress|proprietress|proprietor)/i.test(q)) {
+  if (/(principal|head of school|headmistress|proprietress|proprietor|school manager|leadership)/i.test(q)) {
     return {
-      answer: "🦅 *School Leadership:*\nThe Principal of Eagle Power Schools is *Dr. (Mrs) N. Okoye*, an accomplished educationist dedicated to moral discipline and academic excellence. Office hours for parent consultations are Tuesdays and Thursdays from 10:00 AM to 1:00 PM.",
+      answer: "🦅 *School Leadership:*\nRevd Nnamdi Nathaniel serves as *Principal and School Manager* of Eagle Power Schools, Awka, supported by our management team across academic administration, primary education, and nursery. Office hours for parent consultations are Mondays through Fridays during school administrative hours.",
       intent: 'LEADERSHIP_INFO',
       confidence: 0.99
     };
@@ -1298,9 +1300,9 @@ export function askSchoolAi(query, context = {}) {
     };
   }
 
-  if (/(resumption|calendar|vacation|holiday|school hours|resumption date|assembly)/i.test(q)) {
+  if (/(resumption|calendar|vacation|holiday|school hours|resumption date|assembly|session|term)/i.test(q)) {
     return {
-      answer: "📅 *Academic Calendar & Schedule:*\n• School Hours: Monday to Friday, 7:45 AM to 2:30 PM (Creche to Senior Secondary)\n• Morning Assembly & Devotion: 7:45 AM prompt at the central pavilion\n• Current Session: 2024/2025 Academic Session\n• Co-curricular Activities & Clubs: Wednesdays & Fridays, 2:30 PM - 3:45 PM",
+      answer: "📅 *Academic Calendar & Schedule:*\n• School Hours: Monday to Friday, 7:45 AM to 2:30 PM (Creche to Senior Secondary)\n• Morning Assembly & Devotion: 7:45 AM prompt at the central pavilion\n• Current Session: 2026/2027 Academic Session\n• Active Term: First Term\n• Co-curricular Activities & Clubs: Wednesdays & Fridays, 2:30 PM - 3:45 PM",
       intent: 'CALENDAR_INFO',
       confidence: 0.95
     };
@@ -1582,7 +1584,7 @@ export function seedCurriculumConceptsIfEmpty() {
       }
     }
   } catch (err) {
-    console.error('In-House AI: Seed warning:', err.message);
+    logSafeError('In-house AI seed warning', err);
   }
 }
 

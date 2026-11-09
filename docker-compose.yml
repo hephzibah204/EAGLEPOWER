@@ -12,7 +12,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5050
-      - JWT_SECRET=eaglepower_secure_jwt_token_secret_key_2025_amikwo
+      - JWT_SECRET=${JWT_SECRET:?Set a unique strong JWT_SECRET before starting production}
     volumes:
       - educore-data:/app/server/data
       - educore-backups:/app/server/backups

@@ -148,7 +148,7 @@ router.post('/:id/reset-password', authenticate, requireRoles('superadmin'), (re
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(new_password, salt);
 
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, targetId);
+    db.prepare('UPDATE users SET password_hash = ?, token_version = token_version + 1 WHERE id = ?').run(hash, targetId);
 
     // Clear any lockout state
     clearFailure(user.username.toLowerCase());

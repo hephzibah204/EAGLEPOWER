@@ -11,14 +11,17 @@ import {
   GraduationCap,
   Users,
   Bus,
-  AlertCircle
+  AlertCircle,
+  CreditCard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { getApiBase } from '../config/api';
+import { getApiBase, apiFetch as fetch } from '../config/api';
 
 export default function AdmissionModal({ isOpen, onClose, initialDivision = 'primary' }) {
+  const API_BASE = getApiBase();
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
   const getDefaultGrade = (div) => {
@@ -180,6 +183,37 @@ export default function AdmissionModal({ isOpen, onClose, initialDivision = 'pri
       setSubmitError(err.message || 'Unable to connect to the admission portal. Please verify connection and retry.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handlePayOnlineFee = async () => {
+    setIsProcessingPayment(true);
+    try {
+      const currentApiBase = getApiBase();
+      const res = await fetch(`${currentApiBase}/finance/checkout/initialize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: formData.parentEmail?.trim() || `${formData.parentPhone?.trim() || 'admission'}@eaglepower.com.ng`,
+          amount: 5000,
+          purpose: 'Admission Application Diagnostic Screening Fee',
+          metadata: {
+            application_no: applicationId,
+            candidate_name: `${formData.studentFirstName} ${formData.studentLastName}`,
+            grade: formData.gradeApplying
+          }
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.authorization_url) {
+        window.open(data.authorization_url, '_blank');
+      } else {
+        alert(data.message || 'Online payment initialized. Alternatively, transfer ₦5,000 to Moniepoint MFB 8219442018 or Zenith Bank 1014882910 (Eagle Power Integrated Schools).');
+      }
+    } catch {
+      alert('Diagnostic screening fee is ₦5,000. Transfer to Moniepoint MFB 8219442018 or Zenith Bank 1014882910 (Eagle Power Integrated Schools) using Application No: ' + applicationId);
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -826,7 +860,16 @@ export default function AdmissionModal({ isOpen, onClose, initialDivision = 'pri
                 <strong>Next Step:</strong> Diagnostic screening assessments and biometric photograph capture take place every Saturday at the Amikwo campus (2 & 9 Amikwo Road, Awka) from 9:00 AM.
               </div>
 
-              <div className="pt-2 flex justify-center gap-3">
+              <div className="pt-2 flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  disabled={isProcessingPayment}
+                  onClick={handlePayOnlineFee}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black inline-flex items-center gap-2 transition-colors cursor-pointer shadow-md"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>{isProcessingPayment ? 'Connecting Paystack...' : 'Pay ₦5,000 Screening Fee Online'}</span>
+                </button>
                 <button
                   onClick={() => window.print()}
                   className="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"

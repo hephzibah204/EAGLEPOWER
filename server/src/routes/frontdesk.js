@@ -9,7 +9,7 @@ const router = express.Router();
 // ==========================================
 // 1. FRONT DESK OVERVIEW & STATS
 // ==========================================
-router.get('/stats', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.get('/stats', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const visitorsInCampus = db.prepare("SELECT COUNT(*) as c FROM frontdesk_visitors WHERE status = 'In Campus'").get().c;
     const totalVisitors = db.prepare("SELECT COUNT(*) as c FROM frontdesk_visitors").get().c;
@@ -37,7 +37,7 @@ router.get('/stats', authenticate, requireRoles('superadmin', 'admin', 'bursar',
 // ==========================================
 // 2. VISITORS BOOK / SECURITY PASSES
 // ==========================================
-router.get('/visitors', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.get('/visitors', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const { status, q } = req.query;
     let conditions = [];
@@ -65,7 +65,7 @@ router.get('/visitors', authenticate, requireRoles('superadmin', 'admin', 'bursa
   }
 });
 
-router.post('/visitors', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.post('/visitors', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const { visitor_name, phone, purpose, person_to_see, id_card_type, badge_no, remarks } = req.body;
 
@@ -112,7 +112,7 @@ router.post('/visitors', authenticate, requireRoles('superadmin', 'admin', 'burs
   }
 });
 
-router.patch('/visitors/:id/checkout', authenticate, requireRoles('admin', 'superadmin', 'bursar', 'teacher'), (req, res, next) => {
+router.patch('/visitors/:id/checkout', authenticate, requireRoles('admin', 'superadmin', 'frontdesk'), (req, res, next) => {
   try {
     const stmt = db.prepare(`
       UPDATE frontdesk_visitors
@@ -139,7 +139,7 @@ router.patch('/visitors/:id/checkout', authenticate, requireRoles('admin', 'supe
 // ==========================================
 // 3. ADMISSION ENQUIRIES / LEADS
 // ==========================================
-router.get('/enquiries', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.get('/enquiries', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const { status, class_interested } = req.query;
     let conditions = [];
@@ -216,7 +216,7 @@ router.post('/enquiries', (req, res, next) => {
   }
 });
 
-router.patch('/enquiries/:id/status', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+router.patch('/enquiries/:id/status', authenticate, requireRoles('admin', 'superadmin', 'frontdesk'), (req, res, next) => {
   try {
     const { status, notes } = req.body;
     const valid = ['Active', 'Followed Up', 'Converted/Admitted', 'Closed'];
@@ -247,7 +247,7 @@ router.patch('/enquiries/:id/status', authenticate, requireRoles('admin', 'super
 // ==========================================
 // 4. PHONE CALL LOGS
 // ==========================================
-router.get('/calls', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.get('/calls', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const calls = db.prepare('SELECT * FROM frontdesk_calls ORDER BY id DESC').all();
     res.json({
@@ -260,7 +260,7 @@ router.get('/calls', authenticate, requireRoles('superadmin', 'admin', 'bursar',
   }
 });
 
-router.post('/calls', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.post('/calls', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const { caller_name, phone, call_type = 'Incoming', duration, purpose, follow_up_needed = 0, message } = req.body;
 
@@ -292,7 +292,7 @@ router.post('/calls', authenticate, requireRoles('superadmin', 'admin', 'bursar'
 // ==========================================
 // 5. POSTAL / COURIER DISPATCH & RECEIVE
 // ==========================================
-router.get('/dispatch', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.get('/dispatch', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const records = db.prepare('SELECT * FROM frontdesk_dispatch ORDER BY id DESC').all();
     res.json({
@@ -305,7 +305,7 @@ router.get('/dispatch', authenticate, requireRoles('superadmin', 'admin', 'bursa
   }
 });
 
-router.post('/dispatch', authenticate, requireRoles('superadmin', 'admin', 'bursar', 'teacher'), (req, res, next) => {
+router.post('/dispatch', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const { dispatch_type = 'Received', to_title, from_title, document_title, handled_by } = req.body;
 
@@ -340,7 +340,7 @@ router.post('/dispatch', authenticate, requireRoles('superadmin', 'admin', 'burs
 // ==========================================
 // 6. COMPLAINTS & FEEDBACK MANAGEMENT
 // ==========================================
-router.get('/complaints', authenticate, requireRoles('superadmin', 'admin'), (req, res, next) => {
+router.get('/complaints', authenticate, requireRoles('superadmin', 'admin', 'frontdesk'), (req, res, next) => {
   try {
     const { status } = req.query;
     const where = status ? 'WHERE status = ?' : '';
@@ -388,7 +388,7 @@ router.post('/complaints', (req, res, next) => {
   }
 });
 
-router.patch('/complaints/:id/resolve', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+router.patch('/complaints/:id/resolve', authenticate, requireRoles('admin', 'superadmin', 'frontdesk'), (req, res, next) => {
   try {
     const { resolution_notes } = req.body;
     if (!resolution_notes) {

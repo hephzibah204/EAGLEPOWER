@@ -1,0 +1,27 @@
+name: Production checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm ci --prefix server --no-audit --no-fund
+      - run: npm run lint
+      - run: node --test tests/*.test.mjs server/test/*.test.js
+      - run: npm run build:vite
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm audit --prefix server --omit=dev --audit-level=high

@@ -263,7 +263,7 @@ export const CherithClassicTemplate = ({ data }) => {
           </div>
           <div>
             <div className="h-6 border-b border-indigo-300 flex items-center justify-center font-serif italic text-[10px] text-indigo-900 font-bold">
-              {school.principal || 'Dr. (Mrs) N. Okoye'}
+              {school.principal || 'Revd Nnamdi Nathaniel'}
             </div>
             <span className="text-[8px] font-black uppercase text-slate-600">School Principal</span>
           </div>

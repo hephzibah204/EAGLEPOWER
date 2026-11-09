@@ -7,25 +7,29 @@ export default function ShareReportModal({ isOpen, onClose, studentName, reportL
 
   if (!isOpen) return null;
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(finalLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(finalLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      window.prompt('Copy the portal link:', finalLink);
+    }
   };
 
   const handleWhatsApp = () => {
-    const text = `Eagle Power Schools — Official Terminal Academic Report Sheet for ${studentName || 'Student'}.\nView and download verified report card here:\n${finalLink}`;
+    const text = `Eagle Power Schools — Academic report notification for ${studentName || 'Student'}.\nSign in to your school portal account to view reports you are authorized to access:\n${finalLink}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleEmail = () => {
     const subject = `Eagle Power Schools: Terminal Academic Report for ${studentName || 'Student'}`;
-    const body = `Dear Parent/Guardian,\n\nPlease find the official terminal examination report card for ${studentName || 'your child'} online at the following secure portal link:\n\n${finalLink}\n\nSchool Motto: Love, Truth & Service\nEagle Power Schools Administration`;
+    const body = `Dear Parent/Guardian,\n\nSign in to your school portal account to check academic reports for ${studentName || 'your child'} that you are authorized to access:\n\n${finalLink}\n\nSchool Motto: Love, Truth & Service\nEagle Power Schools Administration`;
     window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   };
 
   const handleSMS = () => {
-    const text = `Eagle Power Schools report card for ${studentName} is ready: ${finalLink}`;
+    const text = `Eagle Power Schools: sign in to your school portal to check academic reports for ${studentName || 'your child'}: ${finalLink}`;
     window.location.href = `sms:?body=${encodeURIComponent(text)}`;
   };
 
@@ -34,8 +38,8 @@ export default function ShareReportModal({ isOpen, onClose, studentName, reportL
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="bg-gradient-to-r from-[#0D2342] to-indigo-900 p-6 text-white flex justify-between items-center">
           <div>
-            <h2 className="text-xl font-black">Share Report Card</h2>
-            <p className="text-indigo-200 text-xs mt-0.5 font-medium">Transmit {studentName}'s result to parents/guardians</p>
+            <h2 className="text-xl font-black">Share Portal Link</h2>
+            <p className="text-indigo-200 text-xs mt-0.5 font-medium">Recipients must sign in with their own school account.</p>
           </div>
           <button onClick={onClose} className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors">
             <X className="w-5 h-5 text-white" />

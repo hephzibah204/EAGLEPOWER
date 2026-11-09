@@ -121,7 +121,7 @@ export const ClassicProfessionalTemplate = ({ data }) => {
               <span className="font-bold uppercase tracking-wider text-[10px]">Class Teacher's Signature</span>
             </div>
             <div>
-              <div className="h-6 border-b border-black mb-1 font-serif italic text-xs">{school.principal || 'Dr. (Mrs) N. Okoye'}</div>
+              <div className="h-6 border-b border-black mb-1 font-serif italic text-xs">{school.principal || 'Revd Nnamdi Nathaniel'}</div>
               <span className="font-bold uppercase tracking-wider text-[10px]">Principal's Signature & Stamp</span>
             </div>
           </div>

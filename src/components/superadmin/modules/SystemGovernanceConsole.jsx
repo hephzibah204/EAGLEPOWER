@@ -18,7 +18,7 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
-import { getApiBase } from '../../../config/api';
+import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
 export default function SystemGovernanceConsole({ authToken }) {
   const API_BASE = getApiBase();
@@ -28,11 +28,12 @@ export default function SystemGovernanceConsole({ authToken }) {
   const [settings, setSettings] = useState({
     school_name: 'Eagle Power Schools Awka',
     school_motto: 'Love, Truth & Service',
-    current_session: '2024/2025',
-    current_term: 'Second Term',
+    current_session: '2026/2027',
+    current_term: 'First Term',
     next_resumption_date: '2025-05-05',
-    principal_name: 'Adaeze Uzoefuna',
-    contact_phone: '+234 803 359 1058',
+    principal_name: 'Revd Nnamdi Nathaniel',
+    vp_name: 'Mrs. Adaeze Uzoefuna',
+    contact_phone: '+234 907 558 0671',
     contact_email: 'info@eaglepowerschools.com.ng',
     address: '2 & 9 Amikwo Road, Awka, Anambra State'
   });
@@ -454,7 +455,7 @@ export default function SystemGovernanceConsole({ authToken }) {
               <input
                 type="text"
                 required
-                placeholder="e.g. 2024/2025"
+                placeholder="e.g. 2026/2027"
                 value={settings.current_session || ''}
                 onChange={(e) => setSettings({ ...settings, current_session: e.target.value })}
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"

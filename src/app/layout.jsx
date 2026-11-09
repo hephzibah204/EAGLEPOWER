@@ -6,7 +6,7 @@ export const metadata = {
     default: 'Eagle Power Schools Awka | Top Nursery, Primary & Secondary College in Anambra State',
     template: '%s | Eagle Power Schools Awka'
   },
-  description: 'Official website of Eagle Power Schools (Eagle Power School of Excellence & Eagle Power College of Excellence), Awka, Anambra State. Nigeria Spelling Bee Champions, 100% WAEC distinction, modern STEM labs & moral discipline. Admissions open.',
+  description: 'Eagle Power Schools, Awka: nursery, primary and secondary education. Celebrate our 2026 Anambra spelling-bee champion, national second runner-up, school community and graduating class.',
   keywords: [
     'Eagle Power Schools',
     'Eagle Power College of Excellence',
@@ -20,7 +20,7 @@ export const metadata = {
     'BECE exams Anambra',
     'Nigeria Spelling Bee champions',
     'schools on Amikwo Road Awka',
-    'Dr Mrs N Okoye'
+    'Revd Nnamdi Nathaniel'
   ],
   authors: [{ name: 'Eagle Power Schools' }],
   creator: 'Eagle Power Schools Management',
@@ -41,7 +41,7 @@ export const metadata = {
   },
   openGraph: {
     title: 'Eagle Power Schools Awka | Excellence, Integrity & Leadership',
-    description: 'Premier nursery, primary, and secondary education in Awka, Anambra State. Home of state spelling bee champions and WAEC distinctions. Admissions open for 2026/2027.',
+    description: 'Nursery, primary and secondary education in Awka. Meet our management team and celebrate our 2026 state and national spelling-bee achievements.',
     url: 'https://www.eaglepowerschools.com.ng/',
     siteName: 'Eagle Power Schools',
     locale: 'en_NG',
@@ -63,7 +63,7 @@ export const metadata = {
   },
   manifest: '/site.webmanifest',
   icons: {
-    icon: '/favicon.svg',
+    icon: '/assets/official-logo.jpg',
     apple: '/assets/official-logo.jpg'
   },
   other: {
@@ -86,7 +86,7 @@ const jsonLdData = {
         "Eagle Power College of Excellence",
         "Eagle Power Awka"
       ],
-      "description": "Premier private nursery, primary, and secondary educational institution in Awka, Anambra State, Nigeria. Renowned for Nigeria Spelling Bee championships, 100% WAEC/NECO distinction rates, and holistic moral training.",
+      "description": "Nursery, primary and secondary school in Awka, Anambra State, celebrating a 2026 state spelling-bee championship, a national second runner-up finish and a Children’s Day march-past win.",
       "url": "https://www.eaglepowerschools.com.ng/",
       "logo": {
         "@type": "ImageObject",
@@ -249,6 +249,8 @@ export default function RootLayout({ children }) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }}
         />
+        {/* Puter.js v2 - Free Unlimited OpenAI API Gateway (https://developer.puter.com/tutorials/free-unlimited-openai-api/) */}
+        <script src="https://js.puter.com/v2/" async></script>
       </head>
       <body className="bg-slate-50 text-slate-800 antialiased selection:bg-amber-400 selection:text-slate-900">
         {children}

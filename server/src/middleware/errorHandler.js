@@ -1,10 +1,13 @@
+import { logSafeError } from './safeLogging.js';
+
 /**
  * Global Centralized Error Handling Middleware
  */
 export function errorHandler(err, req, res, next) {
-  console.error('Unhandled Error:', err);
+  logSafeError('Unhandled request error', err);
 
-  const statusCode = err.status || err.statusCode || 500;
+  const candidateStatus = Number(err.status || err.statusCode || 500);
+  const statusCode = Number.isInteger(candidateStatus) && candidateStatus >= 400 && candidateStatus <= 599 ? candidateStatus : 500;
   
   // In production, mask internal server errors (500) so raw database/system details are not exposed
   let message = err.message || 'An unexpected internal server error occurred.';

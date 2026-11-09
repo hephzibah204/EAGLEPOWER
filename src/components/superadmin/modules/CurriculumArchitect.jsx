@@ -15,7 +15,7 @@ import {
   Layers,
   Sparkles
 } from 'lucide-react';
-import { getApiBase } from '../../../config/api';
+import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
 export default function CurriculumArchitect({ authToken, staffList = [] }) {
   const API_BASE = getApiBase();

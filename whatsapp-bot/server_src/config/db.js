@@ -26,6 +26,13 @@ if (fs.existsSync(schemaPath)) {
 }
 
 // Auto-migrate deep student enrollment columns
+try {
+  db.exec('ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0');
+} catch (error) {
+  if (!String(error.message).includes('duplicate column name')) throw error;
+}
+
+// Auto-migrate deep student enrollment columns
 const studentDeepColumns = [
   'middle_name TEXT',
   'religion TEXT',
@@ -110,6 +117,132 @@ for (const col of admissionDeepColumns) {
     // Column already exists
   }
 }
+
+// Auto-migrate multi-component assessment columns on marks table
+const marksAssessmentColumns = [
+  'ca1_score REAL DEFAULT NULL',
+  'ca2_score REAL DEFAULT NULL',
+  'project_score REAL DEFAULT NULL',
+  'division_grade TEXT DEFAULT NULL'
+];
+
+for (const col of marksAssessmentColumns) {
+  try {
+    db.exec(`ALTER TABLE marks ADD COLUMN ${col};`);
+  } catch (_e) {
+    // Column already exists
+  }
+}
+
+// Auto-migrate invoice fee breakdown and Paystack checkout columns
+const invoiceFeeColumns = [
+  'breakdown_json TEXT',
+  'paystack_reference TEXT',
+  'paystack_access_code TEXT'
+];
+
+for (const col of invoiceFeeColumns) {
+  try {
+    db.exec(`ALTER TABLE invoices ADD COLUMN ${col};`);
+  } catch (_e) {
+    // Column already exists
+  }
+}
+
+// Auto-migrate system_settings columns
+const systemSettingsColumns = [
+  'term_locked INTEGER DEFAULT 0',
+  'active_report_template TEXT DEFAULT "ELITE"',
+  'whatsapp_phone TEXT DEFAULT "+234 907 558 0671"'
+];
+
+for (const col of systemSettingsColumns) {
+  try {
+    db.exec(`ALTER TABLE system_settings ADD COLUMN ${col};`);
+  } catch (_e) {
+    // Column already exists
+  }
+}
+
+// Auto-migrate staff profile & ID card credentials
+const staffProfileColumns = [
+  'photo_url TEXT',
+  'signature_url TEXT',
+  'blood_group TEXT DEFAULT "O+"',
+  'emergency_contact TEXT'
+];
+
+for (const col of staffProfileColumns) {
+  try {
+    db.exec(`ALTER TABLE staff ADD COLUMN ${col};`);
+  } catch (_e) {
+    // Column already exists
+  }
+}
+
+// Auto-migrate users avatar & signature credentials
+const userProfileColumns = [
+  'avatar_url TEXT',
+  'signature_url TEXT'
+];
+
+for (const col of userProfileColumns) {
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN ${col};`);
+  } catch (_e) {
+    // Column already exists
+  }
+}
+
+// Auto-migrate comprehensive staff directory fields
+const staffComprehensiveColumns = [
+  'gender TEXT',
+  'dob TEXT',
+  'date_employed TEXT',
+  'employment_type TEXT DEFAULT "Full time"',
+  'address TEXT',
+  'emergency_contact_name TEXT',
+  'salary REAL DEFAULT 0',
+  'form_responsibility TEXT'
+];
+
+for (const col of staffComprehensiveColumns) {
+  try {
+    db.exec(`ALTER TABLE staff ADD COLUMN ${col};`);
+  } catch (_e) {
+    // Column already exists
+  }
+}
+
+// Ensure lesson_notes table exists
+db.exec(`
+CREATE TABLE IF NOT EXISTS lesson_notes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  teacher_id INTEGER REFERENCES staff(id),
+  teacher_name TEXT NOT NULL,
+  class_id INTEGER NOT NULL REFERENCES classes(id),
+  subject_id INTEGER NOT NULL REFERENCES subjects(id),
+  session TEXT DEFAULT '2026/2027',
+  term TEXT DEFAULT 'Second Term',
+  week_number TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  subtopic TEXT,
+  behavioral_objectives TEXT,
+  instructional_materials TEXT,
+  previous_knowledge TEXT,
+  introduction TEXT,
+  presentation_steps TEXT,
+  evaluation TEXT,
+  conclusion TEXT,
+  assignment TEXT,
+  status TEXT DEFAULT 'Under Review' CHECK(status IN ('Draft', 'Under Review', 'Approved', 'Needs Revision')),
+  hod_feedback TEXT,
+  reviewed_by TEXT,
+  reviewed_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`);
 
 // Polyfill transaction method for Node.js native DatabaseSync
 if (typeof db.transaction !== 'function') {

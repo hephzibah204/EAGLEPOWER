@@ -113,7 +113,7 @@ export default function App() {
       <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-3">
         {/* WhatsApp Direct Pill */}
         <a
-          href="https://wa.me/2348035428910?text=Hello%20Eagle%20Power%20Schools,%20I%20would%20like%20to%20inquire%20about%20admissions"
+          href="https://wa.me/2349075580671?text=Hello%20Eagle%20Power%20Schools,%20I%20would%20like%20to%20inquire%20about%20admissions"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-3 rounded-full shadow-2xl hover:scale-105 transition-all text-xs sm:text-sm border-2 border-white"

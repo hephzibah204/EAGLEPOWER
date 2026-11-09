@@ -10,7 +10,7 @@ import { logAudit } from './audit.js';
 const ipThreatStore = new Map();
 
 // Periodic cleanup of expired bans and records every 15 minutes
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [ip, record] of ipThreatStore.entries()) {
     if (record.bannedUntil && record.bannedUntil < now) {
@@ -20,6 +20,7 @@ setInterval(() => {
     }
   }
 }, 15 * 60 * 1000);
+cleanupTimer.unref?.();
 
 // Known attack signatures and exploit probes
 const MALICIOUS_PATH_PATTERNS = [
@@ -55,7 +56,12 @@ export function threatDefense(req, res, next) {
   }
 
   // 2. Scan URL path against known malicious probes
-  const rawUrl = decodeURIComponent(req.originalUrl || req.url || '');
+  let rawUrl;
+  try {
+    rawUrl = decodeURIComponent(req.originalUrl || req.url || '');
+  } catch {
+    return res.status(400).json({ success: false, message: 'Malformed request URL.' });
+  }
   let isThreat = false;
   let threatReason = '';
 
@@ -97,7 +103,7 @@ export function threatDefense(req, res, next) {
         req.user?.id || null,
         'SECURITY_THREAT_BLOCKED',
         'WAF',
-        `Blocked probe from IP ${clientIp}: ${threatReason} [URL: ${req.originalUrl}]`,
+        { reason: threatReason },
         clientIp
       );
     } catch (_) {}

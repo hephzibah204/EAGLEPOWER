@@ -162,7 +162,7 @@ export const PrimarySchoolTemplate = ({ data }) => {
         </div>
         <div className="text-center">
           <div className="h-8 border-b-2 border-sky-300 flex items-center justify-center font-serif italic text-sm text-sky-900 font-bold">
-            {school.principal || 'Dr. (Mrs) N. Okoye'}
+            {school.principal || 'Revd Nnamdi Nathaniel'}
           </div>
           <span className="text-[9px] font-black uppercase text-sky-900">Head Teacher / Principal</span>
         </div>

@@ -6,7 +6,7 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS report_extras (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-  session TEXT DEFAULT '2024/2025',
+  session TEXT DEFAULT '2026/2027',
   term TEXT DEFAULT 'Second Term',
   attendance TEXT DEFAULT '{"opened":120,"present":116,"absent":4}',
   traits TEXT DEFAULT '{"politeness":5,"neatness":5,"punctuality":4,"attentiveness":5,"honesty":5,"initiative":4,"selfControl":5,"cooperation":4}',

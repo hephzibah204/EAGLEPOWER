@@ -1,3 +1,5 @@
+import { schoolNews } from './schoolUpdates.js';
+
 export const schoolInfo = {
   name: "Eagle Power Schools",
   tagline: "Soaring on Wings of Academic & Moral Excellence",
@@ -7,10 +9,15 @@ export const schoolInfo = {
   foundedYear: 2010,
   address: "2 & 9 Amikwo Road, Awka, Awka-South LGA, Anambra State, Nigeria",
   shortAddress: "Amikwo, Awka, Anambra State",
-  phone: "+234 803 359 1058",
-  altPhone: "+234 803 542 8910",
+  phone: "+234 907 558 0671",
+  altPhone: "+234 803 359 1058",
+  principalPhone: "+234 706 639 7577",
+  whatsapp: "+234 907 558 0671",
+  whatsappDisplay: "09075580671",
+  whatsappUrl: "https://wa.me/2349075580671?text=Hello%20Eagle%20Power%20Schools,%20I%20would%20like%20to%20inquire%20about%20admissions",
   email: "admissions@eaglepowerschools.com.ng",
   adminEmail: "adaeze3011@gmail.com",
+  principalEmail: "principal@eaglepowerschools.com.ng",
   infoEmail: "info@eaglepowerschools.com.ng",
   portalUrl: "https://portal.eaglepowerschools.com.ng/",
   website: "https://www.eaglepowerschools.com.ng",
@@ -50,10 +57,10 @@ export const schoolInfo = {
     }
   ],
   stats: [
-    { value: "100%", label: "WAEC & NECO Pass Rate", sublabel: "Credit grades in 5+ subjects including Maths & English" },
-    { value: "15+", label: "Years of Educational Excellence", sublabel: "Trusted by thousands of families across Anambra" },
-    { value: "15:1", label: "Student to Teacher Ratio", sublabel: "Personalized mentoring & individualized attention" },
-    { value: "24+", label: "State & National Accolades", sublabel: "Championships in Spelling Bee & Science Olympiads" }
+    { value: '2026', label: 'Anambra State Spelling Bee Champion', sublabel: 'Udemba Chimamanda Esther Chidimma · Senior Secondary' },
+    { value: 'Top 3', label: 'National Spelling Bee Finish', sublabel: 'Second runner-up · Uyo · 1 August 2026' },
+    { value: '1st', label: 'Children’s Day March-Past', sublabel: 'Primary school · 27 May 2026' },
+    { value: '2026', label: 'SS3 Graduating Class', sublabel: 'Celebrating our students and their next chapter' }
   ],
   coreValues: [
     {
@@ -129,40 +136,7 @@ export const schoolInfo = {
       location: "Awka South"
     }
   ],
-  news: [
-    {
-      id: 1,
-      title: "Eagle Power College Scholars Shine at Anambra State Spelling Bee Finals",
-      date: "October 2026",
-      category: "Academic Distinction",
-      summary: "Our secondary school representatives secured top honors in the senior division of the annual Nigeria Spelling Bee, advancing to the national championship.",
-      badge: "Competition Winner"
-    },
-    {
-      id: 2,
-      title: "2026/2027 Entrance Examination & Admission Screening Ongoing",
-      date: "September 2026",
-      category: "Admissions",
-      summary: "Application forms are now open for Early Years, Primary School of Excellence, and College of Excellence. Entrance batch test scheduled for every Saturday.",
-      badge: "Admissions"
-    },
-    {
-      id: 3,
-      title: "Community Outreach: Eagle Power Champions Girl-Child Hygiene & Mentorship in Awka",
-      date: "August 2026",
-      category: "Community Impact",
-      summary: "In partnership with youth health advocates, our students distributed educational supplies and personal hygiene essentials in the Amikwo community.",
-      badge: "Outreach"
-    },
-    {
-      id: 4,
-      title: "Annual STEM & Robotics Exhibition Showcases Solar Irrigation Models",
-      date: "July 2026",
-      category: "Innovation",
-      summary: "Primary and College students demonstrated working prototypes of automated plant watering and eco-friendly home security alarms during Science Week.",
-      badge: "STEM"
-    }
-  ],
+  news: schoolNews,
   faqs: [
     {
       question: "What is the admission procedure for new students?",

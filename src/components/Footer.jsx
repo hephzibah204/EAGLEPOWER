@@ -4,12 +4,13 @@ import {
   Phone, 
   ArrowRight, 
   ShieldCheck, 
-  CheckCircle2
+  CheckCircle2,
+  MessageCircle
 } from 'lucide-react';
 import Logo from './Logo';
 import { schoolInfo } from '../data/schoolData';
 
-import { getApiBase } from '../config/api';
+import { getApiBase, apiFetch as fetch } from '../config/api';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
@@ -35,7 +36,7 @@ export default function Footer({ onOpenAdmission, onOpenPortal }) {
           email: emailSub.trim(),
           class_interested: 'General / Newsletter',
           source: 'Website Newsletter Subscription',
-          notes: `Parent subscribed to school updates: ${emailSub.trim()}`
+          notes: `School updates interest request: ${emailSub.trim()}`
         })
       });
 
@@ -201,7 +202,7 @@ export default function Footer({ onOpenAdmission, onOpenPortal }) {
             {subscribed ? (
               <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Thank you! You're subscribed to school updates.</span>
+                <span>Thank you! Your request for school updates has been received.</span>
               </div>
             ) : (
               <form onSubmit={handleSubscribe} className="space-y-2">
@@ -237,6 +238,12 @@ export default function Footer({ onOpenAdmission, onOpenPortal }) {
               <div className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                 <span>{schoolInfo.phone}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <a href={schoolInfo.whatsappUrl} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-300">
+                  WhatsApp: {schoolInfo.whatsappDisplay || '09075580671'}
+                </a>
               </div>
             </div>
           </div>

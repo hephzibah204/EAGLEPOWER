@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -61,7 +62,7 @@ router.post('/apply', (req, res, next) => {
     }
 
     const data = parseResult.data;
-    const applicationNo = `ADM-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}${Math.floor(10 + Math.random() * 90)}`;
+    const applicationNo = `ADM-${new Date().getFullYear()}-${randomBytes(16).toString('hex')}`;
 
     const stmt = db.prepare(`
       INSERT INTO admissions (
@@ -210,6 +211,7 @@ router.get('/', authenticate, requireRoles('admin', 'superadmin'), (req, res, ne
  * Update applicant admission status (Admin only)
  */
 router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+  let inTransaction = false;
   try {
     const { status } = req.body;
     const validStatuses = ['Under Review', 'Screening Scheduled', 'Admitted', 'Declined'];
@@ -221,6 +223,18 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
       });
     }
 
+    const application = db.prepare('SELECT * FROM admissions WHERE id = ?').get(req.params.id);
+    if (!application) return res.status(404).json({ success: false, message: 'Application not found.' });
+    const targetClass = status === 'Admitted' ? db.prepare('SELECT id, name, termly_tuition FROM classes WHERE LOWER(TRIM(name)) = LOWER(TRIM(?))').get(application.applying_class) : null;
+    if (status === 'Admitted' && !targetClass) {
+      return res.status(400).json({ success: false, message: 'Assign an exact existing class before admitting this applicant.' });
+    }
+    const settings = db.prepare('SELECT current_session, current_term FROM system_settings WHERE id = 1').get();
+    if (status === 'Admitted' && (!settings?.current_session || !settings?.current_term)) {
+      return res.status(400).json({ success: false, message: 'Configure the academic session and term before enrollment.' });
+    }
+    db.exec('BEGIN IMMEDIATE');
+    inTransaction = true;
     const stmt = db.prepare('UPDATE admissions SET status = ? WHERE id = ?');
     stmt.run(status, req.params.id);
 
@@ -238,18 +252,10 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
         `).get(app.parent_phone, app.student_name);
 
         if (!existing) {
-          // Resolve matching target class
-          const targetClass = db.prepare(`
-            SELECT id, name, termly_tuition FROM classes 
-            WHERE name LIKE ? OR name = ? 
-            LIMIT 1
-          `).get(`%${app.applying_class}%`, app.applying_class) 
-          || db.prepare('SELECT id, name, termly_tuition FROM classes LIMIT 1').get();
-
           const nameParts = app.student_name.trim().split(' ');
           const firstName = nameParts[0] || 'Pupil';
           const lastName = nameParts.slice(1).join(' ') || 'Student';
-          const newAdmNo = `EPS-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+          const newAdmNo = `EPS-${new Date().getFullYear()}-${randomBytes(8).toString('hex')}`;
 
           const insStudent = db.prepare(`
             INSERT INTO students (
@@ -265,7 +271,7 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
               boarding_status, transport_mode, bus_route, is_active
             ) VALUES (
               ?, ?, ?, ?, ?, ?,
-              ?, ?, '2024/2025', 'Second Term', ?,
+              ?, ?, ?, ?, ?,
               ?, ?, ?, ?,
               ?, ?, ?, ?, ?,
               ?, ?, ?,
@@ -286,6 +292,8 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
             app.dob || null,
             targetClass ? targetClass.id : null,
             app.entry_mode || 'Fresh Admission',
+            settings.current_session,
+            settings.current_term,
             new Date().toISOString().split('T')[0],
             app.religion || 'Christianity',
             app.nationality || 'Nigerian',
@@ -328,7 +336,7 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
 
           // Auto-provision Student Portal Account
           const salt = bcrypt.genSaltSync(10);
-          const studentPassHash = bcrypt.hashSync('Eagle2025!', salt);
+          const studentPassHash = bcrypt.hashSync(randomBytes(32).toString('hex'), salt);
           db.prepare('DELETE FROM users WHERE username = ?').run(newAdmNo);
           db.prepare(`
             INSERT INTO users (username, email, password_hash, role, reference_id, full_name, is_active)
@@ -340,7 +348,7 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
           const parentUsername = cleanParentPhone && cleanParentPhone.length >= 7
             ? cleanParentPhone
             : (app.parent_email ? app.parent_email.trim().toLowerCase() : `parent_${newAdmNo.toLowerCase()}`);
-          const parentPassHash = bcrypt.hashSync('EagleParent2025!', salt);
+          const parentPassHash = bcrypt.hashSync(randomBytes(32).toString('hex'), salt);
 
           const existingParent = db.prepare('SELECT id, username FROM users WHERE username = ?').get(parentUsername);
           if (!existingParent) {
@@ -358,13 +366,13 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
 
           // Generate initial tuition invoice
           if (targetClass && sRes.lastInsertRowid) {
-            const tuitionAmt = targetClass.termly_tuition || 35000;
-            const invNo = `INV-${Date.now().toString().slice(-6)}`;
+            const tuitionAmt = targetClass.termly_tuition;
+            const invNo = `INV-${randomBytes(12).toString('hex')}`;
             db.prepare(`
               INSERT INTO invoices (
                 invoice_no, student_id, session, term, title, amount_due, amount_paid, status
-              ) VALUES (?, ?, '2024/2025', 'Second Term', 'First Termly Tuition & Admission Registration', ?, 0, 'Unpaid')
-            `).run(invNo, sRes.lastInsertRowid, tuitionAmt);
+              ) VALUES (?, ?, ?, ?, 'Termly Tuition & Admission Registration', ?, 0, 'Unpaid')
+            `).run(invNo, sRes.lastInsertRowid, settings.current_session, settings.current_term, tuitionAmt);
 
             generatedInvoice = {
               invoice_no: invNo,
@@ -377,6 +385,8 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
 
     logAudit(req.user.id, 'UPDATE_ADMISSION_STATUS', 'ADMISSIONS', `Updated admission ID ${req.params.id} to ${status}${enrolledStudent ? ` & auto-enrolled as ${enrolledStudent.admission_no}` : ''}`, req.ip);
 
+    db.exec('COMMIT');
+    inTransaction = false;
     res.json({
       success: true,
       message: `Application status updated to ${status}.${enrolledStudent ? ` Student officially enrolled as ${enrolledStudent.admission_no} with invoice generated.` : ''}`,
@@ -384,6 +394,7 @@ router.patch('/:id/status', authenticate, requireRoles('admin', 'superadmin'), (
       invoice: generatedInvoice
     });
   } catch (err) {
+    if (inTransaction) db.exec('ROLLBACK');
     next(err);
   }
 });

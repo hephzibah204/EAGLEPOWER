@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+@theme {
+  --color-navy: #092347;
+  --color-navy-dark: #051429;
+  --color-navy-light: #133a6b;
+  --color-navy-surface: #0e2a54;
+  --color-gold: #f59e0b;
+  --color-gold-hover: #d97706;
+}
+
 :root {
   --primary: #092347;
   --primary-dark: #051429;
@@ -7,6 +16,22 @@
   --accent: #d97706;
   --accent-gold: #f59e0b;
 }
+
+/* Custom Brand Color Fallbacks for Reliable Styling */
+.bg-navy { background-color: #092347 !important; }
+.bg-navy-dark { background-color: #051429 !important; }
+.bg-navy-surface { background-color: #0e2a54 !important; }
+.bg-gold { background-color: #f59e0b !important; }
+.bg-gold-hover:hover { background-color: #d97706 !important; }
+.text-navy { color: #092347 !important; }
+.text-navy-dark { color: #051429 !important; }
+.text-gold { color: #f59e0b !important; }
+.border-gold { border-color: rgba(245, 158, 11, 0.4) !important; }
+.border-gold\/20 { border-color: rgba(245, 158, 11, 0.2) !important; }
+.border-gold\/30 { border-color: rgba(245, 158, 11, 0.3) !important; }
+.border-gold\/60 { border-color: rgba(245, 158, 11, 0.6) !important; }
+.bg-gold\/10 { background-color: rgba(245, 158, 11, 0.1) !important; }
+.bg-gold\/15 { background-color: rgba(245, 158, 11, 0.15) !important; }
 
 html {
   scroll-behavior: smooth;

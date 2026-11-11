@@ -1272,8 +1272,30 @@ export async function onRequest(context) {
     return jsonResponse({ success: true, data: dbData.subjects || [] });
   }
 
-  if (path === '/api/students') {
-    return jsonResponse({ success: true, data: dbData.students || [] });
+  if (path === '/api/students' && method === 'GET') {
+    const classId = url.searchParams.get('class_id');
+    const sectionId = url.searchParams.get('section_id');
+    const query = (url.searchParams.get('q') || '').trim().toLowerCase();
+    const status = url.searchParams.get('status');
+    const students = (dbData.students || []).filter(student => {
+      if (classId && String(student.class_id) !== classId) return false;
+      if (sectionId && String(student.section_id) !== sectionId) return false;
+      if (status === 'active' && Number(student.is_active) !== 1) return false;
+      if (status === 'inactive' && Number(student.is_active) !== 0) return false;
+      return !query || [student.admission_no, student.first_name, student.last_name,
+        `${student.first_name || ''} ${student.last_name || ''}`,
+        `${student.last_name || ''} ${student.first_name || ''}`, student.guardian_phone]
+        .some(value => String(value || '').toLowerCase().includes(query));
+    });
+    const total = students.length;
+    // Existing roster consumers without pagination still receive the complete filtered list.
+    if (!url.searchParams.has('page') && !url.searchParams.has('limit')) {
+      return jsonResponse({ success: true, total, data: students });
+    }
+    const page = Math.max(1, parseInt(url.searchParams.get('page'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit'), 10) || 50));
+    const offset = (page - 1) * limit;
+    return jsonResponse({ success: true, total, page, limit, data: students.slice(offset, offset + limit) });
   }
 
   if (path === '/api/staff') {
@@ -1364,12 +1386,43 @@ export async function onRequest(context) {
     });
   }
 
-  if (path === '/api/executive/promote-students' && method === 'POST') {
-    const { student_ids = [] } = body;
+  if ((path === '/api/students/bulk-promote' || path === '/api/executive/promote-students') && method === 'POST') {
+    const { student_ids = [], target_class_id } = body;
+    if (Array.isArray(student_ids) && target_class_id) {
+      const targetClass = (dbData.classes || []).find(c => String(c.id) === String(target_class_id));
+      student_ids.forEach(sid => {
+        const student = (dbData.students || []).find(s => String(s.id) === String(sid));
+        if (student) {
+          student.class_id = Number(target_class_id);
+          if (targetClass) student.class_name = targetClass.name;
+        }
+      });
+      return jsonResponse({
+        success: true,
+        message: `Successfully promoted/reassigned ${student_ids.length} student(s) to ${targetClass?.name || 'target class'}.`,
+        promoted_count: student_ids.length
+      });
+    }
     return jsonResponse({
       success: true,
       message: `Successfully promoted ${student_ids.length} student(s).`,
       promoted_count: student_ids.length
+    });
+  }
+
+  if (path.startsWith('/api/students/') && path.endsWith('/transfer') && method === 'POST') {
+    const sid = path.split('/')[3];
+    const { target_class_id, reason } = body;
+    const student = (dbData.students || []).find(s => String(s.id) === String(sid));
+    const targetClass = (dbData.classes || []).find(c => String(c.id) === String(target_class_id));
+    if (student && targetClass) {
+      student.class_id = Number(target_class_id);
+      student.class_name = targetClass.name;
+    }
+    return jsonResponse({
+      success: true,
+      message: `Student transferred to ${targetClass?.name || 'target class'} successfully.`,
+      student
     });
   }
 

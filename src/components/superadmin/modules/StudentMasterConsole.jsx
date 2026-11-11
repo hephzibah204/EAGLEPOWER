@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Users,
   Search,
@@ -15,6 +15,7 @@ import {
   Square,
   UserCheck,
   UserX,
+  UserPlus,
   Phone,
   Mail,
   HeartPulse,
@@ -23,7 +24,7 @@ import {
 } from 'lucide-react';
 import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
-export default function StudentMasterConsole({ authToken, classes = [] }) {
+export default function StudentMasterConsole({ authToken, classes = [], onEnrollStudent }) {
   const API_BASE = getApiBase();
 
   const [students, setStudents] = useState([]);
@@ -34,6 +35,7 @@ export default function StudentMasterConsole({ authToken, classes = [] }) {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [page, setPage] = useState(1);
   const pageSize = 25;
+  const latestRequest = useRef(0);
 
   // Selected for bulk actions
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
@@ -67,6 +69,7 @@ export default function StudentMasterConsole({ authToken, classes = [] }) {
   };
 
   const fetchStudents = useCallback(async () => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -74,12 +77,14 @@ export default function StudentMasterConsole({ authToken, classes = [] }) {
       params.append('limit', pageSize);
       if (searchQuery.trim()) params.append('q', searchQuery.trim());
       if (selectedClassId) params.append('class_id', selectedClassId);
+      params.append('status', selectedStatus);
 
       const res = await fetch(`${API_BASE}/students?${params.toString()}`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
       const data = await res.json();
-      if (data.success) {
+      if (requestId !== latestRequest.current) return;
+      if (res.ok && data.success) {
         let list = data.data || [];
         if (selectedStatus === 'active') {
           list = list.filter(s => s.is_active === 1);
@@ -87,12 +92,13 @@ export default function StudentMasterConsole({ authToken, classes = [] }) {
           list = list.filter(s => s.is_active === 0);
         }
         setStudents(list);
-        setTotalCount(data.total || list.length);
+        setTotalCount(data.total ?? list.length);
       }
     } catch {
+      if (requestId !== latestRequest.current) return;
       showFeedback('error', 'Failed to retrieve students registry.');
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
   }, [API_BASE, authToken, page, searchQuery, selectedClassId, selectedStatus]);
 
@@ -279,13 +285,24 @@ export default function StudentMasterConsole({ authToken, classes = [] }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {onEnrollStudent && (
+            <button
+              onClick={onEnrollStudent}
+              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all flex items-center gap-1.5"
+              title="Enroll New Pupil"
+            >
+              <UserPlus className="w-4 h-4" />
+              Enroll Pupil
+            </button>
+          )}
+
           {selectedStudentIds.size > 0 && (
             <button
               onClick={() => setBulkPromoteOpen(true)}
               className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
             >
               <ArrowRightLeft className="w-4 h-4" />
-              Bulk Promote ({selectedStudentIds.size})
+              Bulk Move/Promote ({selectedStudentIds.size})
             </button>
           )}
 
@@ -510,7 +527,7 @@ export default function StudentMasterConsole({ authToken, classes = [] }) {
             <span className="px-2 font-bold text-amber-400">Page {page}</span>
             <button
               onClick={() => setPage(p => p + 1)}
-              disabled={students.length < pageSize}
+              disabled={page * pageSize >= totalCount}
               className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white font-bold"
             >
               Next

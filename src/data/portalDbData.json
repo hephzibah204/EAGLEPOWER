@@ -25,7 +25,7 @@
       "division": "Junior College",
       "termly_tuition": 45000,
       "class_teacher_id": 122,
-      "student_count": 17
+      "student_count": 39
     },
     {
       "id": 3,
@@ -113,7 +113,7 @@
       "division": "Primary",
       "termly_tuition": 40000,
       "class_teacher_id": 146,
-      "student_count": 39
+      "student_count": 17
     },
     {
       "id": 14,
@@ -7108,7 +7108,7 @@
       "last_name": "Adigwe",
       "gender": "Female",
       "dob": "2018-09-30",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Adigwe",
       "guardian_phone": "07038783901",
@@ -7151,8 +7151,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 128,
@@ -7161,7 +7161,7 @@
       "last_name": "Agu",
       "gender": "Male",
       "dob": "2018-06-11",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Agu",
       "guardian_phone": "07036029629",
@@ -7204,8 +7204,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 129,
@@ -7214,7 +7214,7 @@
       "last_name": "Chiedozie",
       "gender": "Female",
       "dob": "2018-01-21",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Chiedozie Sylvester",
       "guardian_phone": "07033579919",
@@ -7257,8 +7257,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 130,
@@ -7267,7 +7267,7 @@
       "last_name": "Chinwuba",
       "gender": "Male",
       "dob": "2018-03-31",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Engr/mrs Hycenth Nwoye",
       "guardian_phone": "08063835339",
@@ -7310,8 +7310,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 131,
@@ -7320,7 +7320,7 @@
       "last_name": "Dikko",
       "gender": "Male",
       "dob": "2013-03-06",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr. Michael Raphael",
       "guardian_phone": "08064494260",
@@ -7363,8 +7363,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 132,
@@ -7373,7 +7373,7 @@
       "last_name": "Eze",
       "gender": "Female",
       "dob": "2018-06-30",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mrs Eze Nnedimma",
       "guardian_phone": "08063417580",
@@ -7416,8 +7416,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 133,
@@ -7426,7 +7426,7 @@
       "last_name": "Mathew",
       "gender": "Female",
       "dob": "2017-01-26",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mrs. Uju Mathew",
       "guardian_phone": "08037586452",
@@ -7469,8 +7469,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 134,
@@ -7479,7 +7479,7 @@
       "last_name": "Mogbo",
       "gender": "Female",
       "dob": "2017-08-19",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Mogboo",
       "guardian_phone": "08037414294",
@@ -7522,8 +7522,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 135,
@@ -7532,7 +7532,7 @@
       "last_name": "Nelson",
       "gender": "Male",
       "dob": "2018-12-03",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr. Nelson Raymond",
       "guardian_phone": "09169074875",
@@ -7575,8 +7575,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 136,
@@ -7585,7 +7585,7 @@
       "last_name": "Nkam",
       "gender": "Female",
       "dob": "2018-01-02",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mrs. Onyinye",
       "guardian_phone": "08067350929",
@@ -7628,8 +7628,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 137,
@@ -7638,7 +7638,7 @@
       "last_name": "Nwonu",
       "gender": "Male",
       "dob": "2013-09-13",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mrs Nwonu Chinenye",
       "guardian_phone": "09039380565",
@@ -7681,8 +7681,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 138,
@@ -7691,7 +7691,7 @@
       "last_name": "Ogidi",
       "gender": "Female",
       "dob": "2017-08-19",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Nnamdi Ogidi",
       "guardian_phone": "08038147081",
@@ -7734,8 +7734,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 139,
@@ -7744,7 +7744,7 @@
       "last_name": "Okeke",
       "gender": "Male",
       "dob": "2018-05-29",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Peter Okeke",
       "guardian_phone": "07014997724",
@@ -7787,8 +7787,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 140,
@@ -7797,7 +7797,7 @@
       "last_name": "Okeke",
       "gender": "Male",
       "dob": "2017-01-23",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mrs Okeke Chizoba",
       "guardian_phone": "09076250008",
@@ -7840,8 +7840,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 141,
@@ -7850,7 +7850,7 @@
       "last_name": "Orogbu",
       "gender": "Male",
       "dob": "2017-01-02",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Godspower Orogbu",
       "guardian_phone": "09036343161",
@@ -7893,8 +7893,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 142,
@@ -7903,7 +7903,7 @@
       "last_name": "Udokwu",
       "gender": "Male",
       "dob": "2017-10-20",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mr/mrs Udokwu",
       "guardian_phone": "08034069368",
@@ -7946,8 +7946,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 143,
@@ -7956,7 +7956,7 @@
       "last_name": "Uzoka",
       "gender": "Male",
       "dob": "2017-05-02",
-      "class_id": 2,
+      "class_id": 13,
       "section_id": 1,
       "guardian_name": "Mrs Uzoka Ogochukwu",
       "guardian_phone": "08069570796",
@@ -7999,8 +7999,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "JSS2",
-      "division": "Junior College"
+      "class_name": "Primary 4",
+      "division": "Primary"
     },
     {
       "id": 144,
@@ -12408,7 +12408,7 @@
       "last_name": "Abafor",
       "gender": "Male",
       "dob": "2014-10-04",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Abafor",
       "guardian_phone": "07032262111",
@@ -12451,8 +12451,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 228,
@@ -12461,7 +12461,7 @@
       "last_name": "Attah",
       "gender": "Male",
       "dob": "2013-03-05",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr Attah Benjamin",
       "guardian_phone": "08064623707",
@@ -12504,8 +12504,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 229,
@@ -12514,7 +12514,7 @@
       "last_name": "Chibueze",
       "gender": "Female",
       "dob": "2015-06-09",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Chibueze",
       "guardian_phone": "08142442564",
@@ -12557,8 +12557,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 230,
@@ -12567,7 +12567,7 @@
       "last_name": "Chidekwe",
       "gender": "Male",
       "dob": "2013-09-28",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Chidekwe",
       "guardian_phone": "08037950632",
@@ -12610,8 +12610,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 231,
@@ -12620,7 +12620,7 @@
       "last_name": "Chidiebere",
       "gender": "Male",
       "dob": "2013-08-22",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs. Juliana Chidiebere",
       "guardian_phone": "08103601884",
@@ -12663,8 +12663,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 232,
@@ -12673,7 +12673,7 @@
       "last_name": "Chidiebere",
       "gender": "Female",
       "dob": "2015-06-19",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr Orsi Chidiebere",
       "guardian_phone": "08039231985",
@@ -12716,8 +12716,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 233,
@@ -12726,7 +12726,7 @@
       "last_name": "Chijioke",
       "gender": "Male",
       "dob": "2014-07-10",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Nwachukwu Chijioke",
       "guardian_phone": "08038168761",
@@ -12769,8 +12769,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 234,
@@ -12779,7 +12779,7 @@
       "last_name": "Chinonye",
       "gender": "Male",
       "dob": "2015-09-06",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Chinonye",
       "guardian_phone": "08062805970",
@@ -12822,8 +12822,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 235,
@@ -12832,7 +12832,7 @@
       "last_name": "Chukwuka",
       "gender": "Female",
       "dob": "2015-10-11",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Chukwuka",
       "guardian_phone": "09033229699",
@@ -12875,8 +12875,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 236,
@@ -12885,7 +12885,7 @@
       "last_name": "David",
       "gender": "Male",
       "dob": "2014-04-29",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr. David Onuorah",
       "guardian_phone": "08067055724",
@@ -12928,8 +12928,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 237,
@@ -12938,7 +12938,7 @@
       "last_name": "Ejesieme",
       "gender": "Female",
       "dob": "2012-03-15",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Ifeoma Izuchukwu",
       "guardian_phone": "08644347206",
@@ -12981,8 +12981,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 238,
@@ -12991,7 +12991,7 @@
       "last_name": "Ekwenie",
       "gender": "Male",
       "dob": "2014-07-06",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Cynthia Ekwenie",
       "guardian_phone": "08132356867",
@@ -13034,8 +13034,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 239,
@@ -13044,7 +13044,7 @@
       "last_name": "Ekwenugo",
       "gender": "Male",
       "dob": "2014-04-19",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Ekwenugo",
       "guardian_phone": "08064142847",
@@ -13087,8 +13087,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 240,
@@ -13097,7 +13097,7 @@
       "last_name": "Eluwa",
       "gender": "Male",
       "dob": "2016-07-02",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Eluwa",
       "guardian_phone": "07033672332",
@@ -13140,8 +13140,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 241,
@@ -13150,7 +13150,7 @@
       "last_name": "Ifezue",
       "gender": "Female",
       "dob": "2013-09-12",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Ifezue",
       "guardian_phone": "08063428724",
@@ -13193,8 +13193,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 242,
@@ -13203,7 +13203,7 @@
       "last_name": "Igwe",
       "gender": "Male",
       "dob": "2014-06-18",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Uchenna Igwe",
       "guardian_phone": "08037793649",
@@ -13246,8 +13246,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 243,
@@ -13256,7 +13256,7 @@
       "last_name": "Ikechukwu",
       "gender": "Female",
       "dob": "2014-11-09",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Ikechukwu",
       "guardian_phone": "08081874813",
@@ -13299,8 +13299,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 244,
@@ -13309,7 +13309,7 @@
       "last_name": "Isaac",
       "gender": "Female",
       "dob": "2014-07-14",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Isaac Tina",
       "guardian_phone": "08131934472",
@@ -13352,8 +13352,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 245,
@@ -13362,7 +13362,7 @@
       "last_name": "Kenechukwu",
       "gender": "Female",
       "dob": "2015-10-29",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr Odunukwe Kenechukwu",
       "guardian_phone": "07069775659",
@@ -13405,8 +13405,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 246,
@@ -13415,7 +13415,7 @@
       "last_name": "Mbachi",
       "gender": "Male",
       "dob": "2013-09-21",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Mbachi",
       "guardian_phone": "09075403758",
@@ -13458,8 +13458,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 247,
@@ -13468,7 +13468,7 @@
       "last_name": "Mbamalu",
       "gender": "Female",
       "dob": "2013-08-30",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Mbamalu",
       "guardian_phone": "08039309985",
@@ -13511,8 +13511,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 248,
@@ -13521,7 +13521,7 @@
       "last_name": "Nnebe",
       "gender": "Male",
       "dob": "2014-10-31",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Nnebe",
       "guardian_phone": "07040080178",
@@ -13564,8 +13564,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 249,
@@ -13574,7 +13574,7 @@
       "last_name": "Nnanna",
       "gender": "Female",
       "dob": "2015-07-08",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Nnanna",
       "guardian_phone": "08063658142",
@@ -13617,8 +13617,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 250,
@@ -13627,7 +13627,7 @@
       "last_name": "Nnebuife",
       "gender": "Male",
       "dob": "2014-10-08",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Nnebuife",
       "guardian_phone": "08033482767",
@@ -13670,8 +13670,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 251,
@@ -13680,7 +13680,7 @@
       "last_name": "Nwachukwu",
       "gender": "Female",
       "dob": "2014-08-24",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Nwachukwu",
       "guardian_phone": "08135793847",
@@ -13723,8 +13723,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 252,
@@ -13733,7 +13733,7 @@
       "last_name": "Nwogbo",
       "gender": "Male",
       "dob": "2015-01-10",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Nwogbo",
       "guardian_phone": "08036263184",
@@ -13776,8 +13776,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 253,
@@ -13786,7 +13786,7 @@
       "last_name": "Obasi",
       "gender": "Female",
       "dob": "2014-10-07",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Ngozi Obasi",
       "guardian_phone": "09014102146",
@@ -13829,8 +13829,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 254,
@@ -13839,7 +13839,7 @@
       "last_name": "Obasi",
       "gender": "Male",
       "dob": "2012-09-16",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Obasi",
       "guardian_phone": "07035469671",
@@ -13882,8 +13882,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 255,
@@ -13892,7 +13892,7 @@
       "last_name": "Odinye",
       "gender": "Female",
       "dob": "2015-02-15",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Odinye",
       "guardian_phone": "08164420920",
@@ -13935,8 +13935,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 256,
@@ -13945,7 +13945,7 @@
       "last_name": "Ogala",
       "gender": "Male",
       "dob": "2013-12-17",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Ogala",
       "guardian_phone": "07060754170",
@@ -13988,8 +13988,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 257,
@@ -13998,7 +13998,7 @@
       "last_name": "Okafor",
       "gender": "Male",
       "dob": "2015-05-28",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Okafor",
       "guardian_phone": "08037341095",
@@ -14041,8 +14041,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 258,
@@ -14051,7 +14051,7 @@
       "last_name": "Okafor",
       "gender": "Male",
       "dob": "2014-06-30",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Okafor",
       "guardian_phone": "08061108474",
@@ -14094,8 +14094,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 259,
@@ -14104,7 +14104,7 @@
       "last_name": "Okeke",
       "gender": "Male",
       "dob": "2013-08-02",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Revd. Canon Okeke",
       "guardian_phone": "08135251429",
@@ -14147,8 +14147,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 260,
@@ -14157,7 +14157,7 @@
       "last_name": "Okeke-Igwe",
       "gender": "Female",
       "dob": "2014-11-17",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Okekeigwe",
       "guardian_phone": "08034458563",
@@ -14200,8 +14200,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 261,
@@ -14210,7 +14210,7 @@
       "last_name": "Okparaugo",
       "gender": "Female",
       "dob": "2012-08-21",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Okparaugo",
       "guardian_phone": "07038523187",
@@ -14253,8 +14253,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 262,
@@ -14263,7 +14263,7 @@
       "last_name": "Onyejiuwa",
       "gender": "Male",
       "dob": "2014-08-05",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/mrs Peter Onyejiuwa",
       "guardian_phone": "08062359691",
@@ -14306,8 +14306,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 263,
@@ -14316,7 +14316,7 @@
       "last_name": "Tochukwu",
       "gender": "Male",
       "dob": "2015-04-04",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr Tochukwu",
       "guardian_phone": "08169721272",
@@ -14359,8 +14359,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 264,
@@ -14369,7 +14369,7 @@
       "last_name": "Uchenna",
       "gender": "Male",
       "dob": "2015-12-24",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mr/dr Uchenna Umeche",
       "guardian_phone": "07034956089",
@@ -14412,8 +14412,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 265,
@@ -14422,7 +14422,7 @@
       "last_name": "Emeka",
       "gender": "Male",
       "dob": "2015-10-30",
-      "class_id": 13,
+      "class_id": 2,
       "section_id": 1,
       "guardian_name": "Mrs Chizoba Glory Emeka",
       "guardian_phone": "09064074299",
@@ -14465,8 +14465,8 @@
       "transport_mode": "Private Pick-up",
       "bus_route": null,
       "passport_photo": null,
-      "class_name": "Primary 4",
-      "division": "Primary"
+      "class_name": "JSS2",
+      "division": "Junior College"
     },
     {
       "id": 266,
@@ -21839,8 +21839,8 @@
       "username": "teacher",
       "email": "adaobi.peter@eaglepowerschools.com.ng",
       "role": "teacher",
-      "reference_id": null,
-      "full_name": "Adaobi Peter (Educator)",
+      "reference_id": "EPS-STF-48",
+      "full_name": "Ayatalumo Stella-Maris U.",
       "avatar_url": null,
       "signature_url": null,
       "is_active": 1,

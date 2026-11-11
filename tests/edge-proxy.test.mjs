@@ -1,6 +1,40 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { onRequest } from '../functions/api/[[catchall]].js';
+import dbData from '../src/data/portalDbData.json' with { type: 'json' };
+
+test('student class filter applies before pagination and counts only that class', async () => {
+  const classId = dbData.students[0].class_id;
+  const expected = dbData.students.filter(student => String(student.class_id) === String(classId));
+  assert.ok(expected.length > 2);
+  for (const page of [1, 2]) {
+    const response = await onRequest({ request: new Request(`https://portal.test/api/students?class_id=${classId}&page=${page}&limit=2`) });
+    const result = await response.json();
+    assert.equal(result.total, expected.length);
+    assert.deepEqual(result.data.map(student => student.id), expected.slice((page - 1) * 2, page * 2).map(student => student.id));
+    assert.ok(result.data.every(student => String(student.class_id) === String(classId)));
+  }
+});
+
+test('student filter returns empty results for unknown classes and combines search with class', async () => {
+  const empty = await onRequest({ request: new Request('https://portal.test/api/students?class_id=nonexistent&page=1&limit=25') });
+  assert.deepEqual(await empty.json(), { success: true, total: 0, page: 1, limit: 25, data: [] });
+  const student = dbData.students[0];
+  const params = new URLSearchParams({ class_id: String(student.class_id), q: student.admission_no, page: '1', limit: '25' });
+  const response = await onRequest({ request: new Request(`https://portal.test/api/students?${params}`) });
+  const result = await response.json();
+  assert.equal(result.total, 1);
+  assert.equal(result.data[0].id, student.id);
+});
+
+test('unpaginated student roster remains complete and status filter runs before counting', async () => {
+  const response = await onRequest({ request: new Request('https://portal.test/api/students') });
+  assert.equal((await response.json()).data.length, dbData.students.length);
+  const inactive = await onRequest({ request: new Request('https://portal.test/api/students?status=inactive&page=1&limit=25') });
+  const result = await inactive.json();
+  assert.equal(result.total, dbData.students.filter(student => Number(student.is_active) === 0).length);
+  assert.ok(result.data.every(student => Number(student.is_active) === 0));
+});
 
 test('edge API refuses invalid, unsafe, and recursive proxy origins', async () => {
   for (const API_ORIGIN of ['http://backend.test', 'https://portal.test', 'https://user:pass@backend.test', 'https://backend.test/api']) {

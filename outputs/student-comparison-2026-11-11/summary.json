@@ -1,0 +1,32 @@
+{
+  "spreadsheet_students": 379,
+  "database_students": 379,
+  "matched_spreadsheet_rows": 379,
+  "matched_database_students": 379,
+  "unmatched_spreadsheet": 0,
+  "unmatched_database": 0,
+  "field_differences": {
+    "guardian_phone": 5,
+    "dob": 7
+  },
+  "source_duplicate_names": {},
+  "ambiguous_database_matches": 0,
+  "by_sheet": {
+    "P.N": 7,
+    "N. 1": 13,
+    "N. 2": 17,
+    "N.3": 19,
+    "B.1 ": 22,
+    "B.2": 25,
+    "B.3": 23,
+    "B.4": 17,
+    "B.5": 26,
+    "B.6": 19,
+    "JSS 1": 38,
+    "JSS 2": 39,
+    "JSS 3": 38,
+    "SS 1": 29,
+    "SS 2": 34,
+    "SS 3": 13
+  }
+}

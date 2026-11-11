@@ -9,6 +9,14 @@ export const EliteModernTemplate = ({ data }) => {
   const totalObtainable = subjectKeys.length * 100;
   const percentage = totalObtainable > 0 ? Number(((totalScoreObtained / totalObtainable) * 100).toFixed(1)) : 0;
 
+  const isPrimary = (student.className || '').toLowerCase().includes('pri') || 
+                    (student.className || '').toLowerCase().includes('basic') || 
+                    (student.division || '').toLowerCase().includes('primary') ||
+                    (student.division || '').toLowerCase().includes('basic');
+  const ca1Max = isPrimary ? 20 : 15;
+  const ca2Max = isPrimary ? 20 : 15;
+  const examMax = isPrimary ? 60 : 70;
+
   return (
     <div className="bg-[#f8f9ff] w-[21cm] min-h-[29.7cm] p-[1cm] font-sans text-[#0b1c30] mx-auto overflow-hidden print:m-0 print:p-[0.8cm] print:shadow-none print:bg-white relative">
       <style>{`
@@ -87,9 +95,9 @@ export const EliteModernTemplate = ({ data }) => {
           <thead>
             <tr className="bg-[#0D2342] text-white">
               <th className="px-5 py-2.5 text-[9px] font-extrabold uppercase tracking-widest">Subject</th>
-              <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">CA 1 (15)</th>
-              <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">CA 2 (15)</th>
-              <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">Exam (70)</th>
+              <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">CA 1 ({ca1Max})</th>
+              <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">CA 2 ({ca2Max})</th>
+              <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">Exam ({examMax})</th>
               <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">Total (100)</th>
               <th className="px-3 py-2.5 text-center text-[9px] font-extrabold uppercase tracking-widest">Grade</th>
               <th className="px-5 py-2.5 text-right text-[9px] font-extrabold uppercase tracking-widest">Remark</th>

@@ -3,6 +3,44 @@
  * Supports division-specific assessment rubrics and 3-term cumulative annual promotion
  */
 
+/**
+ * Assessment weighting configurations:
+ * - Primary: Continuous Assessment (20, 20 = 40) + Exam (60) = 100
+ * - Secondary: Continuous Assessment (30) + Exam (70) = 100
+ */
+export const DIVISION_ASSESSMENT_CONFIG = {
+  Primary: {
+    ca1_max: 20,
+    ca2_max: 20,
+    project_max: 20,
+    ca_max: 40,
+    exam_max: 60,
+    total_max: 100,
+    label: 'Primary: CA 1 (20) + CA 2 (20) + Exam (60) = 100'
+  },
+  Secondary: {
+    ca1_max: 15,
+    ca2_max: 15,
+    project_max: 15,
+    ca_max: 30,
+    exam_max: 70,
+    total_max: 100,
+    label: 'Secondary: CA (30) + Exam (70) = 100'
+  }
+};
+
+export function isPrimaryDivision(division) {
+  if (!division) return false;
+  const divNormalized = String(division).trim().toLowerCase();
+  return divNormalized.includes('primary') || divNormalized.includes('basic');
+}
+
+export function getAssessmentConfig(division) {
+  return isPrimaryDivision(division)
+    ? DIVISION_ASSESSMENT_CONFIG.Primary
+    : DIVISION_ASSESSMENT_CONFIG.Secondary;
+}
+
 export const DIVISION_GRADING_SCALES = {
   // 1. Senior College (SSS1 - SSS3): Official WAEC / WASSCE 9-Point Scale
   'Senior College': {
@@ -121,16 +159,18 @@ export function calculateGradeAndRemark(totalScore, division = 'Senior College')
 /**
  * Multi-Component Continuous Assessment (CA) and Exam Total Computation
  * Supports:
- * - Detailed breakdown: CA1 (10) + CA2 (10) + Project (10) + Exam (70) = 100
- * - Standard breakdown: CA (30) + Exam (70) = 100
+ * - Primary: Continuous Assessment (20, 20 = 40) + Exam (60) = 100
+ * - Secondary: Continuous Assessment (30) + Exam (70) = 100
  */
 export function calculateMultiComponentScore({
   ca1_score = null,
   ca2_score = null,
   project_score = null,
   ca_score = 0,
-  exam_score = 0
+  exam_score = 0,
+  division = 'Senior College'
 }) {
+  const config = getAssessmentConfig(division);
   let finalCa = 0;
   let hasDetailedCa = false;
 
@@ -143,20 +183,23 @@ export function calculateMultiComponentScore({
     return Math.round(score * 10) / 10;
   };
 
-  const numCa1 = parseScore(ca1_score, 'CA1 score', 10, true);
-  const numCa2 = parseScore(ca2_score, 'CA2 score', 10, true);
-  const numProject = parseScore(project_score, 'Project score', 10, true);
-  const finalExam = parseScore(exam_score ?? 0, 'Exam score', 70);
+  const numCa1 = parseScore(ca1_score, 'CA1 score', config.ca1_max, true);
+  const numCa2 = parseScore(ca2_score, 'CA2 score', config.ca2_max, true);
+  const numProject = parseScore(project_score, 'Project score', config.project_max || 15, true);
+  const finalExam = parseScore(exam_score ?? 0, 'Exam score', config.exam_max);
 
   if (numCa1 !== null || numCa2 !== null || numProject !== null) {
     hasDetailedCa = true;
     finalCa = (numCa1 || 0) + (numCa2 || 0) + (numProject || 0);
+    if (finalCa > config.ca_max) {
+      finalCa = config.ca_max;
+    }
   } else {
-    finalCa = parseScore(ca_score ?? 0, 'CA score', 30);
+    finalCa = parseScore(ca_score ?? 0, 'CA score', config.ca_max);
   }
 
   finalCa = Math.round(finalCa * 10) / 10;
-  const totalScore = Math.round((finalCa + finalExam) * 10) / 10;
+  const totalScore = Math.min(100, Math.round((finalCa + finalExam) * 10) / 10);
 
   return {
     ca1_score: numCa1,

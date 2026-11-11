@@ -81,9 +81,9 @@ export const PrimarySchoolTemplate = ({ data }) => {
           <thead>
             <tr className="bg-sky-500 text-white font-black text-[9px] uppercase tracking-wider">
               <th className="px-4 py-2">Subject / Learning Area</th>
-              <th className="px-2 py-2 text-center">CA 1 (15)</th>
-              <th className="px-2 py-2 text-center">CA 2 (15)</th>
-              <th className="px-2 py-2 text-center">Exam (70)</th>
+              <th className="px-2 py-2 text-center">CA 1 (20)</th>
+              <th className="px-2 py-2 text-center">CA 2 (20)</th>
+              <th className="px-2 py-2 text-center">Exam (60)</th>
               <th className="px-2 py-2 text-center">Total (100)</th>
               <th className="px-2 py-2 text-center">Grade</th>
               <th className="px-3 py-2 text-right">Remark</th>

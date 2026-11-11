@@ -10,6 +10,7 @@ import { authenticate, requireRoles } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
 import { failedLoginTracker, clearFailure } from './auth.js';
 import { CURRICULUM_TAXONOMY } from '../services/inHouseAi.js';
+import { calculateGradeAndRemark, isPrimaryDivision, getAssessmentConfig } from '../services/gradingScale.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -961,22 +962,17 @@ router.post('/scores/override', (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Student ID and Subject ID are required.' });
     }
 
-    const nCa1 = Math.max(0, Math.min(15, Number(ca1) || 0));
-    const nCa2 = Math.max(0, Math.min(15, Number(ca2) || 0));
-    const caTotal = Math.min(30, nCa1 + nCa2);
-    const nExam = Math.max(0, Math.min(70, Number(exam) || 0));
-    const total = caTotal + nExam;
+    const student = db.prepare('SELECT c.division FROM students s LEFT JOIN classes c ON s.class_id = c.id WHERE s.id = ?').get(student_id);
+    const division = student?.division || 'Senior College';
+    const config = getAssessmentConfig(division);
 
-    let grade = 'F9';
-    let remark = 'Fail';
-    if (total >= 75) { grade = 'A1'; remark = 'Distinction / Excellent'; }
-    else if (total >= 70) { grade = 'B2'; remark = 'Very Good'; }
-    else if (total >= 65) { grade = 'B3'; remark = 'Good'; }
-    else if (total >= 60) { grade = 'C4'; remark = 'Credit'; }
-    else if (total >= 55) { grade = 'C5'; remark = 'Credit'; }
-    else if (total >= 50) { grade = 'C6'; remark = 'Pass'; }
-    else if (total >= 45) { grade = 'D7'; remark = 'Fair Pass'; }
-    else if (total >= 40) { grade = 'E8'; remark = 'Weak Pass'; }
+    const nCa1 = Math.max(0, Math.min(config.ca1_max, Number(ca1) || 0));
+    const nCa2 = Math.max(0, Math.min(config.ca2_max, Number(ca2) || 0));
+    const caTotal = Math.min(config.ca_max, nCa1 + nCa2);
+    const nExam = Math.max(0, Math.min(config.exam_max, Number(exam) || 0));
+    const total = Math.min(100, caTotal + nExam);
+
+    const { grade, remark, scale_code } = calculateGradeAndRemark(total, division);
 
     const existing = db.prepare(`
       SELECT id FROM marks 

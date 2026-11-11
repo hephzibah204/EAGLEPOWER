@@ -10,7 +10,10 @@ import {
   calculateMultiComponentScore,
   getScaleForDivision,
   getPromotionDecision,
-  DIVISION_GRADING_SCALES
+  DIVISION_GRADING_SCALES,
+  DIVISION_ASSESSMENT_CONFIG,
+  getAssessmentConfig,
+  isPrimaryDivision
 } from '../services/gradingScale.js';
 import { assertTeacherCanGrade } from '../utils/teacherPermissions.js';
 
@@ -20,12 +23,19 @@ function calculateGrade(total, division = 'Senior College') {
   return calculateGradeAndRemark(total, division);
 }
 
-function validateScoreEntry(entry = {}) {
+function validateScoreEntry(entry = {}, division = 'Senior College') {
+  const config = getAssessmentConfig(division);
   const detailed = ['ca1_score', 'ca2_score', 'project_score'].some(key => entry[key] !== null && entry[key] !== undefined && entry[key] !== '');
   const fields = detailed
-    ? [['ca1_score', 10], ['ca2_score', 10], ['project_score', 10]]
-    : [['ca_score', 30]];
-  fields.push(['exam_score', 70]);
+    ? [['ca1_score', config.ca1_max], ['ca2_score', config.ca2_max]]
+    : [['ca_score', config.ca_max]];
+
+  if (detailed && entry.project_score !== null && entry.project_score !== undefined && entry.project_score !== '') {
+    fields.push(['project_score', config.project_max || 15]);
+  }
+
+  fields.push(['exam_score', config.exam_max]);
+
   for (const [field, max] of fields) {
     const value = entry[field];
     if ((field.endsWith('_score') && ['ca1_score', 'ca2_score', 'project_score'].includes(field) && (value === null || value === undefined || value === ''))) continue;
@@ -101,6 +111,7 @@ router.get('/grading-scales', (_req, res) => {
   res.json({
     success: true,
     scales: DIVISION_GRADING_SCALES,
+    assessment_configs: DIVISION_ASSESSMENT_CONFIG,
     data: DIVISION_GRADING_SCALES
   });
 });
@@ -594,16 +605,17 @@ router.post('/marks', authenticate, requireRoles('teacher', 'admin', 'superadmin
       try { assertTeacherCanGrade(req.user, studentInfo.class_id, subject_id); }
       catch (permissionError) { return res.status(403).json({ success: false, message: permissionError.message }); }
     }
-    const scoreError = validateScoreEntry({ ca_score, exam_score, ca1_score, ca2_score, project_score });
-    if (scoreError) return res.status(400).json({ success: false, message: scoreError });
     const division = studentInfo?.division || 'Senior College';
+    const scoreError = validateScoreEntry({ ca_score, exam_score, ca1_score, ca2_score, project_score }, division);
+    if (scoreError) return res.status(400).json({ success: false, message: scoreError });
 
     const computed = calculateMultiComponentScore({
       ca1_score,
       ca2_score,
       project_score,
       ca_score,
-      exam_score
+      exam_score,
+      division
     });
 
     const { grade, remark, scale_code } = calculateGradeAndRemark(computed.total_score, division);
@@ -693,6 +705,16 @@ router.post('/marks/batch', authenticate, requireRoles('teacher', 'admin', 'supe
       return res.status(400).json({ success: false, message: 'A valid subject_id is required.' });
     }
 
+    // Determine division from class_id or first student
+    let division = 'Senior College';
+    if (class_id) {
+      const cls = db.prepare('SELECT division FROM classes WHERE id = ?').get(classId);
+      if (cls?.division) division = cls.division;
+    } else if (entries[0]?.student_id) {
+      const st = db.prepare('SELECT c.division FROM students s JOIN classes c ON s.class_id = c.id WHERE s.id = ?').get(entries[0].student_id);
+      if (st?.division) division = st.division;
+    }
+
     const seenStudentIds = new Set();
     for (const item of entries) {
       const studentId = Number(item?.student_id);
@@ -704,7 +726,7 @@ router.post('/marks/batch', authenticate, requireRoles('teacher', 'admin', 'supe
       if (!student || !student.is_active || Number(student.class_id) !== classId) {
         return res.status(400).json({ success: false, message: `Student ${studentId} is not an active student in the selected class.` });
       }
-      const scoreError = validateScoreEntry(item);
+      const scoreError = validateScoreEntry(item, division);
       if (scoreError) return res.status(400).json({ success: false, message: `Student ${studentId}: ${scoreError}` });
     }
 
@@ -720,16 +742,6 @@ router.post('/marks/batch', authenticate, requireRoles('teacher', 'admin', 'supe
           message: permErr.message
         });
       }
-    }
-
-    // Determine division from class_id or first student
-    let division = 'Senior College';
-    if (class_id) {
-      const cls = db.prepare('SELECT division FROM classes WHERE id = ?').get(classId);
-      if (cls?.division) division = cls.division;
-    } else if (entries[0]?.student_id) {
-      const st = db.prepare('SELECT c.division FROM students s JOIN classes c ON s.class_id = c.id WHERE s.id = ?').get(entries[0].student_id);
-      if (st?.division) division = st.division;
     }
 
     const stmt = db.prepare(`
@@ -760,7 +772,8 @@ router.post('/marks/batch', authenticate, requireRoles('teacher', 'admin', 'supe
           ca2_score: item.ca2_score,
           project_score: item.project_score,
           ca_score: item.ca_score,
-          exam_score: item.exam_score
+          exam_score: item.exam_score,
+          division
         });
 
         const { grade, remark, scale_code } = calculateGradeAndRemark(computed.total_score, division);

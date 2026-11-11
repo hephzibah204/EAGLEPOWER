@@ -1026,13 +1026,17 @@ export function analyzeStudentProgress(studentId) {
   let examAnxietyFlags = 0;
   let inconsistencyFlags = 0;
 
+  const isPrimary = (student?.division || '').toLowerCase().includes('primary') || (student?.division || '').toLowerCase().includes('basic');
+  const maxCa = isPrimary ? 40 : 30;
+  const maxExam = isPrimary ? 60 : 70;
+
   marks.forEach(m => {
     totalScoreSum += m.total_score;
     caSum += (m.ca_score || 0);
     examSum += (m.exam_score || 0);
 
-    const caPercent = (m.ca_score || 0) / 30;
-    const examPercent = (m.exam_score || 0) / 70;
+    const caPercent = (m.ca_score || 0) / maxCa;
+    const examPercent = (m.exam_score || 0) / maxExam;
 
     // Detect CA vs Exam Divergence
     if (caPercent >= 0.80 && examPercent < 0.45) {

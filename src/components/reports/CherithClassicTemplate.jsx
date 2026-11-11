@@ -9,6 +9,14 @@ export const CherithClassicTemplate = ({ data }) => {
   const totalObtainable = subjectKeys.length * 100;
   const percentage = totalObtainable > 0 ? Number(((totalScoreObtained / totalObtainable) * 100).toFixed(1)) : 0;
 
+  const isPrimary = (student.className || '').toLowerCase().includes('pri') || 
+                    (student.className || '').toLowerCase().includes('basic') || 
+                    (student.division || '').toLowerCase().includes('primary') ||
+                    (student.division || '').toLowerCase().includes('basic');
+  const ca1Max = isPrimary ? 20 : 15;
+  const ca2Max = isPrimary ? 20 : 15;
+  const examMax = isPrimary ? 60 : 70;
+
   const attendanceObj = extras?.attendance || { opened: 120, present: 116, absent: 4 };
 
   const affectiveTraits = [
@@ -136,9 +144,9 @@ export const CherithClassicTemplate = ({ data }) => {
             <thead>
               <tr>
                 <th className="w-36">Subject Curriculum</th>
-                <th className="text-center w-9">CA1 (15)</th>
-                <th className="text-center w-9">CA2 (15)</th>
-                <th className="text-center w-9">Exam (70)</th>
+                <th className="text-center w-9">CA1 ({ca1Max})</th>
+                <th className="text-center w-9">CA2 ({ca2Max})</th>
+                <th className="text-center w-9">Exam ({examMax})</th>
                 <th className="text-center w-10">Total (100)</th>
                 <th className="text-center w-10">2nd Term</th>
                 <th className="text-center w-10">3rd Term</th>

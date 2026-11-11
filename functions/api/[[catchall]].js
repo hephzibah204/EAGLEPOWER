@@ -132,7 +132,7 @@ function gradingSchemeForDivision(division) {
   const primary = div.includes('primary') || div.includes('basic') || div.includes('nursery') || div.includes('creche') || div.includes('eyfs');
   return primary
     ? { primary: true, ca1Max: 20, ca2Max: 20, projectMax: 0, caMax: 40, examMax: 60 }
-    : { primary: false, ca1Max: 10, ca2Max: 10, projectMax: 10, caMax: 30, examMax: 70 };
+    : { primary: false, ca1Max: 15, ca2Max: 15, projectMax: 15, caMax: 30, examMax: 70 };
 }
 
 function clampScore(value, max) {

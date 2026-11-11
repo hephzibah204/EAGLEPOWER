@@ -608,6 +608,164 @@ export default function PortalDashboard({
   const [selectedInvoiceForParent, setSelectedInvoiceForParent] = useState(null);
   const [copiedBankText, setCopiedBankText] = useState(null);
 
+  // Teacher "My Students" Hub, Terminal Remarks & Quick CA Score States
+  const [myStudentsSearchQuery, setMyStudentsSearchQuery] = useState('');
+  const [myStudentsClassId, setMyStudentsClassId] = useState('');
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const [commentTargetStudent, setCommentTargetStudent] = useState(null);
+  const [teacherCommentText, setTeacherCommentText] = useState('');
+  const [principalCommentText, setPrincipalCommentText] = useState('');
+  const [commentTraits, setCommentTraits] = useState({
+    attentiveness: 5,
+    neatness: 5,
+    politeness: 5,
+    punctuality: 5,
+    honesty: 5
+  });
+  const [isSavingComment, setIsSavingComment] = useState(false);
+  const [commentSuccessMsg, setCommentSuccessMsg] = useState('');
+
+  // Quick CA Score Entry Modal State
+  const [isQuickCaModalOpen, setIsQuickCaModalOpen] = useState(false);
+  const [quickCaStudent, setQuickCaStudent] = useState(null);
+  const [quickCaSubjectId, setQuickCaSubjectId] = useState('');
+  const [quickCa1, setQuickCa1] = useState(8);
+  const [quickCa2, setQuickCa2] = useState(8);
+  const [quickProject, setQuickProject] = useState(9);
+  const [quickExam, setQuickExam] = useState(55);
+  const [isSavingQuickCa, setIsSavingQuickCa] = useState(false);
+  const [quickCaSuccessMsg, setQuickCaSuccessMsg] = useState('');
+
+  const formatParentWhatsAppUrl = (phone, studentName, className, teacherName) => {
+    if (!phone) return null;
+    let clean = String(phone).replace(/\D/g, '');
+    if (clean.startsWith('0')) clean = '234' + clean.slice(1);
+    if (!clean.startsWith('234') && clean.length === 10) clean = '234' + clean;
+    const msg = encodeURIComponent(`Good day, respected Parent/Guardian. This is ${teacherName || 'the Class Teacher'} from Eagle Power Schools reaching out regarding your ward, ${studentName} (${className}).`);
+    return `https://wa.me/${clean}?text=${msg}`;
+  };
+
+  const handleOpenCommentModal = (student) => {
+    setCommentTargetStudent(student);
+    setTeacherCommentText(student.teacher_comment || 'An exemplary scholar with consistent academic dedication.');
+    setPrincipalCommentText(student.principal_comment || 'Remarkable progress. Keep soaring high.');
+    setCommentTraits({
+      attentiveness: 5,
+      neatness: 5,
+      politeness: 5,
+      punctuality: 5,
+      honesty: 5
+    });
+    setCommentSuccessMsg('');
+    setIsCommentModalOpen(true);
+  };
+
+  const handleSaveTeacherComment = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!commentTargetStudent?.id) return;
+    setIsSavingComment(true);
+    setCommentSuccessMsg('');
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const res = await fetch(`${API_BASE}/exams/report-extras`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          student_id: commentTargetStudent.id,
+          session: gradebookSession || '2026/2027',
+          term: gradebookTerm || 'First Term',
+          teacher_comment: teacherCommentText,
+          principal_comment: principalCommentText || undefined,
+          traits: commentTraits
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setCommentSuccessMsg('Official remarks & affective domain saved successfully!');
+        if (studentReportCard && String(studentReportCard.student?.id) === String(commentTargetStudent.id)) {
+          setStudentReportCard(prev => ({
+            ...prev,
+            evaluations: {
+              ...(prev?.evaluations || {}),
+              teacher_remark: teacherCommentText,
+              principal_remark: principalCommentText || prev?.evaluations?.principal_remark,
+              affective_traits: commentTraits
+            },
+            comments: {
+              ...(prev?.comments || {}),
+              form_teacher: teacherCommentText,
+              principal: principalCommentText || prev?.comments?.principal
+            }
+          }));
+        }
+        setTimeout(() => setIsCommentModalOpen(false), 1400);
+      } else {
+        alert(data.message || 'Could not save comments.');
+      }
+    } catch (err) {
+      console.error('Save comment error:', err);
+      alert('Network error while saving comments.');
+    } finally {
+      setIsSavingComment(false);
+    }
+  };
+
+  const handleOpenQuickCaModal = (student) => {
+    setQuickCaStudent(student);
+    const firstSub = allowedGradebookSubjects[0]?.id || subjects[0]?.id || 1;
+    setQuickCaSubjectId(firstSub);
+    setQuickCa1(8);
+    setQuickCa2(8);
+    setQuickProject(9);
+    setQuickExam(55);
+    setQuickCaSuccessMsg('');
+    setIsQuickCaModalOpen(true);
+  };
+
+  const handleSaveQuickCa = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!quickCaStudent?.id || !quickCaSubjectId) return;
+    setIsSavingQuickCa(true);
+    setQuickCaSuccessMsg('');
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
+      };
+      const caTotal = Number(quickCa1 || 0) + Number(quickCa2 || 0) + Number(quickProject || 0);
+      const res = await fetch(`${API_BASE}/exams/marks`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          student_id: quickCaStudent.id,
+          subject_id: quickCaSubjectId,
+          session: gradebookSession || '2026/2027',
+          term: gradebookTerm || 'First Term',
+          ca1_score: Number(quickCa1 || 0),
+          ca2_score: Number(quickCa2 || 0),
+          project_score: Number(quickProject || 0),
+          ca_score: caTotal,
+          exam_score: Number(quickExam || 0)
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setQuickCaSuccessMsg(`Scores saved! Total: ${caTotal + Number(quickExam || 0)}/100`);
+        setTimeout(() => setIsQuickCaModalOpen(false), 1200);
+      } else {
+        alert(data.message || 'Could not save scores.');
+      }
+    } catch (err) {
+      console.error('Save quick CA error:', err);
+      alert('Network error while saving scores.');
+    } finally {
+      setIsSavingQuickCa(false);
+    }
+  };
+
   // ==========================================
   // SuperAdmin Omni-Control States & Handlers
   // ==========================================
@@ -1746,25 +1904,33 @@ export default function PortalDashboard({
     }
   }, [isOpen, activeRole, currentUser, activeTab, selectedClassId, selectedSubjectId, gradebookSession, gradebookTerm, fetchClassSheet, students.length]);
 
-  // Auto-align Gradebook to an authorized class and subject for the logged-in teacher
+  // Auto-align Gradebook, Attendance & My Students to an authorized class for the logged-in teacher
   useEffect(() => {
     if (activeRole === 'teacher' && currentUser && classes.length > 0) {
       const allowedCls = getAllowedClassesForTeacher(currentUser, classes);
-      if (allowedCls.length > 0 && !allowedCls.some(c => String(c.id) === String(selectedClassId))) {
-        const targetCls = allowedCls[0];
-        setSelectedClassId(targetCls.id);
-        const allowedSubs = getAllowedSubjectsForClass(currentUser, targetCls, subjects);
-        if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
-          setSelectedSubjectId(allowedSubs[0].id);
+      if (allowedCls.length > 0) {
+        if (!allowedCls.some(c => String(c.id) === String(selectedClassId))) {
+          const targetCls = allowedCls[0];
+          setSelectedClassId(targetCls.id);
+          const allowedSubs = getAllowedSubjectsForClass(currentUser, targetCls, subjects);
+          if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
+            setSelectedSubjectId(allowedSubs[0].id);
+          }
+        } else if (currentGradebookClassObj && subjects.length > 0) {
+          const allowedSubs = getAllowedSubjectsForClass(currentUser, currentGradebookClassObj, subjects);
+          if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
+            setSelectedSubjectId(allowedSubs[0].id);
+          }
         }
-      } else if (currentGradebookClassObj && subjects.length > 0) {
-        const allowedSubs = getAllowedSubjectsForClass(currentUser, currentGradebookClassObj, subjects);
-        if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
-          setSelectedSubjectId(allowedSubs[0].id);
+        if (!allowedCls.some(c => String(c.id) === String(attendanceClassId))) {
+          setAttendanceClassId(allowedCls[0].id);
+        }
+        if (!myStudentsClassId || !allowedCls.some(c => String(c.id) === String(myStudentsClassId))) {
+          setMyStudentsClassId(allowedCls[0].id);
         }
       }
     }
-  }, [activeRole, currentUser, classes, subjects, selectedClassId, selectedSubjectId, currentGradebookClassObj]);
+  }, [activeRole, currentUser, classes, subjects, selectedClassId, selectedSubjectId, currentGradebookClassObj, attendanceClassId, myStudentsClassId]);
 
   // Load student report card
   const fetchReportCard = useCallback(async (admNo) => {
@@ -3495,6 +3661,15 @@ export default function PortalDashboard({
                       >
                         <Sparkles className="w-3.5 h-3.5" />
                         <span>Teacher Cockpit</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('my_students')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'my_students' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60'
+                        }`}
+                      >
+                        <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
+                        <span>My Students Roster</span>
                       </button>
                       <button
                         onClick={() => {
@@ -5410,6 +5585,13 @@ export default function PortalDashboard({
                           <span>Change Password</span>
                         </button>
                         <button
+                          onClick={() => setActiveTab('my_students')}
+                          className="px-4 py-2.5 rounded-2xl bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 font-black text-xs border border-amber-400/40 flex items-center gap-2 transition-all hover:scale-102 active:scale-98"
+                        >
+                          <GraduationCap className="w-4 h-4 text-amber-400" />
+                          <span>My Students Roster</span>
+                        </button>
+                        <button
                           onClick={() => {
                             setActiveTab('attendance');
                             fetchStudentAttendance(attendanceClassId, attendanceDate);
@@ -5815,6 +5997,357 @@ export default function PortalDashboard({
                 </div>
               )}
 
+              {/* TEACHER "MY STUDENTS" ROSTER & COMPREHENSIVE ACADEMIC MANAGEMENT HUB */}
+              {(activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'my_students' && (() => {
+                const effectiveClassList = activeRole === 'teacher'
+                  ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes)
+                  : classes;
+
+                const effectiveClassId = myStudentsClassId
+                  ? myStudentsClassId
+                  : (effectiveClassList[0]?.id || classes[0]?.id || 1);
+
+                const currentClassObj = classes.find(c => String(c.id) === String(effectiveClassId)) || effectiveClassList[0] || null;
+                const isFormTeacher = isFormTeacherOfClass(currentUser, currentClassObj);
+
+                // Strictly filter students by class
+                const filteredClassStudents = students.filter(s => {
+                  if (activeRole === 'teacher') {
+                    // Class teacher only sees students in authorized classes
+                    const isAllowed = allowedGradebookClasses.some(c => String(c.id) === String(s.class_id));
+                    if (!isAllowed) return false;
+                  }
+                  if (effectiveClassId && String(s.class_id) !== String(effectiveClassId)) return false;
+                  if (!myStudentsSearchQuery) return true;
+                  const q = myStudentsSearchQuery.toLowerCase();
+                  return (
+                    (s.first_name || '').toLowerCase().includes(q) ||
+                    (s.last_name || '').toLowerCase().includes(q) ||
+                    (s.admission_no || '').toLowerCase().includes(q) ||
+                    (s.guardian_phone || '').toLowerCase().includes(q) ||
+                    (s.guardian_name || '').toLowerCase().includes(q)
+                  );
+                });
+
+                const maleCount = filteredClassStudents.filter(s => (s.gender || '').toLowerCase() === 'male').length;
+                const femaleCount = filteredClassStudents.filter(s => (s.gender || '').toLowerCase() === 'female').length;
+
+                return (
+                  <div className="space-y-6 animate-in fade-in">
+                    {/* Header Banner */}
+                    <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800 shadow-xl relative overflow-hidden">
+                      <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
+                        <div className="space-y-1">
+                          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/20 text-amber-400 text-xs font-bold">
+                            <GraduationCap className="w-3.5 h-3.5" />
+                            <span>My Students Hub • Class Form Management</span>
+                          </div>
+                          <h2 className="text-2xl font-black text-white tracking-tight">
+                            {currentClassObj?.name || 'My Class'} Student Roster
+                          </h2>
+                          <p className="text-xs text-slate-400 max-w-xl">
+                            Continuous Assessment (CA) tracking, terminal report card comments, attendance records, classwork/homework assignments, and direct parent communication.
+                          </p>
+                          <div className="flex items-center gap-2 pt-1 text-xs">
+                            {isFormTeacher ? (
+                              <span className="px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 font-bold border border-amber-400/30 flex items-center gap-1">
+                                <Crown className="w-3 h-3 text-amber-400" />
+                                Form Class Teacher (Full Academic Authority)
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30 flex items-center gap-1">
+                                <BookOpen className="w-3 h-3 text-indigo-400" />
+                                Subject Teacher Class View
+                              </span>
+                            )}
+                            <span className="text-slate-500">•</span>
+                            <span className="text-slate-400 font-medium">{filteredClassStudents.length} Students Enrolled</span>
+                          </div>
+                        </div>
+
+                        {/* Top Action Controls */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Class Selector Dropdown */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-400">Class:</span>
+                            <select
+                              value={effectiveClassId}
+                              onChange={(e) => {
+                                const val = Number(e.target.value) || e.target.value;
+                                setMyStudentsClassId(val);
+                                setSelectedClassId(val);
+                                setAttendanceClassId(val);
+                              }}
+                              className="bg-slate-900 border border-slate-700 text-white font-bold px-3 py-2 rounded-xl text-xs focus:border-amber-400"
+                            >
+                              {effectiveClassList.map(c => (
+                                <option key={c.id} value={c.id}>
+                                  {c.name} {isFormTeacherOfClass(currentUser, c) ? '👑 (Your Class)' : ''} ({c.student_count || students.filter(s => String(s.class_id) === String(c.id)).length} pupils)
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              setActiveTab('attendance');
+                              setAttendanceClassId(effectiveClassId);
+                              fetchStudentAttendance(effectiveClassId, attendanceDate);
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold text-xs border border-slate-700 flex items-center gap-1.5 transition-all"
+                            title="Take attendance for this class"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            <span>Take Roll-Call</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedClassId(effectiveClassId);
+                              setActiveTab('gradebook');
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow transition-all"
+                            title="Open class score entry sheet"
+                          >
+                            <Award className="w-3.5 h-3.5" />
+                            <span>Score Sheet / Gradebook</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setNewHwForm(prev => ({
+                                ...prev,
+                                class_id: effectiveClassId,
+                                subject_id: allowedGradebookSubjects[0]?.id || subjects[0]?.id || 1,
+                                assignment_type: 'Classwork'
+                              }));
+                              setCreateHwModalOpen(true);
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 font-bold text-xs border border-purple-500/40 flex items-center gap-1.5 transition-all"
+                            title="Assign new classwork or homework"
+                          >
+                            <BookOpen className="w-3.5 h-3.5 text-purple-400" />
+                            <span>Give Classwork</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Telemetry Summary Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Enrolled</span>
+                          <span className="text-2xl font-black text-white">{filteredClassStudents.length}</span>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold">
+                          <Users className="w-5 h-5" />
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Male Pupils</span>
+                          <span className="text-2xl font-black text-blue-400">{maleCount}</span>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold">
+                          👦
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Female Pupils</span>
+                          <span className="text-2xl font-black text-pink-400">{femaleCount}</span>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-pink-500/10 text-pink-400 flex items-center justify-center font-bold">
+                          👧
+                        </div>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Academic Session</span>
+                          <span className="text-sm font-black text-amber-400">{gradebookSession || '2026/2027'}</span>
+                          <span className="text-[10px] text-slate-400 block">{gradebookTerm || 'First Term'}</span>
+                        </div>
+                        <div className="w-10 h-10 rounded-xl bg-amber-400/10 text-amber-400 flex items-center justify-center font-bold">
+                          <Calendar className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Search & Filter Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="relative flex-1 min-w-[240px]">
+                        <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          placeholder="Search pupil by name, admission no, or guardian phone..."
+                          value={myStudentsSearchQuery}
+                          onChange={(e) => setMyStudentsSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-medium"
+                        />
+                      </div>
+                      <div className="text-xs text-slate-400 font-bold">
+                        Showing <span className="text-amber-400">{filteredClassStudents.length}</span> pupils in {currentClassObj?.name}
+                      </div>
+                    </div>
+
+                    {/* Student Roster Table */}
+                    <div className="bg-slate-950 rounded-3xl border border-slate-800 overflow-hidden shadow-xl">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-900 text-slate-400 text-[11px] uppercase tracking-wider font-bold border-b border-slate-800">
+                            <tr>
+                              <th className="p-4">Pupil / Identity</th>
+                              <th className="p-4">Gender</th>
+                              <th className="p-4">Parent / Guardian & Phone</th>
+                              <th className="p-4">Direct Contact</th>
+                              <th className="p-4 text-center">Teacher Academic Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-900 text-slate-300">
+                            {filteredClassStudents.length > 0 ? (
+                              filteredClassStudents.map((student, idx) => {
+                                const waUrl = formatParentWhatsAppUrl(
+                                  student.guardian_phone,
+                                  `${student.first_name} ${student.last_name}`,
+                                  currentClassObj?.name || 'Class',
+                                  currentUser?.name || currentUser?.full_name
+                                );
+
+                                return (
+                                  <tr key={student.id || student.admission_no} className="hover:bg-slate-900/50 transition-colors">
+                                    {/* Student Identity */}
+                                    <td className="p-4">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400/20 to-amber-600/20 border border-amber-400/30 flex items-center justify-center font-black text-amber-300 text-sm shrink-0">
+                                          {(student.first_name?.[0] || 'S')}{(student.last_name?.[0] || '')}
+                                        </div>
+                                        <div>
+                                          <div className="font-extrabold text-white text-sm">
+                                            {student.first_name} {student.last_name}
+                                          </div>
+                                          <div className="font-mono text-[10px] text-amber-400 flex items-center gap-1.5 mt-0.5">
+                                            <span>{student.admission_no}</span>
+                                            <span className="text-slate-600">•</span>
+                                            <span className="text-slate-400">{student.class_name || currentClassObj?.name}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Gender */}
+                                    <td className="p-4">
+                                      <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                                        (student.gender || '').toLowerCase() === 'male'
+                                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                          : 'bg-pink-500/10 text-pink-400 border-pink-500/20'
+                                      }`}>
+                                        {student.gender || 'Pupil'}
+                                      </span>
+                                    </td>
+
+                                    {/* Guardian Contact */}
+                                    <td className="p-4">
+                                      <div>
+                                        <div className="font-bold text-white text-xs">
+                                          {student.guardian_name || 'Guardian'}
+                                        </div>
+                                        <div className="font-mono text-slate-400 text-[11px] mt-0.5 flex items-center gap-1">
+                                          <span>📞 {student.guardian_phone || 'No phone on file'}</span>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Contact Parent Direct */}
+                                    <td className="p-4">
+                                      <div className="flex items-center gap-1.5">
+                                        {waUrl ? (
+                                          <a
+                                            href={waUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-bold text-[11px] flex items-center gap-1 transition-all hover:scale-105"
+                                            title="Chat with Parent on WhatsApp"
+                                          >
+                                            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                            <span>WhatsApp</span>
+                                          </a>
+                                        ) : (
+                                          <span className="text-slate-600 text-[10px]">No WhatsApp</span>
+                                        )}
+
+                                        {student.guardian_phone ? (
+                                          <a
+                                            href={`tel:${student.guardian_phone}`}
+                                            className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-all hover:scale-105"
+                                            title={`Call ${student.guardian_phone}`}
+                                          >
+                                            <PhoneCall className="w-3.5 h-3.5 text-amber-400" />
+                                          </a>
+                                        ) : null}
+                                      </div>
+                                    </td>
+
+                                    {/* Academic Management Actions */}
+                                    <td className="p-4">
+                                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                                        {/* Record CA Scores */}
+                                        <button
+                                          onClick={() => handleOpenQuickCaModal(student)}
+                                          className="px-2.5 py-1.5 rounded-xl bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 font-bold text-[11px] flex items-center gap-1 transition-all hover:scale-102"
+                                          title="Quick Record Continuous Assessment (CA) & Exam score"
+                                        >
+                                          <Award className="w-3 h-3 text-amber-400" />
+                                          <span>Record CA</span>
+                                        </button>
+
+                                        {/* Write Comment */}
+                                        <button
+                                          onClick={() => handleOpenCommentModal(student)}
+                                          className="px-2.5 py-1.5 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold text-[11px] flex items-center gap-1 transition-all hover:scale-102"
+                                          title="Write Form Teacher's Official Comment & Evaluate Traits"
+                                        >
+                                          <FileText className="w-3 h-3 text-indigo-400" />
+                                          <span>Write Comment</span>
+                                        </button>
+
+                                        {/* View Report Card */}
+                                        <button
+                                          onClick={() => {
+                                            setSelectedStudentAdmNo(student.admission_no);
+                                            fetchReportCard(student.admission_no);
+                                            setActiveTab('reportcard');
+                                          }}
+                                          className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-[11px] flex items-center gap-1 transition-all hover:scale-102"
+                                          title="Open official terminal report card"
+                                        >
+                                          <Printer className="w-3 h-3 text-slate-400" />
+                                          <span>Report Card</span>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={5} className="p-8 text-center text-slate-500">
+                                  No pupils found matching "{myStudentsSearchQuery}" in {currentClassObj?.name || 'this class'}.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* ATTENDANCE REGISTER (TEACHER, SUPERADMIN & PRINCIPAL) */}
               {(activeRole === 'teacher' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'attendance' && (
                 <div className="space-y-5 animate-in fade-in">
@@ -5834,7 +6367,7 @@ export default function PortalDashboard({
                         }}
                         className="bg-slate-950 border border-slate-800 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
                       >
-                        {classes.map(c => (
+                        {(activeRole === 'teacher' ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes) : classes).map(c => (
                           <option key={c.id} value={c.id}>{c.name} ({c.student_count || 0} pupils)</option>
                         ))}
                       </select>
@@ -6614,8 +7147,8 @@ export default function PortalDashboard({
                         onChange={(e) => setSelectedHwClassId(e.target.value)}
                         className="bg-slate-950 border border-slate-800 text-slate-200 font-bold px-3 py-1.5 rounded-xl text-xs"
                       >
-                        <option value="">All Classes ({homeworkList.length})</option>
-                        {classes.map(c => (
+                        <option value="">All Allowed Classes ({homeworkList.length})</option>
+                        {(activeRole === 'teacher' ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes) : classes).map(c => (
                           <option key={c.id} value={c.name}>{c.name}</option>
                         ))}
                       </select>
@@ -7616,7 +8149,10 @@ export default function PortalDashboard({
                             }}
                             className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
                           >
-                            {students
+                            {(activeRole === 'teacher'
+                              ? students.filter(s => allowedGradebookClasses.some(c => String(c.id) === String(s.class_id)))
+                              : students
+                            )
                               .filter(s => {
                                 if (!studentSearchQuery) return true;
                                 const q = studentSearchQuery.toLowerCase();
@@ -7735,12 +8271,35 @@ export default function PortalDashboard({
                         </table>
                       </div>
 
-                      {/* Principal Remark */}
-                      <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
-                        <span className="text-[10px] font-bold text-amber-400 uppercase">Head Administrator's Official Endorsement</span>
-                        <p className="text-xs text-slate-200 italic">
-                          "{studentReportCard.evaluations?.principal_remark || 'An outstanding and disciplined scholar.'}"
-                        </p>
+                      {/* Official Form Teacher Remark & Principal Endorsement */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1 relative">
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-amber-400 uppercase">Class Form Teacher's Official Remark</span>
+                            {(activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin') && (
+                              <button
+                                onClick={() => {
+                                  const sObj = students.find(s => s.admission_no === selectedStudentAdmNo) || { id: studentReportCard.student?.id, admission_no: selectedStudentAdmNo, first_name: studentReportCard.student?.full_name || 'Pupil' };
+                                  handleOpenCommentModal(sObj);
+                                }}
+                                className="px-2 py-0.5 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 font-bold text-[10px] border border-amber-400/30 flex items-center gap-1"
+                              >
+                                <FileText className="w-3 h-3 text-amber-400" />
+                                <span>Edit Comment</span>
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-200 italic">
+                            "{studentReportCard.evaluations?.teacher_remark || studentReportCard.comments?.form_teacher || 'Very dedicated and attentive scholar. Keeps up high academic standard.'}"
+                          </p>
+                        </div>
+
+                        <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1">
+                          <span className="text-[10px] font-bold text-amber-400 uppercase">Head Administrator's Official Endorsement</span>
+                          <p className="text-xs text-slate-200 italic">
+                            "{studentReportCard.evaluations?.principal_remark || studentReportCard.comments?.principal || 'An outstanding and disciplined scholar.'}"
+                          </p>
+                        </div>
                       </div>
                     </div>
                   ) : (
@@ -8393,6 +8952,234 @@ export default function PortalDashboard({
                     className="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black shadow"
                   >
                     Confirm & Issue Official Receipt
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Teacher's Official Report Card Comment & Affective Traits */}
+        {isCommentModalOpen && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+                    ✍️
+                  </span>
+                  <div>
+                    <h4 className="text-base font-extrabold text-white">Teacher's Official Terminal Remarks</h4>
+                    <p className="text-[11px] text-slate-400">
+                      {commentTargetStudent?.first_name} {commentTargetStudent?.last_name} ({commentTargetStudent?.admission_no})
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setIsCommentModalOpen(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {commentSuccessMsg && (
+                <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>{commentSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveTeacherComment} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">Official Form Teacher's Remark *</label>
+                  <textarea
+                    rows={3}
+                    required
+                    value={teacherCommentText}
+                    onChange={(e) => setTeacherCommentText(e.target.value)}
+                    placeholder="Enter official teacher remark for this student's report sheet..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-medium focus:outline-none focus:border-amber-400"
+                  />
+                  {/* Quick Smart Remark Suggestions */}
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <span className="text-[10px] text-slate-500 font-bold mr-1">Quick Suggestions:</span>
+                    {[
+                      'An exemplary scholar with consistent academic dedication.',
+                      'Impressive progress this term; keep maintaining this standard.',
+                      'Active pupil with great enthusiasm, can achieve even higher scores.',
+                      'Well-behaved, punctual and attentive in class assignments.'
+                    ].map((sug, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setTeacherCommentText(sug)}
+                        className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition-colors"
+                      >
+                        "{sug.slice(0, 32)}..."
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Affective Domain Rating (1 to 5) */}
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">Affective Domain & Behavioral Rating (1 - 5 Stars)</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {['attentiveness', 'neatness', 'politeness', 'punctuality', 'honesty'].map(trait => (
+                      <div key={trait} className="p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between">
+                        <span className="capitalize font-bold text-slate-300 text-[11px]">{trait}:</span>
+                        <select
+                          value={commentTraits[trait] || 5}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value);
+                            setCommentTraits(prev => ({ ...prev, [trait]: val }));
+                          }}
+                          className="bg-slate-900 border border-slate-700 text-amber-400 font-bold px-2 py-1 rounded-lg text-xs"
+                        >
+                          <option value="5">5 ★ (Excellent)</option>
+                          <option value="4">4 ★ (Very Good)</option>
+                          <option value="3">3 ★ (Good)</option>
+                          <option value="2">2 ★ (Fair)</option>
+                          <option value="1">1 ★ (Poor)</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsCommentModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingComment}
+                    className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow"
+                  >
+                    {isSavingComment ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    <span>Save Official Remark</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Quick Continuous Assessment (CA) Score Entry */}
+        {isQuickCaModalOpen && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center font-bold">
+                    📝
+                  </span>
+                  <div>
+                    <h4 className="text-base font-extrabold text-white">Record CA & Exam Scores</h4>
+                    <p className="text-[11px] text-slate-400">
+                      {quickCaStudent?.first_name} {quickCaStudent?.last_name} ({quickCaStudent?.admission_no})
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => setIsQuickCaModalOpen(false)} className="text-slate-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {quickCaSuccessMsg && (
+                <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>{quickCaSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveQuickCa} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-bold mb-1">Subject *</label>
+                  <select
+                    value={quickCaSubjectId}
+                    onChange={(e) => setQuickCaSubjectId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
+                  >
+                    {(allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects).map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">CA 1 (Max 10)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={quickCa1}
+                      onChange={(e) => setQuickCa1(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">CA 2 (Max 10)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={quickCa2}
+                      onChange={(e) => setQuickCa2(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Project (Max 10)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="10"
+                      value={quickProject}
+                      onChange={(e) => setQuickProject(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Exam Score (Max 70)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="70"
+                      value={quickExam}
+                      onChange={(e) => setQuickExam(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center text-sm"
+                    />
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-center items-center">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Total Score</span>
+                    <span className="text-xl font-black text-amber-400">
+                      {Number(quickCa1 || 0) + Number(quickCa2 || 0) + Number(quickProject || 0) + Number(quickExam || 0)} / 100
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsQuickCaModalOpen(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingQuickCa}
+                    className="px-5 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow"
+                  >
+                    {isSavingQuickCa ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    <span>Save CA Scores</span>
                   </button>
                 </div>
               </form>
@@ -10011,7 +10798,19 @@ export default function PortalDashboard({
               </div>
 
               <form onSubmit={handleCreateHomework} className="space-y-3 text-xs">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-slate-300 font-bold mb-1">Assignment Type *</label>
+                    <select
+                      value={newHwForm.assignment_type || 'Homework'}
+                      onChange={(e) => setNewHwForm(prev => ({ ...prev, assignment_type: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-amber-400 font-bold focus:outline-none focus:border-amber-400"
+                    >
+                      <option value="Homework">🏠 Homework</option>
+                      <option value="Classwork">✏️ Classwork</option>
+                      <option value="Project">🔬 Project / Task</option>
+                    </select>
+                  </div>
                   <div>
                     <label className="block text-slate-300 font-bold mb-1">Target Class *</label>
                     <select
@@ -10019,7 +10818,7 @@ export default function PortalDashboard({
                       onChange={(e) => setNewHwForm(prev => ({ ...prev, class_id: e.target.value }))}
                       className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
                     >
-                      {classes.map(c => (
+                      {(activeRole === 'teacher' ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes) : classes).map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
@@ -10031,7 +10830,7 @@ export default function PortalDashboard({
                       onChange={(e) => setNewHwForm(prev => ({ ...prev, subject_id: e.target.value }))}
                       className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
                     >
-                      {subjects.map(s => (
+                      {(activeRole === 'teacher' && allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects).map(s => (
                         <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                       ))}
                     </select>

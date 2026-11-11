@@ -2,7 +2,7 @@ const management = ['executive_cockpit', 'overview', 'students', 'student_profil
 export const ROLE_TABS = Object.freeze({
   superadmin: [...management, 'users', 'system_settings', 'threat_radar', 'security', 'audit', 'ai_analytics'],
   admin: management,
-  teacher: ['teacher_cockpit', 'attendance', 'gradebook', 'broadsheet', 'homework', 'lesson_notes', 'reportcard', 'ai_progress'],
+  teacher: ['teacher_cockpit', 'my_students', 'attendance', 'gradebook', 'broadsheet', 'homework', 'lesson_notes', 'reportcard', 'ai_progress'],
   bursar: ['invoices', 'payroll', 'reportcard'],
   student: ['reportcard', 'homework', 'student_profile', 'ai_progress'],
   parent: ['child_overview', 'reportcard', 'homework', 'student_profile', 'invoices', 'ai_progress'],

@@ -1734,6 +1734,60 @@ export async function onRequest(context) {
     });
   }
 
+  if (path === '/api/exams/report-extras' && method === 'POST') {
+    const {
+      student_id,
+      session = '2026/2027',
+      term = 'First Term',
+      attendance,
+      traits,
+      psychomotor,
+      teacher_comment,
+      principal_comment,
+      next_term_resumption,
+      promotion_status,
+      template
+    } = body;
+
+    if (!student_id) {
+      return jsonResponse({ success: false, message: 'student_id is required' }, 400);
+    }
+
+    if (!dbData.report_extras) dbData.report_extras = [];
+    const existingIdx = dbData.report_extras.findIndex(re => 
+      String(re.student_id) === String(student_id) && 
+      re.session === session && 
+      re.term === term
+    );
+
+    const record = {
+      id: existingIdx >= 0 ? dbData.report_extras[existingIdx].id : dbData.report_extras.length + 1,
+      student_id,
+      session,
+      term,
+      attendance: attendance !== undefined ? attendance : (existingIdx >= 0 ? dbData.report_extras[existingIdx].attendance : null),
+      traits: traits !== undefined ? traits : (existingIdx >= 0 ? dbData.report_extras[existingIdx].traits : null),
+      psychomotor: psychomotor !== undefined ? psychomotor : (existingIdx >= 0 ? dbData.report_extras[existingIdx].psychomotor : null),
+      teacher_comment: teacher_comment !== undefined ? teacher_comment : (existingIdx >= 0 ? dbData.report_extras[existingIdx].teacher_comment : null),
+      principal_comment: principal_comment !== undefined ? principal_comment : (existingIdx >= 0 ? dbData.report_extras[existingIdx].principal_comment : null),
+      next_term_resumption: next_term_resumption || (existingIdx >= 0 ? dbData.report_extras[existingIdx].next_term_resumption : null),
+      promotion_status: promotion_status || (existingIdx >= 0 ? dbData.report_extras[existingIdx].promotion_status : null),
+      template: template || (existingIdx >= 0 ? dbData.report_extras[existingIdx].template : null),
+      updated_at: new Date().toISOString()
+    };
+
+    if (existingIdx >= 0) {
+      dbData.report_extras[existingIdx] = record;
+    } else {
+      dbData.report_extras.push(record);
+    }
+
+    return jsonResponse({
+      success: true,
+      message: 'Student report extras saved successfully.'
+    });
+  }
+
   if (path.startsWith('/api/exams/report-card/')) {
     const admNo = path.split('/')[4] || '';
     const cleanAdmNo = decodeURIComponent(admNo).trim().toUpperCase();
@@ -1763,6 +1817,10 @@ export async function onRequest(context) {
         class_average: 68
       };
     });
+
+    const extraRow = (dbData.report_extras || []).find(re => 
+      String(re.student_id) === String(student.id)
+    );
 
     const totalScore = grades.reduce((sum, g) => sum + (g.total_score || 0), 0);
     const avgScore = grades.length > 0 ? Math.round(totalScore / grades.length) : 0;
@@ -1795,8 +1853,13 @@ export async function onRequest(context) {
           days_absent: 2
         },
         comments: {
-          form_teacher: 'Outstanding academic capability. Consistent commitment to excellence.',
-          principal: 'Excellent performance. Keep soaring high like an eagle.'
+          form_teacher: extraRow?.teacher_comment || 'Outstanding academic capability. Consistent commitment to excellence.',
+          principal: extraRow?.principal_comment || 'Excellent performance. Keep soaring high like an eagle.'
+        },
+        evaluations: {
+          principal_remark: extraRow?.principal_comment || 'Excellent performance. Keep soaring high like an eagle.',
+          teacher_remark: extraRow?.teacher_comment || 'Outstanding academic capability. Consistent commitment to excellence.',
+          affective_traits: extraRow?.traits || null
         }
       }
     });

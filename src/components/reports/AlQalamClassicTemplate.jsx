@@ -9,6 +9,14 @@ export const AlQalamClassicTemplate = ({ data }) => {
   const totalObtainable = subjectKeys.length * 100;
   const percentage = totalObtainable > 0 ? Number(((totalScoreObtained / totalObtainable) * 100).toFixed(1)) : 0;
 
+  const isPrimary = (student.className || '').toLowerCase().includes('pri') || 
+                    (student.className || '').toLowerCase().includes('basic') || 
+                    (student.division || '').toLowerCase().includes('primary') ||
+                    (student.division || '').toLowerCase().includes('basic');
+  const ca1Max = isPrimary ? 20 : 15;
+  const ca2Max = isPrimary ? 20 : 15;
+  const examMax = isPrimary ? 60 : 70;
+
   const attendanceObj = extras?.attendance || { opened: 120, present: 116, absent: 4 };
 
   const moralTraits = [
@@ -96,9 +104,9 @@ export const AlQalamClassicTemplate = ({ data }) => {
           <thead>
             <tr>
               <th className="w-36">Subject Curriculum</th>
-              <th className="text-center w-10">CA 1 (15)</th>
-              <th className="text-center w-10">CA 2 (15)</th>
-              <th className="text-center w-10">Exam (70)</th>
+              <th className="text-center w-10">CA 1 ({ca1Max})</th>
+              <th className="text-center w-10">CA 2 ({ca2Max})</th>
+              <th className="text-center w-10">Exam ({examMax})</th>
               <th className="text-center w-12">Total (100)</th>
               <th className="text-center w-10">Grade</th>
               <th className="text-right w-20">Remark</th>

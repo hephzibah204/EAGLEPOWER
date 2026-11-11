@@ -149,7 +149,7 @@ function computeEntryScores(scheme, entry) {
     ca1 = clampScore(entry.ca1_score || 0, scheme.ca1Max);
     ca2 = clampScore(entry.ca2_score || 0, scheme.ca2Max);
     project = scheme.primary ? null : clampScore(entry.project_score || 0, scheme.projectMax);
-    ca = ca1 + ca2 + (project || 0);
+    ca = Math.min(ca1 + ca2 + (project || 0), scheme.caMax);
   } else {
     ca = clampScore(entry.ca_score || 0, scheme.caMax);
   }
@@ -169,12 +169,67 @@ function computeEntryScores(scheme, entry) {
 
 async function loadMergedMarks(env, dbData) {
   const storeMap = await loadStoreMap(env, 'marks_store');
-  const stored = [];
-  for (const row of storeMap.values()) {
-    if (!row.deleted && row.data) stored.push(row.data);
-  }
   // Stored (teacher-saved) marks come first so they win over baseline rows.
-  return [...stored, ...(dbData.marks || [])];
+  // Dedupe on student|subject|session|term: a mark saved through THIS isolate
+  // exists both in the store and in dbData.marks and must only count once.
+  const seen = new Set();
+  const merged = [];
+  const push = (m) => {
+    const key = `${m.student_id}|${m.subject_id}|${m.session || ''}|${m.term || ''}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(m);
+  };
+  for (const row of storeMap.values()) {
+    if (!row.deleted && row.data) push(row.data);
+  }
+  for (const m of (dbData.marks || [])) push(m);
+  return merged;
+}
+
+function gradeForTotal(total) {
+  if (total >= 75) return { grade: 'A1', remark: 'Distinction / Excellent' };
+  if (total >= 70) return { grade: 'B2', remark: 'Very Good' };
+  if (total >= 65) return { grade: 'B3', remark: 'Good' };
+  if (total >= 60) return { grade: 'C4', remark: 'Credit' };
+  if (total >= 55) return { grade: 'C5', remark: 'Credit' };
+  if (total >= 50) return { grade: 'C6', remark: 'Credit' };
+  if (total >= 45) return { grade: 'D7', remark: 'Pass' };
+  if (total >= 40) return { grade: 'E8', remark: 'Weak Pass' };
+  return { grade: 'F9', remark: 'Fail' };
+}
+
+function toOrdinal(n) {
+  const sfx = ['th', 'st', 'nd', 'rd'];
+  const v = n % 100;
+  return n + (sfx[(v - 20) % 10] || sfx[v] || sfx[0]);
+}
+
+// Every stored attendance register entry for one class: [{date, student_id, status}].
+// D1 is authoritative when it has rows; the in-memory map is the no-binding fallback.
+async function loadClassAttendance(env, classId) {
+  const out = [];
+  let fromDb = false;
+  if (env && env.DB) {
+    try {
+      const res = await env.DB.prepare('SELECT attendance_date, student_id, status FROM attendance_records WHERE class_id = ?1').bind(String(classId)).all();
+      for (const row of (res.results || [])) {
+        fromDb = true;
+        out.push({ date: row.attendance_date, student_id: row.student_id, status: row.status });
+      }
+    } catch {}
+  }
+  if (!fromDb) {
+    for (const [key, val] of attendanceStore.entries()) {
+      if (String(key).startsWith(`${classId}|`)) {
+        const date = String(key).split('|')[1];
+        for (const [sid, rec] of Object.entries(val || {})) {
+          out.push({ date, student_id: sid, status: rec.status });
+        }
+      }
+    }
+  }
+  return out;
 }
 
 const whatsappBroadcastStore = [
@@ -1861,34 +1916,85 @@ async function handleRequest(context, dbData) {
   }
 
   if (path === '/api/exams/class-broadsheet') {
-    const classId = url.searchParams.get('class_id') || '1';
-    const cls = (dbData.classes || []).find(c => String(c.id) === String(classId)) || { name: 'JSS 1 Gold' };
-    const classStudents = (dbData.students || []).filter(s => String(s.class_id) === String(classId));
-    const targetStudents = classStudents.length > 0 ? classStudents : (dbData.students || []).slice(0, 10);
+    const classId = url.searchParams.get('class_id');
+    const session = url.searchParams.get('session') || '2026/2027';
+    const term = url.searchParams.get('term') || 'First Term';
+    const cls = classId ? (dbData.classes || []).find(c => String(c.id) === String(classId)) : null;
+    if (!cls) {
+      return jsonResponse({ success: false, message: 'Class not found.' }, 404);
+    }
+    const classStudents = (dbData.students || []).filter(s2 => String(s2.class_id) === String(cls.id));
+    const studentIds = new Set(classStudents.map(s2 => String(s2.id)));
+    const allMarks = await loadMergedMarks(env, dbData);
+    const marks = allMarks.filter(m =>
+      studentIds.has(String(m.student_id)) &&
+      String(m.session || '2026/2027') === String(session) &&
+      String(m.term || 'First Term') === String(term)
+    );
+    const subjectName = (id) => (dbData.subjects || []).find(su => String(su.id) === String(id))?.name || null;
+    const subjects = [...new Set(marks.map(m => subjectName(m.subject_id)).filter(Boolean))].sort();
 
-    const rows = targetStudents.map((st, idx) => ({
-      student_id: st.id,
-      admission_no: st.admission_no,
-      student_name: `${st.first_name} ${st.last_name}`,
-      gender: st.gender || 'Male',
-      total_score: 820 - (idx * 25),
-      average: Math.max(50, 82 - (idx * 2.5)),
-      position: `${idx + 1}${idx === 0 ? 'st' : idx === 1 ? 'nd' : idx === 2 ? 'rd' : 'th'}`,
-      subject_scores: {
-        "Mathematics": { ca1: 14, ca2: 13, exam: 58, total: 85, grade: 'A1' },
-        "English Language": { ca1: 13, ca2: 13, exam: 56, total: 82, grade: 'A1' },
-        "Basic Science & Technology": { ca1: 12, ca2: 14, exam: 54, total: 80, grade: 'A1' }
-      }
-    }));
+    const rows = classStudents.map(st => {
+      const mine = marks.filter(m => String(m.student_id) === String(st.id));
+      const subject_totals = {};
+      mine.forEach(m => { const n = subjectName(m.subject_id); if (n) subject_totals[n] = m.total_score; });
+      const total = mine.reduce((a, m) => a + (m.total_score || 0), 0);
+      const average = mine.length ? Math.round((total / mine.length) * 100) / 100 : 0;
+      return {
+        student_id: st.id,
+        name: `${st.first_name} ${st.last_name}`,
+        admission_no: st.admission_no || st.student_id,
+        gender: st.gender || '',
+        subject_totals,
+        subjects_taken: mine.length,
+        total_score: total,
+        average,
+        grade: mine.length ? gradeForTotal(average).grade : '-',
+        rank: null,
+        position: '\u2014'
+      };
+    });
+    const graded = rows.filter(r => r.subjects_taken > 0).sort((a, b) => b.average - a.average);
+    graded.forEach((r, idx) => {
+      const rank = (idx > 0 && graded[idx - 1].average === r.average) ? graded[idx - 1].rank : idx + 1;
+      r.rank = rank;
+      r.position = toOrdinal(rank);
+    });
+    rows.sort((a, b) => ((a.rank === null ? 9999 : a.rank) - (b.rank === null ? 9999 : b.rank)) || a.name.localeCompare(b.name));
 
+    const subject_averages = {};
+    subjects.forEach(name => {
+      const vals = marks.filter(m => subjectName(m.subject_id) === name).map(m => m.total_score || 0);
+      subject_averages[name] = {
+        average: vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100 : 0,
+        count: vals.length,
+        highest: vals.length ? Math.max(...vals) : 0,
+        lowest: vals.length ? Math.min(...vals) : 0
+      };
+    });
+    const grade_distribution = {};
+    graded.forEach(r => { grade_distribution[r.grade] = (grade_distribution[r.grade] || 0) + 1; });
+    const top = graded[0] || null;
     return jsonResponse({
       success: true,
-      class_id: classId,
+      class_id: cls.id,
       class_name: cls.name,
-      session: '2026/2027',
-      term: 'Second Term',
-      student_count: rows.length,
-      broadsheet: rows
+      class_info: { id: cls.id, name: cls.name, division: cls.division },
+      session,
+      term,
+      subjects,
+      students: rows,
+      statistics: {
+        total_enrolled: classStudents.length,
+        graded_count: graded.length,
+        class_average: graded.length ? Math.round((graded.reduce((a, r) => a + r.average, 0) / graded.length) * 100) / 100 : 0,
+        top_student_name: top ? top.name : null,
+        highest_average: top ? top.average : 0,
+        distinction_count: graded.filter(r => r.average >= 75).length,
+        at_risk_count: graded.filter(r => r.average < 50).length,
+        subject_averages,
+        grade_distribution
+      }
     });
   }
 
@@ -2139,16 +2245,21 @@ async function handleRequest(context, dbData) {
   if (path.startsWith('/api/exams/report-card/')) {
     const admNo = path.split('/')[4] || '';
     const cleanAdmNo = decodeURIComponent(admNo).trim().toUpperCase();
-    const student = (dbData.students || []).find(s => (s.admission_no || '').toUpperCase() === cleanAdmNo) || dbData.students?.[0];
+    const student = (dbData.students || []).find(s => (s.admission_no || '').toUpperCase() === cleanAdmNo)
+      || (dbData.students || []).find(s => String(s.id) === cleanAdmNo);
 
     if (!student) {
       return jsonResponse({ success: false, message: 'Student report card not found.' }, 404);
     }
 
+    const rcSession = url.searchParams.get('session') || '2026/2027';
+    const rcTerm = url.searchParams.get('term') || 'Second Term';
     const allMarks = await loadMergedMarks(env, dbData);
     const seenMarkKeys = new Set();
     const studentMarks = allMarks.filter(m => {
       if (String(m.student_id) !== String(student.id)) return false;
+      if (String(m.session || '2026/2027') !== rcSession) return false;
+      if (String(m.term || 'Second Term') !== rcTerm) return false;
       const markKey = `${m.subject_id}|${m.session || ''}|${m.term || ''}`;
       if (seenMarkKeys.has(markKey)) return false;
       seenMarkKeys.add(markKey);
@@ -2156,21 +2267,25 @@ async function handleRequest(context, dbData) {
     });
     const subjectsList = dbData.subjects || [];
 
-    const grades = (studentMarks.length > 0 ? studentMarks : subjectsList.slice(0, 9)).map((m, idx) => {
-      const sub = subjectsList.find(s => String(s.id) === String(m.subject_id)) || subjectsList[idx] || { name: 'Subject ' + (idx + 1), code: 'SUB' };
-      const ca = m.ca_score !== undefined ? m.ca_score : 24;
-      const exam = m.exam_score !== undefined ? m.exam_score : 58;
-      const total = m.total_score !== undefined ? m.total_score : ca + exam;
+    const classmateIds = new Set((dbData.students || []).filter(s2 => String(s2.class_id) === String(student.class_id)).map(s2 => String(s2.id)));
+    const grades = studentMarks.map((m) => {
+      const sub = subjectsList.find(s2 => String(s2.id) === String(m.subject_id)) || { id: m.subject_id, name: 'Subject ' + m.subject_id, code: 'SUB' };
+      const ca = m.ca_score !== undefined && m.ca_score !== null ? m.ca_score : 0;
+      const exam = m.exam_score !== undefined && m.exam_score !== null ? m.exam_score : 0;
+      const total = m.total_score !== undefined && m.total_score !== null ? m.total_score : ca + exam;
+      const peers = allMarks.filter(x => String(x.subject_id) === String(m.subject_id) && String(x.session || '2026/2027') === rcSession && String(x.term || 'Second Term') === rcTerm && classmateIds.has(String(x.student_id)));
       return {
         subject_id: sub.id,
         subject_name: sub.name,
         subject_code: sub.code,
         ca_score: ca,
+        ca1_score: m.ca1_score !== undefined ? m.ca1_score : null,
+        ca2_score: m.ca2_score !== undefined ? m.ca2_score : null,
         exam_score: exam,
         total_score: total,
-        grade: m.grade || 'A1',
-        remark: m.remark || 'Excellent',
-        class_average: 68
+        grade: m.grade || gradeForTotal(total).grade,
+        remark: m.remark || gradeForTotal(total).remark,
+        class_average: peers.length ? Math.round((peers.reduce((a, x) => a + (x.total_score || 0), 0) / peers.length) * 100) / 100 : total
       };
     });
 
@@ -2181,6 +2296,21 @@ async function handleRequest(context, dbData) {
     const totalScore = grades.reduce((sum, g) => sum + (g.total_score || 0), 0);
     const avgScore = grades.length > 0 ? Math.round(totalScore / grades.length) : 0;
 
+    // Real class position: rank this student's average among classmates with marks
+    const classmateAverages = [...classmateIds].map(cid => {
+      const cm = allMarks.filter(x => String(x.student_id) === cid && String(x.session || '2026/2027') === rcSession && String(x.term || 'Second Term') === rcTerm);
+      return cm.length ? cm.reduce((a, x) => a + (x.total_score || 0), 0) / cm.length : null;
+    }).filter(v => v !== null).sort((a, b) => b - a);
+    const myAverage = grades.length ? totalScore / grades.length : null;
+    const positionInClass = myAverage !== null ? toOrdinal(classmateAverages.filter(a => a > myAverage).length + 1) : null;
+    // Real attendance from the stored registers for this student's class
+    const attRecords = await loadClassAttendance(env, student.class_id);
+    const schoolDaysOpened = new Set(attRecords.map(r => r.date)).size;
+    const myAtt = attRecords.filter(r => String(r.student_id) === String(student.id));
+    const daysPresent = myAtt.filter(r => String(r.status).toLowerCase() === 'present').length;
+    const daysAbsent = myAtt.filter(r => String(r.status).toLowerCase() === 'absent').length;
+    const rcClass = (dbData.classes || []).find(c => String(c.id) === String(student.class_id));
+
     return jsonResponse({
       success: true,
       report_card: {
@@ -2189,32 +2319,32 @@ async function handleRequest(context, dbData) {
           admission_no: student.admission_no,
           first_name: student.first_name,
           last_name: student.last_name,
-          class_name: student.class_name || 'JSS 2',
-          division: student.division || 'Junior College',
+          class_name: rcClass?.name || student.class_name || '',
+          division: rcClass?.division || student.division || '',
           photo_url: student.photo_url || null
         },
-        session: '2026/2027',
-        term: 'Second Term',
+        session: rcSession,
+        term: rcTerm,
         academic_records: grades,
         summary: {
           total_score: totalScore,
           average_score: avgScore,
-          position_in_class: '1st',
-          total_students_in_class: 15,
-          decision: 'PROMOTED / PASS'
+          position_in_class: positionInClass,
+          total_students_in_class: classmateIds.size,
+          decision: grades.length === 0 ? 'NO RESULT' : (avgScore >= 50 ? 'PROMOTED / PASS' : avgScore >= 40 ? 'PASS ON TRIAL' : 'REPEAT ADVISED')
         },
         attendance: {
-          days_school_opened: 65,
-          days_present: 63,
-          days_absent: 2
+          days_school_opened: schoolDaysOpened,
+          days_present: daysPresent,
+          days_absent: daysAbsent
         },
         comments: {
-          form_teacher: extraRow?.teacher_comment || 'Outstanding academic capability. Consistent commitment to excellence.',
-          principal: extraRow?.principal_comment || 'Excellent performance. Keep soaring high like an eagle.'
+          form_teacher: extraRow?.teacher_comment || '',
+          principal: extraRow?.principal_comment || ''
         },
         evaluations: {
-          principal_remark: extraRow?.principal_comment || 'Excellent performance. Keep soaring high like an eagle.',
-          teacher_remark: extraRow?.teacher_comment || 'Outstanding academic capability. Consistent commitment to excellence.',
+          principal_remark: extraRow?.principal_comment || '',
+          teacher_remark: extraRow?.teacher_comment || '',
           affective_traits: extraRow?.traits || null
         }
       }
@@ -2278,60 +2408,75 @@ async function handleRequest(context, dbData) {
   }
 
   if (path === '/api/exams/annual-broadsheet') {
-    const classId = url.searchParams.get('class_id') || '1';
-    const cls = (dbData.classes || []).find(c => String(c.id) === String(classId)) || { name: 'JSS 1 Gold', division: 'Junior College' };
-    const classStudents = (dbData.students || []).filter(s => String(s.class_id) === String(classId));
-    const targetStudents = classStudents.length > 0 ? classStudents : (dbData.students || []).slice(0, 10);
+    const classId = url.searchParams.get('class_id');
+    const session = url.searchParams.get('session') || '2026/2027';
+    const cls = classId ? (dbData.classes || []).find(c => String(c.id) === String(classId)) : null;
+    if (!cls) {
+      return jsonResponse({ success: false, message: 'Class not found.' }, 404);
+    }
+    const classStudents = (dbData.students || []).filter(s2 => String(s2.class_id) === String(cls.id));
+    const studentIds = new Set(classStudents.map(s2 => String(s2.id)));
+    const TERMS = ['First Term', 'Second Term', 'Third Term'];
+    const allMarks = await loadMergedMarks(env, dbData);
+    const marks = allMarks.filter(m => studentIds.has(String(m.student_id)) && String(m.session || '2026/2027') === String(session));
 
-    const rows = targetStudents.map((st, idx) => {
-      const annualAvg = Math.max(45, 84 - (idx * 2.8));
-      const sfx = ['th', 'st', 'nd', 'rd'];
-      const v = (idx + 1) % 100;
-      const pos = (idx + 1) + (sfx[(v - 20) % 10] || sfx[v] || sfx[0]);
+    const rows = classStudents.map(st => {
+      const mine = marks.filter(m => String(m.student_id) === String(st.id));
+      const term_averages = {};
+      TERMS.forEach(t => {
+        const tm = mine.filter(m => String(m.term || '') === t);
+        if (tm.length) term_averages[t] = Math.round((tm.reduce((a, m) => a + (m.total_score || 0), 0) / tm.length) * 100) / 100;
+      });
+      const termAvgs = Object.values(term_averages);
+      const cumulative_average = termAvgs.length ? Math.round((termAvgs.reduce((a, b) => a + b, 0) / termAvgs.length) * 100) / 100 : 0;
+      const cumulative_total = mine.reduce((a, m) => a + (m.total_score || 0), 0);
+      let promotion;
+      if (!termAvgs.length) promotion = { decision: 'NO RESULT', status: 'NO RESULT', badge_color: 'rose' };
+      else if (cumulative_average >= 50) promotion = { decision: 'PROMOTED TO NEXT CLASS', status: 'PROMOTED', badge_color: 'emerald' };
+      else if (cumulative_average >= 40) promotion = { decision: 'PROMOTED ON TRIAL', status: 'ON TRIAL', badge_color: 'amber' };
+      else promotion = { decision: 'TO REPEAT CLASS', status: 'REPEAT', badge_color: 'rose' };
       return {
         student_id: st.id,
-        admission_no: st.admission_no,
         name: `${st.first_name} ${st.last_name}`,
-        gender: st.gender === 'Female' ? 'F' : 'M',
-        terms_breakdown: {
-          first_term_avg: parseFloat((annualAvg - 2).toFixed(1)),
-          second_term_avg: parseFloat((annualAvg + 1).toFixed(1)),
-          third_term_avg: parseFloat(annualAvg.toFixed(1)),
-          terms_attended_count: 3
-        },
-        subjects: {
-          "Mathematics": { term1: 80, term2: 85, term3: 82, annual_average: 82.3, annual_grade: 'A', annual_remark: 'Distinction' },
-          "English Language": { term1: 78, term2: 82, term3: 80, annual_average: 80.0, annual_grade: 'A', annual_remark: 'Distinction' },
-          "Basic Science": { term1: 75, term2: 79, term3: 77, annual_average: 77.0, annual_grade: 'A', annual_remark: 'Distinction' }
-        },
-        annual_average: parseFloat(annualAvg.toFixed(1)),
-        rank: idx + 1,
-        annual_position: pos,
-        promotion_status: annualAvg >= 50 ? 'PROMOTED' : annualAvg >= 40 ? 'PROMOTED_ON_TRIAL' : 'REPEAT',
-        promotion_decision: annualAvg >= 50 ? 'PROMOTED TO NEXT CLASS' : annualAvg >= 40 ? 'PROMOTED ON TRIAL' : 'REPEAT CLASS / REMEDIAL CLINIC',
-        promotion_color: annualAvg >= 50 ? 'emerald' : annualAvg >= 40 ? 'amber' : 'rose'
+        admission_no: st.admission_no || st.student_id,
+        gender: st.gender || '',
+        term_averages,
+        cumulative_total,
+        cumulative_average,
+        annual_average: cumulative_average,
+        division_grade: termAvgs.length ? gradeForTotal(cumulative_average).grade : '-',
+        promotion,
+        rank: null,
+        position: '\u2014'
       };
     });
-
+    const graded = rows.filter(r => Object.keys(r.term_averages).length > 0).sort((a, b) => b.cumulative_average - a.cumulative_average);
+    graded.forEach((r, idx) => {
+      const rank = (idx > 0 && graded[idx - 1].cumulative_average === r.cumulative_average) ? graded[idx - 1].rank : idx + 1;
+      r.rank = rank;
+      r.position = toOrdinal(rank);
+    });
+    rows.sort((a, b) => ((a.rank === null ? 9999 : a.rank) - (b.rank === null ? 9999 : b.rank)) || a.name.localeCompare(b.name));
     return jsonResponse({
       success: true,
-      session: url.searchParams.get('session') || '2026/2027',
-      class_info: cls,
-      subjects: ["Mathematics", "English Language", "Basic Science"],
+      class_id: cls.id,
+      class_name: cls.name,
+      class_info: { id: cls.id, name: cls.name, division: cls.division },
+      session,
+      students: rows,
       statistics: {
-        total_students: rows.length,
-        class_annual_average: 76.4,
-        highest_annual_average: rows[0]?.annual_average || 84,
-        lowest_annual_average: rows[rows.length - 1]?.annual_average || 55,
-        promotion_rate_percent: 100,
-        promoted_count: rows.filter(r => r.promotion_status === 'PROMOTED').length,
-        promoted_on_trial_count: rows.filter(r => r.promotion_status === 'PROMOTED_ON_TRIAL').length,
-        repeat_count: rows.filter(r => r.promotion_status === 'REPEAT').length
-      },
-      data: rows
+        total_enrolled: classStudents.length,
+        graded_count: graded.length,
+        class_annual_average: graded.length ? Math.round((graded.reduce((a, r) => a + r.cumulative_average, 0) / graded.length) * 100) / 100 : 0,
+        highest_annual_average: graded.length ? graded[0].cumulative_average : 0,
+        promotion_summary: {
+          promoted: rows.filter(r => r.promotion.status === 'PROMOTED').length,
+          trial: rows.filter(r => r.promotion.status === 'ON TRIAL').length,
+          repeated: rows.filter(r => r.promotion.status === 'REPEAT').length
+        }
+      }
     });
   }
-
   if (path === '/api/reports/executive-summary') {
     const fin = getComputedFinanceStats(dbData);
     const studentList = dbData.students || [];

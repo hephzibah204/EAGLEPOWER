@@ -27,6 +27,43 @@ const auditLogStore = [
 // Matches the in-memory pattern used by the audit and broadcast stores above.
 const attendanceStore = new Map();
 
+// Durable attendance storage: D1 (env.DB, table attendance_records) when the
+// binding exists, with the in-memory map as a same-isolate fallback.
+async function loadSavedAttendance(env, classId, date) {
+  if (env && env.DB) {
+    try {
+      const { results } = await env.DB.prepare(
+        'SELECT student_id, status, remarks FROM attendance_records WHERE class_id = ?1 AND attendance_date = ?2'
+      ).bind(String(classId), String(date)).all();
+      const saved = {};
+      for (const row of results || []) {
+        saved[row.student_id] = { status: row.status, remarks: row.remarks || '' };
+      }
+      return saved;
+    } catch (err) {
+      // fall through to the in-memory store
+    }
+  }
+  return attendanceStore.get(`${classId}|${date}`) || {};
+}
+
+async function persistAttendance(env, classId, date, saved) {
+  attendanceStore.set(`${classId}|${date}`, saved);
+  if (env && env.DB) {
+    try {
+      const now = new Date().toISOString();
+      const statements = Object.entries(saved).map(([studentId, rec]) =>
+        env.DB.prepare(
+          'INSERT INTO attendance_records (class_id, attendance_date, student_id, status, remarks, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(class_id, attendance_date, student_id) DO UPDATE SET status = excluded.status, remarks = excluded.remarks, updated_at = excluded.updated_at'
+        ).bind(String(classId), String(date), String(studentId), rec.status || 'Present', rec.remarks || '', now)
+      );
+      if (statements.length) await env.DB.batch(statements);
+    } catch (err) {
+      // the in-memory copy above still serves this isolate
+    }
+  }
+}
+
 const whatsappBroadcastStore = [
   {
     id: 1,
@@ -1096,7 +1133,7 @@ async function handleRequest(context, dbData) {
   if (path === '/api/attendance/students') {
     const classId = url.searchParams.get('class_id') || '2';
     const date = url.searchParams.get('date') || '';
-    const saved = attendanceStore.get(`${classId}|${date}`) || {};
+    const saved = await loadSavedAttendance(env, classId, date);
     const allStudents = dbData.students || [];
     const classStudents = allStudents.filter(s => String(s.class_id) === String(classId));
     const records = classStudents.map(s => ({
@@ -1132,7 +1169,7 @@ async function handleRequest(context, dbData) {
         saved[r.student_id] = { status: r.status || 'Present', remarks: r.remarks || '' };
       }
     }
-    attendanceStore.set(`${classId}|${date}`, saved);
+    await persistAttendance(env, classId, date, saved);
     return jsonResponse({
       success: true,
       count: Object.keys(saved).length,

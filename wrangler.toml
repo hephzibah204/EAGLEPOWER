@@ -7,3 +7,8 @@ binding = "HR_DB"
 database_name = "eaglepower-hr"
 database_id = "7365e9e1-f06c-440f-9e06-8380dabb9168"
 migrations_dir = "migrations/hr"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "eaglepower-data"
+database_id = "184ecb15-8b43-47a3-b7f7-cfa243fe4271"

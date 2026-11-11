@@ -1,3 +1,4 @@
+import { getApiBase, apiFetch as fetch } from '../../config/api';
 import React, { useState, useEffect } from 'react';
 import {
   Send,
@@ -21,7 +22,7 @@ import {
   Info
 } from 'lucide-react';
 
-export default function StaffCommunicationConsole({ apiBase = '', currentUser }) {
+export default function StaffCommunicationConsole({ apiBase = getApiBase(), currentUser }) {
   const [activeTab, setActiveTab] = useState('broadcast'); // 'broadcast' | 'rules' | 'history' | 'templates'
   const [overview, setOverview] = useState(null);
   const [rules, setRules] = useState([]);
@@ -42,30 +43,30 @@ export default function StaffCommunicationConsole({ apiBase = '', currentUser })
 
   const fetchOverview = async () => {
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = null;
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const res = await fetch(`${apiBase}/api/staff-communication/overview`, { credentials: 'include', headers });
+      const res = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/overview`, { credentials: 'include', headers });
       if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
         setOverview(data);
-        setRules(data.rules || []);
-        setCampaigns(data.recentCampaigns || []);
+        setRules(Array.isArray(data.rules) ? data.rules : []);
+        setCampaigns(Array.isArray(data.recentCampaigns) ? data.recentCampaigns : []);
       }
     } catch (_) {}
   };
 
   const fetchTemplates = async () => {
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = null;
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const res = await fetch(`${apiBase}/api/staff-communication/templates`, { credentials: 'include', headers });
+      const res = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/templates`, { credentials: 'include', headers });
       if (!res.ok) return;
       const data = await res.json();
       if (data.success) {
-        setTemplates(data.templates || []);
+        setTemplates(Array.isArray(data.templates) ? data.templates : []);
       }
     } catch (_) {}
   };
@@ -86,8 +87,8 @@ export default function StaffCommunicationConsole({ apiBase = '', currentUser })
     setStatusMessage(null);
 
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`${apiBase}/api/staff-communication/broadcast`, {
+      const token = null;
+      const res = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/broadcast`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -124,8 +125,8 @@ export default function StaffCommunicationConsole({ apiBase = '', currentUser })
 
   const handleToggleRule = async (ruleKey, currentEnabled) => {
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`${apiBase}/api/staff-communication/rules/${ruleKey}`, {
+      const token = null;
+      const res = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/rules/${ruleKey}`, {
         method: 'PUT',
         credentials: 'include',
         headers: {
@@ -145,8 +146,8 @@ export default function StaffCommunicationConsole({ apiBase = '', currentUser })
     setIsLoading(true);
     setStatusMessage(null);
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      const res = await fetch(`${apiBase}/api/staff-communication/rules/${ruleKey}/trigger`, {
+      const token = null;
+      const res = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/rules/${ruleKey}/trigger`, {
         method: 'POST',
         credentials: 'include',
         headers: {

@@ -102,12 +102,12 @@ export function expandClassRange(text) {
   }
 
   // Singles
-  if (/\bSSS?1\b/i.test(t)) classes.add('SS1');
-  if (/\bSSS?2\b/i.test(t)) classes.add('SS2');
-  if (/\bSSS?3\b/i.test(t)) classes.add('SS3');
-  if (/\bJSS?1\b/i.test(t)) classes.add('JSS1');
-  if (/\bJSS?2\b/i.test(t)) classes.add('JSS2');
-  if (/\bJSS?3\b/i.test(t)) classes.add('JSS3');
+  if (/\bSSS?\s*1\b/i.test(t)) classes.add('SS1');
+  if (/\bSSS?\s*2\b/i.test(t)) classes.add('SS2');
+  if (/\bSSS?\s*3\b/i.test(t)) classes.add('SS3');
+  if (/\bJSS?\s*1\b/i.test(t)) classes.add('JSS1');
+  if (/\bJSS?\s*2\b/i.test(t)) classes.add('JSS2');
+  if (/\bJSS?\s*3\b/i.test(t)) classes.add('JSS3');
 
   for (let i = 1; i <= 6; i++) {
     const reg = new RegExp('\\b(BASIC|PRIMARY|PRI)\\s*' + i + '\\b', 'i');
@@ -133,7 +133,7 @@ export function isFormTeacherOfClass(userOrStaff, classObj) {
   if (isUnrestrictedStaff(userOrStaff)) return true;
 
   const staff = userOrStaff.staff || userOrStaff;
-  const staffId = staff.id;
+  const staffId = userOrStaff.staff?.id || (!userOrStaff.reference_id ? staff.id : null);
 
   // Direct SQLite class_teacher_id match
   if (staffId && classObj.class_teacher_id && String(staffId) === String(classObj.class_teacher_id)) {
@@ -144,41 +144,12 @@ export function isFormTeacherOfClass(userOrStaff, classObj) {
 
   // Check form responsibility on staff record
   const resp = (staff.form_responsibility || '').toUpperCase();
-  if (resp) {
-    if (targetNorm === 'SS1' && (resp.includes('SSS1') || resp.includes('SS1'))) return true;
-    if (targetNorm === 'SS2' && (resp.includes('SSS2') || resp.includes('SS2'))) return true;
-    if (targetNorm === 'JSS2' && resp.includes('JSS2')) return true;
-    if (targetNorm === 'JSS3' && resp.includes('JSS3')) return true;
-    if (targetNorm.startsWith('PRIMARY')) {
-      const num = targetNorm.replace('PRIMARY', '');
-      if (resp.includes('BASIC ' + num) || resp.includes('PRIMARY ' + num)) return true;
-    }
-    if (targetNorm.startsWith('NURSERY')) {
-      const num = targetNorm.replace('NURSERY', '');
-      if (resp.includes('NURSERY ' + num)) return true;
-    }
-    if (targetNorm === 'PRENURSERY' && (resp.includes('PRE-NURSERY') || resp.includes('DAYCARE'))) return true;
-  }
+  if (expandClassRange(resp).has(targetNorm)) return true;
 
   // Check structured faculty roster record
   const faculty = getFacultyRecord(userOrStaff);
   if (faculty) {
-    if (faculty.formResponsibility) {
-      const fResp = faculty.formResponsibility.toUpperCase();
-      if (targetNorm === 'SS1' && (fResp.includes('SSS1') || fResp.includes('SS1'))) return true;
-      if (targetNorm === 'SS2' && (fResp.includes('SSS2') || fResp.includes('SS2'))) return true;
-      if (targetNorm === 'JSS2' && fResp.includes('JSS2')) return true;
-      if (targetNorm === 'JSS3' && fResp.includes('JSS3')) return true;
-      if (targetNorm.startsWith('PRIMARY')) {
-        const num = targetNorm.replace('PRIMARY', '');
-        if (fResp.includes('BASIC ' + num) || fResp.includes('PRIMARY ' + num)) return true;
-      }
-      if (targetNorm.startsWith('NURSERY')) {
-        const num = targetNorm.replace('NURSERY', '');
-        if (fResp.includes('NURSERY ' + num)) return true;
-      }
-      if (targetNorm === 'PRENURSERY' && (fResp.includes('PRE-NURSERY') || fResp.includes('DAYCARE'))) return true;
-    }
+    if (expandClassRange(faculty.formResponsibility || '').has(targetNorm)) return true;
 
     // Lead Early Years / Primary educators who teach all subjects in a class
     if (faculty.subjects && faculty.subjects.toLowerCase().includes('all') && faculty.classes) {

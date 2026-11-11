@@ -1,4 +1,5 @@
-import dbData from '../../src/data/portalDbData.json' with { type: 'json' };
+import baselineData from '../../src/data/portalDbData.json' with { type: 'json' };
+import { handleHr } from '../_lib/hr.js';
 
 // In-Memory Cloudflare Edge State
 let maintenanceMode = {
@@ -54,7 +55,7 @@ function jsonResponse(data, status = 200, extraHeaders = {}) {
   });
 }
 
-function getComputedFinanceStats() {
+function getComputedFinanceStats(dbData) {
   const invoices = dbData.invoices || [];
   return invoices.reduce((acc, inv) => {
     const due = Number(inv.amount_due || 0);
@@ -69,7 +70,7 @@ function getComputedFinanceStats() {
   }, { total_invoiced: 0, total_collected: 0, outstanding_debt: 0, total_outstanding: 0, total_invoices: 0, debtor_count: 0 });
 }
 
-function getComputedPayrollStats() {
+function getComputedPayrollStats(dbData) {
   const structures = dbData.staff_salary_structures || [];
   return structures.reduce((acc, sss) => {
     acc.total_monthly_payroll += Number(sss.net_salary || 0);
@@ -82,6 +83,10 @@ function getComputedPayrollStats() {
 }
 
 export async function onRequest(context) {
+  return handleHr(context, baselineData, handleRequest);
+}
+
+async function handleRequest(context, dbData) {
   const { request, params, env } = context;
 
   // 1. If an external API_ORIGIN is explicitly specified in environment, proxy to it
@@ -1307,7 +1312,7 @@ export async function onRequest(context) {
   }
 
   if (path === '/api/finance/stats') {
-    const fin = getComputedFinanceStats();
+    const fin = getComputedFinanceStats(dbData);
     return jsonResponse({
       success: true,
       data: {
@@ -1337,8 +1342,8 @@ export async function onRequest(context) {
 
   // 7. Executive Omni-Control Center Edge Handlers
   if (path === '/api/executive/all-modules-data') {
-    const fin = getComputedFinanceStats();
-    const pay = getComputedPayrollStats();
+    const fin = getComputedFinanceStats(dbData);
+    const pay = getComputedPayrollStats(dbData);
     return jsonResponse({
       success: true,
       timestamp: new Date().toISOString(),
@@ -2030,7 +2035,7 @@ export async function onRequest(context) {
   }
 
   if (path === '/api/reports/executive-summary') {
-    const fin = getComputedFinanceStats();
+    const fin = getComputedFinanceStats(dbData);
     const studentList = dbData.students || [];
     const maleCount = studentList.filter(s => s.gender === 'Male').length;
     const femaleCount = studentList.filter(s => s.gender === 'Female').length;
@@ -2073,7 +2078,7 @@ export async function onRequest(context) {
   }
 
   if (path === '/api/payroll/overview') {
-    const pay = getComputedPayrollStats();
+    const pay = getComputedPayrollStats(dbData);
     return jsonResponse({
       success: true,
       data: {

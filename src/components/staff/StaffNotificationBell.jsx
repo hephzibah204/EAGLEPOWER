@@ -1,3 +1,4 @@
+import { getApiBase, apiFetch as fetch } from '../../config/api';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Bell,
@@ -17,24 +18,32 @@ import {
 export default function StaffNotificationBell({
   currentUser,
   onNavigateTab,
-  apiBase = ''
+  apiBase = getApiBase()
 }) {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const dropdownRef = useRef(null);
+  const notificationsUnavailable = useRef(false);
+  const [loadError, setLoadError] = useState('');
 
   const fetchNotifications = async () => {
+    if (notificationsUnavailable.current) return;
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = null;
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const res = await fetch(`${apiBase}/api/staff-communication/notifications?limit=25`, { credentials: 'include', headers });
-      if (!res.ok) return;
+      const res = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/notifications?limit=25`, { credentials: 'include', headers });
+      if (!res.ok) {
+        if (res.status === 404) notificationsUnavailable.current = true;
+        setLoadError('Staff notifications are unavailable. The deployed backend needs the staff communication service.');
+        return;
+      }
+      setLoadError('');
       const data = await res.json();
       if (data.success) {
-        setNotifications(data.notifications || []);
+        setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
         setUnreadCount(data.unreadCount || 0);
       }
     } catch (_) {}
@@ -60,16 +69,17 @@ export default function StaffNotificationBell({
   const handleMarkAsRead = async (id, e) => {
     if (e) e.stopPropagation();
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = null;
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       };
-      await fetch(`${apiBase}/api/staff-communication/notifications/${id}/read`, {
+      const response = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/notifications/${id}/read`, {
         method: 'POST',
         credentials: 'include',
         headers
       });
+      if (!response.ok) return;
       setNotifications(prev =>
         prev.map(n => n.id === id ? { ...n, is_read: 1 } : n)
       );
@@ -80,16 +90,17 @@ export default function StaffNotificationBell({
   const handleMarkAllRead = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      const token = null;
       const headers = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
       };
-      await fetch(`${apiBase}/api/staff-communication/notifications/read-all`, {
+      const response = await fetch(`${apiBase.replace(/\/$/, '').replace(/\/api$/, '')}/api/staff-communication/notifications/read-all`, {
         method: 'POST',
         credentials: 'include',
         headers
       });
+      if (!response.ok) return;
       setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
       setUnreadCount(0);
     } catch (_) {} finally {
@@ -193,7 +204,7 @@ export default function StaffNotificationBell({
 
           {/* List */}
           <div className="max-h-[380px] overflow-y-auto divide-y divide-slate-800/60 text-xs">
-            {notifications.length === 0 ? (
+            {loadError ? <p role="status" className="p-4 text-sm text-amber-300">{loadError}</p> : notifications.length === 0 ? (
               <div className="p-8 text-center text-slate-500 space-y-2">
                 <Bell className="w-8 h-8 mx-auto text-slate-700 opacity-50" />
                 <p className="text-xs font-medium">No announcements or duty alerts yet.</p>

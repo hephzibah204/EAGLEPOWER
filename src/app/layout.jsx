@@ -249,8 +249,6 @@ export default function RootLayout({ children }) {
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdData) }}
         />
-        {/* Puter.js v2 - Free Unlimited OpenAI API Gateway (https://developer.puter.com/tutorials/free-unlimited-openai-api/) */}
-        <script src="https://js.puter.com/v2/" async></script>
       </head>
       <body className="bg-slate-50 text-slate-800 antialiased selection:bg-amber-400 selection:text-slate-900">
         {children}

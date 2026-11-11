@@ -66,12 +66,12 @@ export function expandClassRange(text) {
     ['NURSERY1', 'NURSERY2', 'NURSERY3'].forEach(c => classes.add(c));
   }
 
-  if (/\bSSS?1\b/i.test(t)) classes.add('SS1');
-  if (/\bSSS?2\b/i.test(t)) classes.add('SS2');
-  if (/\bSSS?3\b/i.test(t)) classes.add('SS3');
-  if (/\bJSS?1\b/i.test(t)) classes.add('JSS1');
-  if (/\bJSS?2\b/i.test(t)) classes.add('JSS2');
-  if (/\bJSS?3\b/i.test(t)) classes.add('JSS3');
+  if (/\bSSS?\s*1\b/i.test(t)) classes.add('SS1');
+  if (/\bSSS?\s*2\b/i.test(t)) classes.add('SS2');
+  if (/\bSSS?\s*3\b/i.test(t)) classes.add('SS3');
+  if (/\bJSS?\s*1\b/i.test(t)) classes.add('JSS1');
+  if (/\bJSS?\s*2\b/i.test(t)) classes.add('JSS2');
+  if (/\bJSS?\s*3\b/i.test(t)) classes.add('JSS3');
 
   for (let i = 1; i <= 6; i++) {
     const reg = new RegExp('\\b(BASIC|PRIMARY|PRI)\\s*' + i + '\\b', 'i');
@@ -163,21 +163,7 @@ export function assertTeacherCanGrade(user, classId, subjectId) {
 
   const targetNorm = normalizeClass(cls.name);
   const resp = (staff.form_responsibility || '').toUpperCase();
-  if (resp) {
-    if (targetNorm === 'SS1' && (resp.includes('SSS1') || resp.includes('SS1'))) return true;
-    if (targetNorm === 'SS2' && (resp.includes('SSS2') || resp.includes('SS2'))) return true;
-    if (targetNorm === 'JSS2' && resp.includes('JSS2')) return true;
-    if (targetNorm === 'JSS3' && resp.includes('JSS3')) return true;
-    if (targetNorm.startsWith('PRIMARY')) {
-      const num = targetNorm.replace('PRIMARY', '');
-      if (resp.includes('BASIC ' + num) || resp.includes('PRIMARY ' + num)) return true;
-    }
-    if (targetNorm.startsWith('NURSERY')) {
-      const num = targetNorm.replace('NURSERY', '');
-      if (resp.includes('NURSERY ' + num)) return true;
-    }
-    if (targetNorm === 'PRENURSERY' && (resp.includes('PRE-NURSERY') || resp.includes('DAYCARE'))) return true;
-  }
+  if (expandClassRange(resp).has(targetNorm)) return true;
 
   // RULE 2: Subject Teacher check
   const assigned = staff.assigned_class || '';

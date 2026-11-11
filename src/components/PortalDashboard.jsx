@@ -1,4 +1,4 @@
-import WhatsAppConnectionCard from './WhatsAppConnectionCard';
+import { normalizeThreatTelemetry } from '../utils/threatTelemetry';
 import { getDashboardRole, canAccessTab, defaultTab, canLoadDashboardResource } from '../utils/portalPermissions';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
@@ -88,6 +88,7 @@ import StudentMasterConsole from './superadmin/modules/StudentMasterConsole';
 import CurriculumArchitect from './superadmin/modules/CurriculumArchitect';
 import SystemGovernanceConsole from './superadmin/modules/SystemGovernanceConsole';
 import StaffIDCardModal from './staff/StaffIDCardModal';
+import StaffManagementConsole from './staff/StaffManagementConsole';
 import WhatsAppBotConsoleModal from './superadmin/modules/WhatsAppBotConsoleModal';
 import StaffNotificationBell from './staff/StaffNotificationBell';
 import StaffCommunicationConsole from './staff/StaffCommunicationConsole';
@@ -985,7 +986,7 @@ export default function PortalDashboard({
       const res = await fetch(`${API_BASE}/system/threat-defense`, { headers });
       if (res.ok) {
         const d = await res.json();
-        setThreatTelemetry(d.data || null);
+        setThreatTelemetry(normalizeThreatTelemetry(d.data));
       }
     } catch (err) {
       console.error('Threat telemetry error:', err);
@@ -3977,10 +3978,7 @@ export default function PortalDashboard({
             {/* Main Panel Content */}
             <main className="grow p-4 sm:p-6 overflow-y-auto bg-slate-900/50">
               
-              {activeRole === 'superadmin' && (activeTab === 'overview' || activeTab === 'executive_cockpit') && (
-                <WhatsAppConnectionCard />
-              )}
-
+              
               {/* EXECUTIVE SCHOOL HEAD DECISION COCKPIT */}
               {activeTab === 'executive_cockpit' && (
                 <ExecutiveReportingCockpit authToken={authToken} />
@@ -4725,7 +4723,7 @@ export default function PortalDashboard({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/60 font-mono">
-                          {!threatTelemetry || threatTelemetry.bannedIps?.length === 0 ? (
+                          {!Array.isArray(threatTelemetry?.bannedIps) || threatTelemetry.bannedIps.length === 0 ? (
                             <tr>
                               <td colSpan={5} className="py-6 text-center text-slate-400 font-sans">
                                 🛡️ No actively banned IPs. All traffic within safe operational parameters.
@@ -4788,64 +4786,12 @@ export default function PortalDashboard({
 
               {/* SUPERADMIN & ADMIN: Staff */}
               {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'staff' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex flex-wrap justify-between items-center gap-3">
-                    <div>
-                      <h3 className="text-lg font-bold text-white">Staff Faculty & Officers</h3>
-                      <p className="text-xs text-slate-400">Institutional personnel and academic faculty profiles</p>
-                    </div>
-                    <button
-                      onClick={() => { setAddStaffModalOpen(true); setAddedStaffSuccess(null); }}
-                      className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Staff Member</span>
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {staff.map(s => (
-                      <div key={s.id} className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 text-xs space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-mono text-amber-400 text-[10px]">{s.staff_no}</span>
-                          <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px] font-bold text-slate-300">
-                            {s.assigned_class || 'General Faculty'}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="font-extrabold text-white text-sm">{s.name}</div>
-                          <div className="text-slate-300 font-semibold">{s.role}</div>
-                          <div className="text-slate-400 text-[11px]">{s.qualification}</div>
-                        </div>
-                        <div className="pt-2 border-t border-slate-900 flex justify-between items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setStaffIdTarget(s);
-                              setIsStaffIdModalOpen(true);
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-[10px] font-bold flex items-center gap-1 transition-colors"
-                            title="View & Print Official Staff ID Card"
-                          >
-                            <CreditCard className="w-3 h-3" />
-                            <span>Print ID Card</span>
-                          </button>
-                          {s.role.toLowerCase().includes('teacher') && (
-                            <button
-                              onClick={() => {
-                                setSelectedStaffForClass(s);
-                                setSelectedClassNameToAssign(s.assigned_class || classes[0]?.name || 'JSS1');
-                                setSelectedClassForTeacher(null);
-                                setAssignClassModalOpen(true);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-400 border border-amber-400/30 text-[10px] font-bold transition-colors"
-                            >
-                              Assign Class &rarr;
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <StaffManagementConsole
+                  authToken={authToken}
+                  classes={classes}
+                  onStaffChanged={fetchAllData}
+                  onPrintId={record => { setStaffIdTarget(record); setIsStaffIdModalOpen(true); }}
+                />
               )}
 
               {/* SUPERADMIN: Security */}
@@ -5124,7 +5070,14 @@ export default function PortalDashboard({
               {/* SUPERADMIN: Student Master Console */}
               {(activeRole === 'superadmin') && activeTab === 'students' && (
                 <div className="animate-in fade-in">
-                  <StudentMasterConsole authToken={authToken} classes={classes} />
+                  <StudentMasterConsole
+                    authToken={authToken}
+                    classes={classes}
+                    onEnrollStudent={() => {
+                      setEnrollStudentModalOpen(true);
+                      setEnrolledStudentSuccess(null);
+                    }}
+                  />
                 </div>
               )}
 
@@ -6367,7 +6320,7 @@ export default function PortalDashboard({
                         }}
                         className="bg-slate-950 border border-slate-800 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
                       >
-                        {(activeRole === 'teacher' ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes) : classes).map(c => (
+                        {(activeRole === 'teacher' ? allowedGradebookClasses : classes).map(c => (
                           <option key={c.id} value={c.id}>{c.name} ({c.student_count || 0} pupils)</option>
                         ))}
                       </select>

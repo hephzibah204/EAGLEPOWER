@@ -401,7 +401,7 @@ const facultyData = [
     classes: 'Basic 5',
     formResponsibility: 'Class Teacher, Basic 5',
     formClass: 'Primary 5',
-    phone: '08032782173',
+    phone: '08032782137',
     qualification: 'HND',
     salary: 50000,
     gender: 'Female',

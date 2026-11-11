@@ -64,6 +64,67 @@ async function persistAttendance(env, classId, date, saved) {
   }
 }
 
+// Durable record stores (D1 tables classes_store / subjects_store / staff_store):
+// each row holds the full merged record as JSON; deleted=1 hides a baseline record.
+// In-memory maps mirror the same contract when the DB binding is absent.
+const memStores = { classes_store: new Map(), subjects_store: new Map(), staff_store: new Map() };
+
+async function loadStoreMap(env, table) {
+  if (env && env.DB) {
+    try {
+      const { results } = await env.DB.prepare(`SELECT id, data, deleted FROM ${table}`).all();
+      const map = new Map();
+      for (const row of results || []) {
+        let parsed = null;
+        try { parsed = JSON.parse(row.data); } catch { parsed = null; }
+        map.set(String(row.id), { data: parsed, deleted: Number(row.deleted) === 1 });
+      }
+      return map;
+    } catch (err) {
+      // fall through to the in-memory mirror
+    }
+  }
+  return memStores[table];
+}
+
+async function upsertStoreRow(env, table, id, dataObj, deleted = false) {
+  const key = String(id);
+  memStores[table].set(key, { data: dataObj, deleted });
+  if (env && env.DB) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO ${table} (id, data, deleted, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(id) DO UPDATE SET data = excluded.data, deleted = excluded.deleted, updated_at = excluded.updated_at`
+      ).bind(key, JSON.stringify(dataObj), deleted ? 1 : 0, new Date().toISOString()).run();
+    } catch (err) {
+      // the in-memory mirror above still serves this isolate
+    }
+  }
+}
+
+function mergeStoredRecords(baseline, storeMap) {
+  const byId = new Map();
+  for (const item of baseline || []) byId.set(String(item.id), { ...item });
+  for (const [id, row] of storeMap) {
+    if (row.deleted) { byId.delete(id); continue; }
+    if (row.data) byId.set(id, { ...(byId.get(id) || {}), ...row.data });
+  }
+  return [...byId.values()];
+}
+
+async function getStoredRecord(env, table, baseline, id) {
+  const map = await loadStoreMap(env, table);
+  return mergeStoredRecords(baseline, map).find(r => String(r.id) === String(id)) || null;
+}
+
+function enrichClassRecord(cls, staffList) {
+  const teacher = (staffList || []).find(s => String(s.id) === String(cls.class_teacher_id));
+  return {
+    ...cls,
+    teacher_id: cls.class_teacher_id ?? null,
+    teacher_name: teacher ? teacher.name : null
+  };
+}
+
 const whatsappBroadcastStore = [
   {
     id: 1,
@@ -1335,12 +1396,16 @@ async function handleRequest(context, dbData) {
   }
 
   // 6. Public Portal Academics & Roster
-  if (path === '/api/academics/classes') {
-    return jsonResponse({ success: true, data: dbData.classes || [] });
+  if (path === '/api/academics/classes' && method === 'GET') {
+    const storeMap = await loadStoreMap(env, 'classes_store');
+    const classes = mergeStoredRecords(dbData.classes || [], storeMap)
+      .map(c => enrichClassRecord(c, dbData.staff || []));
+    return jsonResponse({ success: true, data: classes });
   }
 
-  if (path === '/api/academics/subjects') {
-    return jsonResponse({ success: true, data: dbData.subjects || [] });
+  if (path === '/api/academics/subjects' && method === 'GET') {
+    const storeMap = await loadStoreMap(env, 'subjects_store');
+    return jsonResponse({ success: true, data: mergeStoredRecords(dbData.subjects || [], storeMap) });
   }
 
   if (path === '/api/students' && method === 'GET') {
@@ -1369,8 +1434,22 @@ async function handleRequest(context, dbData) {
     return jsonResponse({ success: true, total, page, limit, data: students.slice(offset, offset + limit) });
   }
 
-  if (path === '/api/staff') {
-    return jsonResponse({ success: true, data: dbData.staff || [] });
+  if (path === '/api/staff' && method === 'GET') {
+    const storeMap = await loadStoreMap(env, 'staff_store');
+    return jsonResponse({ success: true, data: mergeStoredRecords(dbData.staff || [], storeMap) });
+  }
+
+  if (path.startsWith('/api/staff/') && method === 'PUT') {
+    const staffId = path.split('/')[3];
+    const existing = await getStoredRecord(env, 'staff_store', dbData.staff || [], staffId);
+    if (!existing) {
+      return jsonResponse({ success: false, message: 'Staff record not found.' }, 404);
+    }
+    const updates = { ...body };
+    delete updates.id;
+    const merged = { ...existing, ...updates };
+    await upsertStoreRow(env, 'staff_store', staffId, merged);
+    return jsonResponse({ success: true, message: 'Staff record updated successfully.', data: merged });
   }
 
   if (path === '/api/finance/invoices') {
@@ -1518,18 +1597,109 @@ async function handleRequest(context, dbData) {
   }
 
   if (path.startsWith('/api/academics/classes/') && path.endsWith('/assign-teacher') && method === 'PUT') {
+    const classId = path.split('/')[4];
+    const existing = await getStoredRecord(env, 'classes_store', dbData.classes || [], classId);
+    if (!existing) {
+      return jsonResponse({ success: false, message: 'Class not found.' }, 404);
+    }
+    const merged = {
+      ...existing,
+      class_teacher_id: body.teacher_id === undefined || body.teacher_id === null ? null : Number(body.teacher_id)
+    };
+    await upsertStoreRow(env, 'classes_store', classId, merged);
     return jsonResponse({
       success: true,
-      message: 'Class teacher assigned successfully.'
+      message: 'Class teacher assigned successfully.',
+      data: enrichClassRecord(merged, dbData.staff || [])
+    });
+  }
+
+  if (path.startsWith('/api/academics/classes/') && method === 'PUT') {
+    const classId = path.split('/')[4];
+    const existing = await getStoredRecord(env, 'classes_store', dbData.classes || [], classId);
+    if (!existing) {
+      return jsonResponse({ success: false, message: 'Class not found.' }, 404);
+    }
+    const merged = { ...existing };
+    if (body.name !== undefined) merged.name = String(body.name).trim();
+    if (body.division !== undefined) merged.division = body.division;
+    if (body.termly_tuition !== undefined) merged.termly_tuition = Number(body.termly_tuition) || merged.termly_tuition;
+    if (body.class_teacher_id !== undefined) {
+      merged.class_teacher_id = body.class_teacher_id === null ? null : Number(body.class_teacher_id);
+    }
+    await upsertStoreRow(env, 'classes_store', classId, merged);
+    return jsonResponse({
+      success: true,
+      message: 'Class updated successfully.',
+      data: enrichClassRecord(merged, dbData.staff || [])
     });
   }
 
   if (path === '/api/academics/classes' && method === 'POST') {
+    const name = String(body.name || '').trim();
+    if (!name) {
+      return jsonResponse({ success: false, message: 'Class name is required.' }, 400);
+    }
+    const storeMap = await loadStoreMap(env, 'classes_store');
+    const all = mergeStoredRecords(dbData.classes || [], storeMap);
+    const newId = all.reduce((max, c) => Math.max(max, Number(c.id) || 0), 0) + 1;
+    const created = {
+      id: newId,
+      name,
+      division: body.division || 'Primary',
+      termly_tuition: Number(body.termly_tuition) || 40000,
+      class_teacher_id: body.class_teacher_id === undefined || body.class_teacher_id === null ? null : Number(body.class_teacher_id),
+      student_count: 0
+    };
+    await upsertStoreRow(env, 'classes_store', newId, created);
     return jsonResponse({
       success: true,
       message: 'Class created successfully.',
-      class_id: (dbData.classes?.length || 12) + 1
+      class_id: newId,
+      data: enrichClassRecord(created, dbData.staff || [])
     });
+  }
+
+  if (path === '/api/academics/subjects' && method === 'POST') {
+    const name = String(body.name || '').trim();
+    if (!name) {
+      return jsonResponse({ success: false, message: 'Subject name is required.' }, 400);
+    }
+    const storeMap = await loadStoreMap(env, 'subjects_store');
+    const all = mergeStoredRecords(dbData.subjects || [], storeMap);
+    const newId = all.reduce((max, s) => Math.max(max, Number(s.id) || 0), 0) + 1;
+    const created = {
+      id: newId,
+      name,
+      code: body.code || '',
+      division: body.division || 'All',
+      category: body.category || 'Core'
+    };
+    await upsertStoreRow(env, 'subjects_store', newId, created);
+    return jsonResponse({ success: true, message: 'Subject created successfully.', subject_id: newId, data: created });
+  }
+
+  if (path.startsWith('/api/academics/subjects/') && method === 'PUT') {
+    const subjectId = path.split('/')[4];
+    const existing = await getStoredRecord(env, 'subjects_store', dbData.subjects || [], subjectId);
+    if (!existing) {
+      return jsonResponse({ success: false, message: 'Subject not found.' }, 404);
+    }
+    const updates = { ...body };
+    delete updates.id;
+    const merged = { ...existing, ...updates };
+    await upsertStoreRow(env, 'subjects_store', subjectId, merged);
+    return jsonResponse({ success: true, message: 'Subject updated successfully.', data: merged });
+  }
+
+  if (path.startsWith('/api/academics/subjects/') && method === 'DELETE') {
+    const subjectId = path.split('/')[4];
+    const existing = await getStoredRecord(env, 'subjects_store', dbData.subjects || [], subjectId);
+    if (!existing) {
+      return jsonResponse({ success: false, message: 'Subject not found.' }, 404);
+    }
+    await upsertStoreRow(env, 'subjects_store', subjectId, existing, true);
+    return jsonResponse({ success: true, message: 'Subject deleted successfully.' });
   }
 
   if (path === '/api/students' && method === 'POST') {

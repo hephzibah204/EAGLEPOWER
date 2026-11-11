@@ -131,15 +131,7 @@
       "class_teacher_id": 140,
       "student_count": 19
     },
-    {
-      "id": 16,
-      "name": "SS 2",
-      "division": "Senior College",
-      "termly_tuition": 55000,
-      "class_teacher_id": 76,
-      "student_count": 0
-    },
-    {
+        {
       "id": 20,
       "name": "JSS1",
       "division": "Junior College",

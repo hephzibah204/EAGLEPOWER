@@ -772,10 +772,19 @@ export default function PortalDashboard({
     setQuickCaStudent(student);
     const firstSub = allowedGradebookSubjects[0]?.id || subjects[0]?.id || 1;
     setQuickCaSubjectId(firstSub);
-    setQuickCa1(8);
-    setQuickCa2(8);
-    setQuickProject(9);
-    setQuickExam(55);
+    const stuDiv = (classes.find(c => String(c.id) === String(student?.class_id))?.division || student?.division || student?.class_name || '').toLowerCase();
+    const isStuPrimary = stuDiv.includes('primary') || stuDiv.includes('basic') || stuDiv.includes('nursery');
+    if (isStuPrimary) {
+      setQuickCa1(16);
+      setQuickCa2(16);
+      setQuickProject(0);
+      setQuickExam(48);
+    } else {
+      setQuickCa1(8);
+      setQuickCa2(8);
+      setQuickProject(9);
+      setQuickExam(55);
+    }
     setQuickCaSuccessMsg('');
     setIsQuickCaModalOpen(true);
   };
@@ -790,7 +799,11 @@ export default function PortalDashboard({
         'Content-Type': 'application/json',
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {})
       };
-      const caTotal = Number(quickCa1 || 0) + Number(quickCa2 || 0) + Number(quickProject || 0);
+      const stuDiv = (classes.find(c => String(c.id) === String(quickCaStudent?.class_id))?.division || quickCaStudent?.division || quickCaStudent?.class_name || '').toLowerCase();
+      const isStuPrimary = stuDiv.includes('primary') || stuDiv.includes('basic') || stuDiv.includes('nursery');
+      const caTotal = isStuPrimary
+        ? Math.min(40, Number(quickCa1 || 0) + Number(quickCa2 || 0))
+        : Math.min(30, Number(quickCa1 || 0) + Number(quickCa2 || 0) + Number(quickProject || 0));
       const res = await fetch(`${API_BASE}/exams/marks`, {
         method: 'POST',
         headers,
@@ -801,7 +814,7 @@ export default function PortalDashboard({
           term: gradebookTerm || 'First Term',
           ca1_score: Number(quickCa1 || 0),
           ca2_score: Number(quickCa2 || 0),
-          project_score: Number(quickProject || 0),
+          project_score: isStuPrimary ? null : Number(quickProject || 0),
           ca_score: caTotal,
           exam_score: Number(quickExam || 0)
         })
@@ -2490,12 +2503,13 @@ export default function PortalDashboard({
     const updated = [...classSheetRows];
     const row = { ...updated[index] };
 
-    if (field === 'ca1') row.ca1_score = Math.min(gbIsPrimary ? 20 : 10, num);
-    if (field === 'ca2') row.ca2_score = Math.min(gbIsPrimary ? 20 : 10, num);
+    if (field === 'ca1') row.ca1_score = Math.min(gbIsPrimary ? 20 : 15, num);
+    if (field === 'ca2') row.ca2_score = Math.min(gbIsPrimary ? 20 : 15, num);
     if (field === 'project') row.project_score = gbIsPrimary ? 0 : Math.min(10, num);
 
     if (field === 'ca1' || field === 'ca2' || field === 'project') {
-      row.ca_score = (row.ca1_score || 0) + (row.ca2_score || 0) + (gbIsPrimary ? 0 : (row.project_score || 0));
+      const rawCa = (row.ca1_score || 0) + (row.ca2_score || 0) + (gbIsPrimary ? 0 : (row.project_score || 0));
+      row.ca_score = Math.min(gbIsPrimary ? 40 : 30, rawCa);
     } else if (field === 'ca') {
       row.ca_score = Math.min(gbIsPrimary ? 40 : 30, num);
     }
@@ -3156,7 +3170,7 @@ export default function PortalDashboard({
                     required
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
-                    placeholder={isExecutive ? 'superadmin or director@eaglepowerschools.com.ng' : 'e.g. admin, adaeze3011@gmail.com, 08033591058, or ESE2009012'}
+                    placeholder={isExecutive ? 'Enter your executive username or email' : 'Enter your username, email, phone or admission number'}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
                   />
                 </div>
@@ -3216,7 +3230,7 @@ export default function PortalDashboard({
                         required
                         value={otpPhone}
                         onChange={(e) => setOtpPhone(e.target.value)}
-                        placeholder="e.g. 08130439923 or EPS/ST/002"
+                        placeholder="Enter your registered phone number or staff ID"
                         className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-emerald-400"
                       />
                       <p className="text-[11px] text-slate-400 mt-1">
@@ -3304,7 +3318,7 @@ export default function PortalDashboard({
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800">
                     <strong className="text-white block mb-0.5">🎒 Enrolled Students:</strong>
-                    <span>Sign in using your school Admission Number (e.g. <span className="font-mono text-amber-300">ESE2009012</span>) and access PIN.</span>
+                    <span>Sign in using your school Admission Number and access PIN.</span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 sm:col-span-2">
                     <strong className="text-white block mb-0.5">👪 Parents & Guardians:</strong>
@@ -5835,7 +5849,7 @@ export default function PortalDashboard({
                           </div>
                           <h4 className="text-sm font-black text-white">CA & Exam Score Register</h4>
                           <p className="text-xs text-slate-400">
-                            Record Continuous Assessment (30) and Exam (70) marks with real-time WAEC grading.
+                            Record Continuous Assessment (Primary: 20/20/60, Secondary: 30/70) with real-time division grading.
                           </p>
                         </div>
 
@@ -6782,10 +6796,10 @@ export default function PortalDashboard({
                         onClick={() => {
                           const updated = classSheetRows.map(row => {
                             if (!row.ca_score || row.ca_score === 0) {
-                              let ca1 = row.ca1_score || 8;
-                              let ca2 = row.ca2_score || 8;
-                              let project = row.project_score || 9;
-                              let ca = ca1 + ca2 + project;
+                              let ca1 = row.ca1_score || (gbIsPrimary ? 16 : 8);
+                              let ca2 = row.ca2_score || (gbIsPrimary ? 16 : 8);
+                              let project = gbIsPrimary ? 0 : (row.project_score || 9);
+                              let ca = ca1 + ca2 + (gbIsPrimary ? 0 : project);
                               const exam = row.exam_score || 0;
                               const tot = ca + exam;
                               let grade = 'F9', remark = 'Fail';
@@ -6836,9 +6850,9 @@ export default function PortalDashboard({
                             ? 'bg-slate-900 text-slate-600 cursor-not-allowed border border-slate-800'
                             : 'bg-slate-800 hover:bg-slate-700 text-amber-300'
                         }`}
-                        title={activeRole === 'teacher' && !canGradeCurrentSubject ? 'Score entry restricted for this subject' : 'Auto-fill empty CA components with benchmark marks (8+8+9 = 25/30)'}
+                        title={activeRole === 'teacher' && !canGradeCurrentSubject ? 'Score entry restricted for this subject' : (gbIsPrimary ? 'Auto-fill empty CA components with benchmark marks (16+16 = 32/40)' : 'Auto-fill empty CA components with benchmark marks (8+8+9 = 25/30)')}
                       >
-                        Quick-Fill CA (25)
+                        Quick-Fill CA ({gbIsPrimary ? '32/40' : '25/30'})
                       </button>
 
                       <button
@@ -7198,7 +7212,7 @@ export default function PortalDashboard({
                                 </button>
                                 {r.guardian_phone && (
                                   <a
-                                    href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${r.guardian_name || 'Parent'}, this is your child's subject teacher at Eagle Power Schools. Current score for ${r.first_name} ${r.last_name} in ${subjects.find(s => s.id === selectedSubjectId)?.name || 'Subject'}: CA: ${r.ca_score || 0}/30, Exam: ${r.exam_score || 0}/70, Total: ${r.total_score || 0}/100 (${r.grade || 'A1'}). Remark: ${r.remark || 'Dedicated student'}.`)}`}
+                                    href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${r.guardian_name || 'Parent'}, this is your child's subject teacher at Eagle Power Schools. Current score for ${r.first_name} ${r.last_name} in ${subjects.find(s => s.id === selectedSubjectId)?.name || 'Subject'}: CA: ${r.ca_score || 0}/${gbIsPrimary ? 40 : 30}, Exam: ${r.exam_score || 0}/${gbIsPrimary ? 60 : 70}, Total: ${r.total_score || 0}/100 (${r.division_grade || r.grade || 'A1'}). Remark: ${r.remark || 'Dedicated student'}.`)}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all shrink-0"
@@ -8338,10 +8352,18 @@ export default function PortalDashboard({
                           <thead>
                             <tr className="bg-slate-900 text-slate-400 font-bold border-b border-slate-800 text-[10px] uppercase">
                               <th className="p-2.5">Subject</th>
-                              <th className="p-2.5 text-center">CA (30)</th>
-                              <th className="p-2.5 text-center">Exam (70)</th>
-                              <th className="p-2.5 text-center">Total (100)</th>
-                              <th className="p-2.5 text-center">WAEC Grade</th>
+                              {(() => {
+                                const cardDiv = (studentReportCard.student?.class_division || studentReportCard.student?.class_name || '').toLowerCase();
+                                const isCardPrimary = cardDiv.includes('primary') || cardDiv.includes('basic') || cardDiv.includes('nursery');
+                                return (
+                                  <>
+                                    <th className="p-2.5 text-center">CA ({isCardPrimary ? 40 : 30})</th>
+                                    <th className="p-2.5 text-center">Exam ({isCardPrimary ? 60 : 70})</th>
+                                    <th className="p-2.5 text-center">Total (100)</th>
+                                    <th className="p-2.5 text-center">{isCardPrimary ? 'Grade' : 'WAEC Grade'}</th>
+                                  </>
+                                );
+                              })()}
                               <th className="p-2.5">Remark</th>
                             </tr>
                           </thead>
@@ -9198,61 +9220,121 @@ export default function PortalDashboard({
                   </select>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-slate-300 font-bold mb-1">CA 1 (Max 10)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      value={quickCa1}
-                      onChange={(e) => setQuickCa1(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 font-bold mb-1">CA 2 (Max 10)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      value={quickCa2}
-                      onChange={(e) => setQuickCa2(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-300 font-bold mb-1">Project (Max 10)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      value={quickProject}
-                      onChange={(e) => setQuickProject(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
-                    />
-                  </div>
-                </div>
+                {(() => {
+                  const stuDiv = (classes.find(c => String(c.id) === String(quickCaStudent?.class_id))?.division || quickCaStudent?.division || quickCaStudent?.class_name || '').toLowerCase();
+                  const isStuPrimary = stuDiv.includes('primary') || stuDiv.includes('basic') || stuDiv.includes('nursery');
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-slate-300 font-bold mb-1">Exam Score (Max 70)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="70"
-                      value={quickExam}
-                      onChange={(e) => setQuickExam(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center text-sm"
-                    />
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-center items-center">
-                    <span className="text-[10px] uppercase font-bold text-slate-400">Total Score</span>
-                    <span className="text-xl font-black text-amber-400">
-                      {Number(quickCa1 || 0) + Number(quickCa2 || 0) + Number(quickProject || 0) + Number(quickExam || 0)} / 100
-                    </span>
-                  </div>
-                </div>
+                  if (isStuPrimary) {
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">CA 1 (Max 20)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              value={quickCa1}
+                              onChange={(e) => setQuickCa1(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">CA 2 (Max 20)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="20"
+                              value={quickCa2}
+                              onChange={(e) => setQuickCa2(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-slate-300 font-bold mb-1">Exam Score (Max 60)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="60"
+                              value={quickExam}
+                              onChange={(e) => setQuickExam(e.target.value)}
+                              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center text-sm"
+                            />
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-center items-center">
+                            <span className="text-[10px] uppercase font-bold text-slate-400">Total Score (40+60)</span>
+                            <span className="text-xl font-black text-amber-400">
+                              {Number(quickCa1 || 0) + Number(quickCa2 || 0) + Number(quickExam || 0)} / 100
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  }
+
+                  return (
+                    <>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">CA 1 (Max 15)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="15"
+                            value={quickCa1}
+                            onChange={(e) => setQuickCa1(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">CA 2 (Max 15)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="15"
+                            value={quickCa2}
+                            onChange={(e) => setQuickCa2(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Project (Max 10)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="10"
+                            value={quickProject}
+                            onChange={(e) => setQuickProject(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-slate-300 font-bold mb-1">Exam Score (Max 70)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="70"
+                            value={quickExam}
+                            onChange={(e) => setQuickExam(e.target.value)}
+                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold text-center text-sm"
+                          />
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col justify-center items-center">
+                          <span className="text-[10px] uppercase font-bold text-slate-400">Total Score (30+70)</span>
+                          <span className="text-xl font-black text-amber-400">
+                            {Number(quickCa1 || 0) + Number(quickCa2 || 0) + Number(quickProject || 0) + Number(quickExam || 0)} / 100
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
 
                 <div className="flex justify-end gap-2 pt-2">
                   <button

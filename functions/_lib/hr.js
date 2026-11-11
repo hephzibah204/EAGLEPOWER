@@ -6,6 +6,22 @@ const hex = bytes => Array.from(new Uint8Array(bytes), b => b.toString(16).padSt
 const tokenFrom = request => request.headers.get('cookie')?.split(';').map(v => v.trim()).find(v => v.startsWith('eagle_session='))?.slice(14) || request.headers.get('authorization')?.replace(/^Bearer /, '') || '';
 const digest = async value => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value)));
 
+const GENERIC_PASSWORDS = ['EagleSuperAdmin2025!', 'EagleAdmin2025!', 'EagleStaff2025!', 'Teacher2025!', 'Bursar2025!', 'Eagle2025!', 'EagleParent2025!'];
+
+// Issues a single-use forced-password-change token (SHA-256-hashed at rest,
+// 15-minute expiry) in the edge DB the legacy handler shares.
+async function issueChangeToken(env, user) {
+  if (!env?.DB) return null;
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS pwd_change_tokens (token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)').run();
+    const token = hex(crypto.getRandomValues(new Uint8Array(32)));
+    const key = String(user.username || '').toLowerCase();
+    await env.DB.prepare('DELETE FROM pwd_change_tokens WHERE username = ?').bind(key).run();
+    await env.DB.prepare('INSERT INTO pwd_change_tokens (token_hash, username, expires_at, attempts) VALUES (?, ?, ?, ?)').bind(await digest(token), key, Date.now() + 15 * 60 * 1000, 0).run();
+    return token;
+  } catch { return null; }
+}
+
 export async function passwordHash(password, salt = hex(crypto.getRandomValues(new Uint8Array(16)))) {
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
   const hash = hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 100000, hash: 'SHA-256' }, key, 256));
@@ -95,6 +111,45 @@ export async function handleHr(context, baseline, legacy) {
     const user = await sessionUser(db, request, data);
     return user ? reply({ success: true, session: true, user }) : fail('Your session expired. Sign in again.', 401);
   }
+  if (path === '/api/auth/force-change-password' && method === 'POST') {
+    if (!env.DB) return legacy(context, data);
+    const fbody = await request.clone().json().catch(() => ({}));
+    const tokenHash = await digest(String(fbody.change_token || ''));
+    let rec = null;
+    try { rec = await env.DB.prepare('SELECT username, expires_at, attempts FROM pwd_change_tokens WHERE token_hash = ?').bind(tokenHash).first(); } catch {}
+    if (!rec || rec.expires_at <= Date.now() || rec.attempts >= 5) return fail('This password-change session has expired. Sign in again with the default password to restart.', 401);
+    const target = data.users.find(u => (u.username || '').toLowerCase() === rec.username);
+    if (!target || !['superadmin', 'admin', 'teacher', 'bursar'].includes(target.role)) return fail('This password-change session has expired. Sign in again with the default password to restart.', 401);
+    const newPassword = String(fbody.new_password || '');
+    const bad = !newPassword || newPassword.length < 8 ? 'New password must be at least 8 characters long.'
+      : (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) ? 'New password must contain both letters and numbers.'
+      : GENERIC_PASSWORDS.includes(newPassword) ? 'That is one of the default passwords. Choose a new personal password instead.'
+      : (newPassword.toLowerCase() === String(target.username || '').toLowerCase() || newPassword === String(target.reference_id || '')) ? 'New password cannot be your username or ID.'
+      : null;
+    if (bad) {
+      try { await env.DB.prepare('UPDATE pwd_change_tokens SET attempts = attempts + 1 WHERE token_hash = ?').bind(tokenHash).run(); } catch {}
+      return fail(bad, 400);
+    }
+    const credential = await passwordHash(newPassword);
+    // Persist to the HR credential store when the user has a staff record,
+    // and always to the edge credential store the legacy login checks.
+    const staffRec = data.staff.find(s => s.staff_no === target.reference_id);
+    const existingManaged = managed.find(m => String(m.user?.id) === String(target.id));
+    if (staffRec || existingManaged) {
+      const record = existingManaged?.record || staffRec;
+      const hrUser = existingManaged?.user || target;
+      await db.prepare('INSERT INTO hr_staff (id, username, record_json, user_json, credential_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET username=excluded.username, record_json=excluded.record_json, user_json=excluded.user_json, credential_json=excluded.credential_json')
+        .bind(String(record.id), hrUser.username || null, JSON.stringify(record), JSON.stringify(publicUser(hrUser)), JSON.stringify(credential)).run();
+    }
+    try {
+      await env.DB.prepare('CREATE TABLE IF NOT EXISTS user_credentials (username TEXT PRIMARY KEY, salt TEXT NOT NULL, hash TEXT NOT NULL, updated_at INTEGER NOT NULL)').run();
+      await env.DB.prepare('INSERT INTO user_credentials (username, salt, hash, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(username) DO UPDATE SET salt = excluded.salt, hash = excluded.hash, updated_at = excluded.updated_at')
+        .bind(String(target.username || '').toLowerCase(), credential.salt, credential.hash, Date.now()).run();
+    } catch {}
+    try { await env.DB.prepare('DELETE FROM pwd_change_tokens WHERE username = ?').bind(rec.username).run(); } catch {}
+    await db.prepare('DELETE FROM hr_sessions WHERE user_id = ?').bind(String(target.id)).run();
+    return mintSession(db, target, request, data);
+  }
   if (['/api/auth/login', '/api/auth/executive-login'].includes(path) && method === 'POST') {
     const body = await request.clone().json().catch(() => ({}));
     const identifier = String(body.username || body.email || body.phone || body.identifier || '').trim().toLowerCase();
@@ -105,12 +160,17 @@ export async function handleHr(context, baseline, legacy) {
       if (match.credential) {
         const attempt = await passwordHash(String(body.password || ''), match.credential.salt);
         if (attempt.hash !== match.credential.hash) return fail('Invalid username or password.', 401);
+        if (GENERIC_PASSWORDS.includes(String(body.password || ''))) {
+          const changeToken = await issueChangeToken(env, match.user);
+          if (changeToken) return reply({ success: true, session: false, must_change_password: true, change_token: changeToken, message: 'You signed in with the default password. Set a new personal password to continue.', user: publicUser(match.user) }, 200);
+        }
         return mintSession(db, match.user, request, data);
       }
     }
     const response = await legacy(context, data);
     if (!response.ok) return response;
     const result = await response.clone().json().catch(() => ({}));
+    if (result.must_change_password) return response;
     if (result.success && result.user) {
       // A managed password replaces all legacy aliases and default passwords.
       const overridden = managed.find(m => String(m.user?.id) === String(result.user.id));

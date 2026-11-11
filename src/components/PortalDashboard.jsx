@@ -152,6 +152,13 @@ export default function PortalDashboard({
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // Forced password change (staff who signed in with a default password)
+  const [forceChange, setForceChange] = useState(null); // { change_token, user }
+  const [forcePassNew, setForcePassNew] = useState('');
+  const [forcePassConfirm, setForcePassConfirm] = useState('');
+  const [forcePassError, setForcePassError] = useState('');
+  const [forcePassLoading, setForcePassLoading] = useState(false);
+
   // WhatsApp OTP Login States
   const [isOtpMode, setIsOtpMode] = useState(false);
   const [otpPhone, setOtpPhone] = useState('');
@@ -539,7 +546,7 @@ export default function PortalDashboard({
     phone: '',
     qualification: 'B.Ed / NCE',
     assigned_class: 'Junior College (JSS 1)',
-    password: 'EagleStaff2025!'
+    password: ''
   });
   const [isAddingStaff, setIsAddingStaff] = useState(false);
   const [addedStaffSuccess, setAddedStaffSuccess] = useState(null);
@@ -2129,6 +2136,17 @@ export default function PortalDashboard({
 
       const data = await res.json().catch(() => ({}));
 
+      // Staff who signed in with a default password must set their own
+      // password before the portal opens - no session is issued until then.
+      if (data.must_change_password && data.change_token) {
+        setForceChange({ change_token: data.change_token, user: data.user });
+        setForcePassNew('');
+        setForcePassConfirm('');
+        setForcePassError('');
+        setLoginPassword('');
+        return;
+      }
+
       if (!res.ok || (!data.session && !data.token && !data.success) || !data.user) {
         setLoginError(data.message || 'Login failed. Please verify credentials.');
         return;
@@ -2149,6 +2167,56 @@ export default function PortalDashboard({
       setLoginError('Unable to connect to Eagle Power authentication server. Please verify your connection or ensure the server is active.');
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  // Forced Password Change Handler (default-password staff logins)
+  const handleForceChangePassword = async (e) => {
+    if (e) e.preventDefault();
+    setForcePassError('');
+
+    if (!forcePassNew || forcePassNew.length < 8) {
+      setForcePassError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (!/[A-Za-z]/.test(forcePassNew) || !/\d/.test(forcePassNew)) {
+      setForcePassError('New password must contain both letters and numbers.');
+      return;
+    }
+    if (forcePassNew !== forcePassConfirm) {
+      setForcePassError('New password and confirmation do not match.');
+      return;
+    }
+
+    setForcePassLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/force-change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ change_token: forceChange.change_token, new_password: forcePassNew })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.user) {
+        throw new Error(data.message || 'Failed to set your new password.');
+      }
+
+      setForceChange(null);
+      setForcePassNew('');
+      setForcePassConfirm('');
+      setAuthToken(data.token || COOKIE_SESSION);
+      setCurrentUser(data.user);
+      setSessionToken(COOKIE_SESSION);
+      setActiveRole(data.user.role);
+
+      if (data.user.role === 'superadmin') {
+        setActiveTab('overview');
+      } else if (data.user.role === 'student' && data.user.reference_id) {
+        setSelectedStudentAdmNo(data.user.reference_id);
+      }
+    } catch (err) {
+      setForcePassError(err.message || 'Failed to set your new password.');
+    } finally {
+      setForcePassLoading(false);
     }
   };
 
@@ -3125,7 +3193,7 @@ export default function PortalDashboard({
             </div>
 
             {/* Login Mode Switcher (Standard Password vs. WhatsApp OTP) */}
-            {!isExecutive && (
+            {!isExecutive && !forceChange && (
               <div className="w-full flex items-center p-1 rounded-xl bg-slate-900 border border-slate-800 text-xs">
                 <button
                   type="button"
@@ -3150,7 +3218,59 @@ export default function PortalDashboard({
             )}
 
             {/* Login Form: Password vs WhatsApp OTP */}
-            {!isOtpMode ? (
+            {forceChange ? (
+              <form onSubmit={handleForceChangePassword} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-amber-500/40 text-xs shadow-xl">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black text-white">Set a new password</h4>
+                  <p className="text-slate-400 leading-relaxed">
+                    {forceChange.user?.full_name ? `${forceChange.user.full_name}, you` : 'You'} signed in with the default password. For security, set your own personal password now - the portal will not open until you do.
+                  </p>
+                </div>
+                {forcePassError && (
+                  <div className="w-full p-3 rounded-xl bg-red-950/70 border border-red-800 text-red-200 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    <span className="leading-relaxed">{forcePassError}</span>
+                  </div>
+                )}
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={forcePassNew}
+                    onChange={(e) => setForcePassNew(e.target.value)}
+                    placeholder="At least 8 characters, with letters and numbers"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-300 uppercase mb-1">Confirm New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={forcePassConfirm}
+                    onChange={(e) => setForcePassConfirm(e.target.value)}
+                    placeholder="Repeat your new password"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-semibold focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={forcePassLoading}
+                  className="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                >
+                  {forcePassLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  <span>Set Password & Continue</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setForceChange(null); setForcePassError(''); }}
+                  className="w-full text-slate-400 underline"
+                >
+                  Back to sign in
+                </button>
+              </form>
+            ) : !isOtpMode ? (
               <form onSubmit={handlePerformLogin} className="w-full space-y-3.5 bg-slate-950 p-5 rounded-2xl border border-slate-800 text-xs shadow-xl">
                 {loginError && (
                   <div className="w-full p-3.5 rounded-xl bg-red-950/70 border border-red-800 text-red-200 text-xs flex flex-col gap-2.5">
@@ -8427,8 +8547,15 @@ export default function PortalDashboard({
                 const targetStudent = students.find(s => s.admission_no === effectiveAdmNo)
                   || currentUser?.studentDetails
                   || (currentUser?.children && currentUser.children[0])
-                  || students[0]
-                  || { first_name: 'David', last_name: 'Okeke', admission_no: 'ESE2009012', class_name: 'Junior College (JSS 1)', division: 'Junior College', gender: 'Male', guardian_name: 'Mr. & Mrs. Okeke', guardian_phone: '08033591058' };
+                  || null;
+
+                if (!targetStudent) {
+                  return (
+                    <div className="p-8 text-center text-slate-400 text-xs bg-slate-950 rounded-2xl border border-slate-800">
+                      No student profile is available for this selection yet. Choose a student from the Students register to view their dossier.
+                    </div>
+                  );
+                }
 
                 const enrolledSubjects = subjects.filter(sub => {
                   if (targetStudent.division && sub.division) {

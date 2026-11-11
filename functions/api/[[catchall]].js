@@ -1,5 +1,5 @@
 import baselineData from '../../src/data/portalDbData.json' with { type: 'json' };
-import { handleHr } from '../_lib/hr.js';
+import { handleHr, passwordHash } from '../_lib/hr.js';
 
 // In-Memory Cloudflare Edge State
 let maintenanceMode = {
@@ -278,6 +278,164 @@ async function clearOtp(env, key) {
   otpMemory.delete(key);
 }
 
+
+// --- Individual staff credentials + forced password change -----------------
+// Staff historically signed in with shared role passwords. Per the school's
+// decision (2026-11-11), a staff login with a generic password no longer
+// opens the platform: the user must set an individual password first.
+// Students and parents are exempt - their admission/reference logins stay.
+// Individual passwords are PBKDF2-hashed (the HR console scheme) in D1 table
+// user_credentials; a single-use, SHA-256-hashed token in pwd_change_tokens
+// (15-minute expiry) authorises the forced change.
+const GENERIC_PASSWORDS = ['EagleSuperAdmin2025!', 'EagleAdmin2025!', 'EagleStaff2025!', 'Teacher2025!', 'Bursar2025!', 'Eagle2025!', 'EagleParent2025!'];
+const STAFF_ROLES = ['superadmin', 'admin', 'teacher', 'bursar'];
+const STAFF_GENERIC_BY_ROLE = {
+  superadmin: ['EagleSuperAdmin2025!', 'EagleAdmin2025!'],
+  admin: ['EagleAdmin2025!', 'EagleStaff2025!'],
+  teacher: ['EagleStaff2025!', 'Teacher2025!'],
+  bursar: ['Bursar2025!', 'EagleStaff2025!']
+};
+const credentialMemory = new Map();
+const changeTokenMemory = new Map();
+let authTablesReady = false;
+
+async function ensureAuthTables(env) {
+  if (!env || !env.DB || authTablesReady) return;
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS user_credentials (username TEXT PRIMARY KEY, salt TEXT NOT NULL, hash TEXT NOT NULL, updated_at INTEGER NOT NULL)').run();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS pwd_change_tokens (token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, expires_at INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)').run();
+    authTablesReady = true;
+  } catch {}
+}
+
+async function getUserCredential(env, username) {
+  const key = String(username || '').toLowerCase();
+  if (env && env.DB) {
+    await ensureAuthTables(env);
+    try {
+      const row = await env.DB.prepare('SELECT salt, hash FROM user_credentials WHERE username = ?1').bind(key).first();
+      if (row) return { salt: row.salt, hash: row.hash };
+    } catch {}
+  }
+  return credentialMemory.get(key) || null;
+}
+
+async function saveUserCredential(env, username, password) {
+  const key = String(username || '').toLowerCase();
+  const cred = await passwordHash(password);
+  if (env && env.DB) {
+    await ensureAuthTables(env);
+    try {
+      await env.DB.prepare('INSERT INTO user_credentials (username, salt, hash, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(username) DO UPDATE SET salt = excluded.salt, hash = excluded.hash, updated_at = excluded.updated_at')
+        .bind(key, cred.salt, cred.hash, Date.now()).run();
+    } catch {}
+  }
+  credentialMemory.set(key, cred);
+}
+
+async function verifyUserCredential(env, username, password) {
+  const cred = await getUserCredential(env, username);
+  if (!cred) return false;
+  const attempt = await passwordHash(String(password || ''), cred.salt);
+  return attempt.hash === cred.hash;
+}
+
+async function issueChangeToken(env, user) {
+  const token = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('');
+  const key = String(user.username || '').toLowerCase();
+  const rec = { username: key, hash: await sha256Hex(token), expires: Date.now() + 15 * 60 * 1000, attempts: 0 };
+  if (env && env.DB) {
+    await ensureAuthTables(env);
+    try {
+      await env.DB.prepare('DELETE FROM pwd_change_tokens WHERE username = ?1').bind(key).run();
+      await env.DB.prepare('INSERT INTO pwd_change_tokens (token_hash, username, expires_at, attempts) VALUES (?1, ?2, ?3, ?4)')
+        .bind(rec.hash, key, rec.expires, 0).run();
+      return token;
+    } catch {}
+  }
+  for (const [k, v] of changeTokenMemory) if (v.username === key) changeTokenMemory.delete(k);
+  changeTokenMemory.set(rec.hash, rec);
+  return token;
+}
+
+async function readChangeToken(env, token) {
+  const hash = await sha256Hex(String(token || ''));
+  if (env && env.DB) {
+    await ensureAuthTables(env);
+    try {
+      const row = await env.DB.prepare('SELECT username, expires_at, attempts FROM pwd_change_tokens WHERE token_hash = ?1').bind(hash).first();
+      return row ? { username: row.username, hash, expires: row.expires_at, attempts: row.attempts } : null;
+    } catch {}
+  }
+  return changeTokenMemory.get(hash) || null;
+}
+
+async function bumpChangeTokenAttempts(env, rec) {
+  const attempts = (rec.attempts || 0) + 1;
+  if (env && env.DB) {
+    try { await env.DB.prepare('UPDATE pwd_change_tokens SET attempts = ?2 WHERE token_hash = ?1').bind(rec.hash, attempts).run(); return; } catch {}
+  }
+  if (changeTokenMemory.has(rec.hash)) changeTokenMemory.set(rec.hash, { ...rec, attempts });
+}
+
+async function clearChangeTokens(env, username, hash) {
+  if (env && env.DB) {
+    try {
+      await env.DB.prepare('DELETE FROM pwd_change_tokens WHERE username = ?1').bind(String(username || '').toLowerCase()).run();
+      return;
+    } catch {}
+  }
+  for (const [k, v] of changeTokenMemory) if (v.username === String(username || '').toLowerCase() || k === hash) changeTokenMemory.delete(k);
+}
+
+function validateNewPassword(newPassword, user) {
+  if (!newPassword || String(newPassword).length < 8) return 'New password must be at least 8 characters long.';
+  if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) return 'New password must contain both letters and numbers.';
+  if (GENERIC_PASSWORDS.includes(newPassword)) return 'That is one of the default passwords. Choose a new personal password instead.';
+  if (user && (String(newPassword).toLowerCase() === String(user.username || '').toLowerCase() || String(newPassword) === String(user.reference_id || ''))) return 'New password cannot be your username or ID.';
+  return null;
+}
+
+async function mustChangeResponse(env, user) {
+  const change_token = await issueChangeToken(env, user);
+  return jsonResponse({
+    success: true,
+    session: false,
+    must_change_password: true,
+    message: 'You signed in with the default password. Set a new personal password to continue.',
+    change_token,
+    user: {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      full_name: user.full_name,
+      reference_id: user.reference_id
+    }
+  }, 200);
+}
+
+// Strict token resolution (the same rule as the strict /api/auth/me handler):
+// the token must be a well-formed issued token whose username resolves to a
+// real account. Returns the user record or null.
+function resolveTokenUser(dbData, rawToken) {
+  const tokenMatch = /^eagle_([a-z_]+)_([A-Za-z0-9+/=]+)$/.exec(rawToken || '');
+  if (!tokenMatch) return null;
+  try {
+    const decoded = atob(tokenMatch[2]);
+    const sep = decoded.lastIndexOf(':');
+    const uname = sep > 0 ? decoded.slice(0, sep) : '';
+    const stamp = sep > 0 ? decoded.slice(sep + 1) : '';
+    if (!uname || !/^\d+$/.test(stamp)) return null;
+    const clean = uname.toLowerCase();
+    return (dbData.users || []).find(u =>
+      (u.username || '').toLowerCase() === clean ||
+      (u.reference_id || '').toLowerCase() === clean ||
+      (u.email || '').toLowerCase() === clean
+    ) || null;
+  } catch { return null; }
+}
+
 // Shared matcher for the WhatsApp OTP flow: by username, reference ID, or a
 // phone number suffix-matched against the linked staff record.
 function findOtpUser(dbData, rawInput) {
@@ -517,7 +675,31 @@ async function handleRequest(context, dbData) {
     const phoneKey = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : (cleanDigits.length >= 7 ? cleanDigits : '');
 
     const isSuperAdminMatch = cleanUser === 'superadmin' || cleanUser === 'director@eaglepowerschools.com.ng';
-    if (isSuperAdminMatch && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) {
+    if (isSuperAdminMatch) {
+      const execUser = (dbData.users || []).find(u => (u.username || '').toLowerCase() === 'superadmin')
+        || { id: 1, username: 'superadmin', email: 'director@eaglepowerschools.com.ng', role: 'superadmin', full_name: 'Proprietor & Director', reference_id: null };
+
+      // Once an individual password is set it replaces the shared executive
+      // passwords; while only a shared password exists, signing in with it
+      // forces a password change before the console opens.
+      if (await getUserCredential(env, 'superadmin')) {
+        if (!(await verifyUserCredential(env, 'superadmin', password || ''))) {
+          return jsonResponse({
+            success: false,
+            session: false,
+            message: 'Invalid executive credentials. Please verify your root passphrase.'
+          }, 401);
+        }
+      } else if (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!') {
+        return mustChangeResponse(env, execUser);
+      } else {
+        return jsonResponse({
+          success: false,
+          session: false,
+          message: 'Invalid executive credentials. Please verify your root passphrase.'
+        }, 401);
+      }
+
       auditLogStore.unshift({
         id: auditLogStore.length + 101,
         timestamp: new Date().toISOString(),
@@ -537,12 +719,12 @@ async function handleRequest(context, dbData) {
         message: 'Executive Console root access granted.',
         token,
         user: {
-          id: 1,
+          id: execUser.id,
           username: 'superadmin',
           email: 'director@eaglepowerschools.com.ng',
           role: 'superadmin',
-          full_name: 'Proprietor & Director',
-          reference_id: null
+          full_name: execUser.full_name || 'Proprietor & Director',
+          reference_id: execUser.reference_id ?? null
         }
       }, 200, {
         'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
@@ -571,129 +753,12 @@ async function handleRequest(context, dbData) {
     const cleanDigits = cleanUser.replace(/\D/g, '');
     const phoneKey = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : (cleanDigits.length >= 7 ? cleanDigits : '');
 
-    // SuperAdmin
-    if ((cleanUser === 'superadmin' || cleanUser === 'director@eaglepowerschools.com.ng') && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) {
-      auditLogStore.unshift({
-        id: auditLogStore.length + 101,
-        timestamp: new Date().toISOString(),
-        action: 'SUPERADMIN_LOGIN',
-        module: 'AUTH',
-        user_id: 1,
-        username: 'superadmin',
-        role: 'superadmin',
-        ip_address: request.headers.get('cf-connecting-ip') || '127.0.0.1',
-        details: 'SuperAdmin authenticated from Cloudflare Edge'
-      });
-
-      const token = 'eagle_root_exec_' + btoa('superadmin:' + Date.now());
-      return jsonResponse({
-        success: true,
-        session: true,
-        message: 'SuperAdmin login successful.',
-        token,
-        user: {
-          id: 1,
-          username: 'superadmin',
-          email: 'director@eaglepowerschools.com.ng',
-          role: 'superadmin',
-          full_name: 'Proprietor & Director',
-          reference_id: null
-        }
-      }, 200, {
-        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
-      });
-    }
-
-    // Admin / Principal
-    if (cleanUser === 'admin' && password === 'EagleAdmin2025!') {
-      const token = 'eagle_admin_' + btoa('admin:' + Date.now());
-      return jsonResponse({
-        success: true,
-        session: true,
-        message: 'Login successful.',
-        token,
-        user: {
-          id: 2,
-          username: 'admin',
-          email: 'principal@eaglepowerschools.com.ng',
-          role: 'admin',
-          full_name: 'Principal / School Administrator',
-          reference_id: 'EPS-ADM-01'
-        }
-      }, 200, {
-        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
-      });
-    }
-
-    // Teacher
-    if (cleanUser === 'teacher' && password === 'Teacher2025!') {
-      const token = 'eagle_teacher_' + btoa('teacher:' + Date.now());
-      return jsonResponse({
-        success: true,
-        session: true,
-        message: 'Login successful.',
-        token,
-        user: {
-          id: 3,
-          username: 'teacher',
-          email: 'teacher@eaglepowerschools.com.ng',
-          role: 'teacher',
-          full_name: 'Senior Academic Faculty',
-          reference_id: 'EPS-TCH-01'
-        }
-      }, 200, {
-        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
-      });
-    }
-
-    // Bursar
-    if (cleanUser === 'bursar' && password === 'Bursar2025!') {
-      const token = 'eagle_bursar_' + btoa('bursar:' + Date.now());
-      return jsonResponse({
-        success: true,
-        session: true,
-        message: 'Login successful.',
-        token,
-        user: {
-          id: 4,
-          username: 'bursar',
-          email: 'bursary@eaglepowerschools.com.ng',
-          role: 'bursar',
-          full_name: 'School Bursar / Finance Head',
-          reference_id: 'EPS-BUR-01'
-        }
-      }, 200, {
-        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
-      });
-    }
-
-    // Student (ESE2009012)
-    if (cleanUser === 'ese2009012' && (password === 'Eagle2025!' || password === 'ESE2009012')) {
-      const token = 'eagle_student_' + btoa('ese2009012:' + Date.now());
-      return jsonResponse({
-        success: true,
-        session: true,
-        message: 'Login successful.',
-        token,
-        user: {
-          id: 5,
-          username: 'ESE2009012',
-          email: 'student@eaglepowerschools.com.ng',
-          role: 'student',
-          full_name: 'Ugochi Eze',
-          reference_id: 'ESE2009012',
-          student: {
-            admission_no: 'ESE2009012',
-            first_name: 'Ugochi',
-            last_name: 'Eze',
-            class_name: 'JSS2',
-            division: 'Junior College'
-          }
-        }
-      }, 200, {
-        'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
-      });
-    }
+    // All accounts - including the generic 'admin'/'teacher'/'bursar'
+    // usernames, which belong to real staff records - resolve through the
+    // dynamic lookup below, so individual credentials and the forced
+    // password-change rule apply uniformly. The former hardcoded branches,
+    // including the synthetic ESE2009012 student (not a real account), were
+    // removed 2026-11-11.
 
     // Dynamic user lookup for all faculty, students, parents, and administrative staff
     const matchedUser = (dbData.users || []).find(u => {
@@ -738,12 +803,23 @@ async function handleRequest(context, dbData) {
 
     if (matchedUser) {
       let isValidPass = false;
-      if (matchedUser.role === 'superadmin' && (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!')) isValidPass = true;
-      else if (matchedUser.role === 'admin' && (password === 'EagleAdmin2025!' || password === 'EagleStaff2025!')) isValidPass = true;
-      else if (matchedUser.role === 'teacher' && (password === 'EagleStaff2025!' || password === 'Teacher2025!')) isValidPass = true;
-      else if (matchedUser.role === 'bursar' && (password === 'Bursar2025!' || password === 'EagleStaff2025!')) isValidPass = true;
+      let usedGeneric = false;
+      if (STAFF_ROLES.includes(matchedUser.role)) {
+        const credKey = (matchedUser.username || '').toLowerCase();
+        if (await getUserCredential(env, credKey)) {
+          // An individual password, once set, is the ONLY password.
+          isValidPass = await verifyUserCredential(env, credKey, password || '');
+        } else if ((STAFF_GENERIC_BY_ROLE[matchedUser.role] || []).includes(password)) {
+          isValidPass = true;
+          usedGeneric = true;
+        }
+      }
       else if (matchedUser.role === 'student' && (password === 'Eagle2025!' || password === matchedUser.username || password === matchedUser.reference_id)) isValidPass = true;
       else if (matchedUser.role === 'parent' && (password === 'EagleParent2025!' || password === 'Eagle2025!' || password === matchedUser.reference_id)) isValidPass = true;
+
+      if (isValidPass && usedGeneric) {
+        return mustChangeResponse(env, matchedUser);
+      }
 
       if (isValidPass) {
         const studentInfo = matchedUser.role === 'student'
@@ -883,24 +959,45 @@ async function handleRequest(context, dbData) {
     const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
     const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
 
-    if (!rawToken) {
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
       return jsonResponse({ success: false, message: 'Authentication required to update password.' }, 401);
+    }
+    if (!STAFF_ROLES.includes(tokenUser.role)) {
+      return jsonResponse({ success: false, message: 'Students and parents sign in with their admission or reference number, so there is no separate password to change.' }, 400);
     }
 
     const { old_password, current_password, new_password } = body;
     const currentPass = current_password || old_password;
-    if (!currentPass || !new_password || new_password.length < 8 || !/[A-Za-z]/.test(new_password) || !/\d/.test(new_password)) {
-      return jsonResponse({
-        success: false,
-        message: 'New password must be at least 8 characters long and contain both letters and numbers.'
-      }, 400);
+    if (!currentPass) {
+      return jsonResponse({ success: false, message: 'Enter your current password.' }, 400);
     }
+    const pwError = validateNewPassword(new_password, tokenUser);
+    if (pwError) return jsonResponse({ success: false, message: pwError }, 400);
+    if (new_password === currentPass) {
+      return jsonResponse({ success: false, message: 'New password must be different from your current password.' }, 400);
+    }
+
+    const credKey = (tokenUser.username || '').toLowerCase();
+    let currentOk;
+    if (await getUserCredential(env, credKey)) {
+      currentOk = await verifyUserCredential(env, credKey, currentPass);
+    } else {
+      currentOk = (STAFF_GENERIC_BY_ROLE[tokenUser.role] || []).includes(currentPass);
+    }
+    if (!currentOk) {
+      return jsonResponse({ success: false, message: 'Your current password is incorrect.' }, 401);
+    }
+
+    await saveUserCredential(env, credKey, new_password);
 
     auditLogStore.unshift({
       id: auditLogStore.length + 101,
       timestamp: new Date().toISOString(),
       action: 'PASSWORD_CHANGED',
       module: 'AUTH',
+      username: tokenUser.username,
+      role: tokenUser.role,
       ip_address: request.headers.get('cf-connecting-ip') || '127.0.0.1',
       details: 'User password successfully updated.'
     });
@@ -911,144 +1008,57 @@ async function handleRequest(context, dbData) {
     }, 200);
   }
 
-  // 5. Session Validation (/api/auth/me)
-  if (path === '/api/auth/me') {
-    const authHeader = request.headers.get('Authorization') || '';
-    const cookieHeader = request.headers.get('Cookie') || '';
-    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
-    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+  // 4c. Forced Password Change (/api/auth/force-change-password)
+  // A staff user who signed in with a generic password receives a single-use
+  // change token instead of a session; this endpoint exchanges it for an
+  // individual password and a real session.
+  if (path === '/api/auth/force-change-password' && method === 'POST') {
+    const { change_token, new_password } = body;
+    const expired = () => jsonResponse({ success: false, message: 'This password-change session has expired. Sign in again with the default password to restart.' }, 401);
+    if (!change_token) return expired();
 
-    if (!rawToken) {
-      return jsonResponse({ success: false, session: false, message: 'Unauthenticated' }, 401);
+    const rec = await readChangeToken(env, change_token);
+    if (!rec || rec.expires <= Date.now() || rec.attempts >= 5) return expired();
+
+    const tokenUser = (dbData.users || []).find(u => (u.username || '').toLowerCase() === rec.username);
+    if (!tokenUser || !STAFF_ROLES.includes(tokenUser.role)) return expired();
+
+    const pwError = validateNewPassword(new_password, tokenUser);
+    if (pwError) {
+      await bumpChangeTokenAttempts(env, rec);
+      return jsonResponse({ success: false, message: pwError }, 400);
     }
 
-    if (rawToken.includes('exec') || rawToken.includes('superadmin')) {
-      return jsonResponse({
-        success: true,
-        session: true,
-        user: {
-          id: 1,
-          username: 'superadmin',
-          email: 'director@eaglepowerschools.com.ng',
-          role: 'superadmin',
-          full_name: 'Proprietor & Director'
-        }
-      });
-    }
+    await saveUserCredential(env, rec.username, new_password);
+    await clearChangeTokens(env, rec.username, rec.hash);
 
-    // Check if token format is eagle_${role}_base64(username:timestamp)
-    let parsedUsername = null;
-    let parsedRole = null;
-    try {
-      const parts = rawToken.split('_');
-      if (parts.length >= 3) {
-        parsedRole = parts[1];
-        const decoded = atob(parts.slice(2).join('_'));
-        parsedUsername = decoded.split(':')[0];
-      }
-    } catch {
-      // ignore
-    }
+    auditLogStore.unshift({
+      id: auditLogStore.length + 101,
+      timestamp: new Date().toISOString(),
+      action: 'PASSWORD_CHANGED',
+      module: 'AUTH',
+      username: tokenUser.username,
+      role: tokenUser.role,
+      ip_address: request.headers.get('cf-connecting-ip') || '127.0.0.1',
+      details: 'Staff user replaced the default password with an individual password at sign-in.'
+    });
 
-    if (parsedUsername) {
-      const cleanUser = parsedUsername.toLowerCase();
-      const matchedUser = (dbData.users || []).find(u => {
-        const uName = (u.username || '').toLowerCase();
-        const uRef = (u.reference_id || '').toLowerCase();
-        const uEmail = (u.email || '').toLowerCase();
-        return uName === cleanUser || uRef === cleanUser || uEmail === cleanUser;
-      });
+    const studentInfo = tokenUser.role === 'student'
+      ? (dbData.students || []).find(s2 => s2.admission_no === tokenUser.reference_id || s2.id === tokenUser.reference_id)
+      : undefined;
+    const staffInfo = (['teacher', 'admin', 'bursar'].includes(tokenUser.role))
+      ? (dbData.staff || []).find(st => st.staff_no === tokenUser.reference_id || st.name?.toLowerCase() === tokenUser.full_name?.toLowerCase())
+      : undefined;
 
-      if (matchedUser) {
-        const studentInfo = matchedUser.role === 'student'
-          ? (dbData.students || []).find(s => s.admission_no === matchedUser.reference_id || s.id === matchedUser.reference_id)
-          : undefined;
-
-        const staffInfo = (['teacher', 'admin', 'bursar'].includes(matchedUser.role))
-          ? (dbData.staff || []).find(st => st.staff_no === matchedUser.reference_id || st.name?.toLowerCase() === matchedUser.full_name?.toLowerCase())
-          : undefined;
-
-        return jsonResponse({
-          success: true,
-          session: true,
-          user: {
-            ...matchedUser,
-            student: studentInfo,
-            staff: staffInfo
-          }
-        });
-      }
-    }
-
-    if (rawToken.includes('admin')) {
-      return jsonResponse({
-        success: true,
-        session: true,
-        user: {
-          id: 2,
-          username: 'admin',
-          email: 'principal@eaglepowerschools.com.ng',
-          role: 'admin',
-          full_name: 'Principal / School Administrator',
-          reference_id: 'EPS-ADM-01'
-        }
-      });
-    }
-
-    if (rawToken.includes('teacher')) {
-      return jsonResponse({
-        success: true,
-        session: true,
-        user: {
-          id: 3,
-          username: 'teacher',
-          email: 'teacher@eaglepowerschools.com.ng',
-          role: 'teacher',
-          full_name: 'Senior Academic Faculty',
-          reference_id: 'EPS-TCH-01'
-        }
-      });
-    }
-
-    if (rawToken.includes('bursar')) {
-      return jsonResponse({
-        success: true,
-        session: true,
-        user: {
-          id: 4,
-          username: 'bursar',
-          email: 'bursary@eaglepowerschools.com.ng',
-          role: 'bursar',
-          full_name: 'School Bursar / Finance Head',
-          reference_id: 'EPS-BUR-01'
-        }
-      });
-    }
-
-    if (rawToken.includes('student')) {
-      return jsonResponse({
-        success: true,
-        session: true,
-        user: {
-          id: 5,
-          username: 'ESE2009012',
-          email: 'student@eaglepowerschools.com.ng',
-          role: 'student',
-          full_name: 'Ugochi Eze',
-          reference_id: 'ESE2009012'
-        }
-      });
-    }
-
+    const token = `eagle_${tokenUser.role}_` + btoa(`${tokenUser.username}:${Date.now()}`);
     return jsonResponse({
       success: true,
       session: true,
-      user: {
-        id: 2,
-        username: 'admin',
-        role: 'admin',
-        full_name: 'Principal / School Administrator'
-      }
+      message: 'Password set. You are now signed in.',
+      token,
+      user: { ...tokenUser, student: studentInfo, staff: staffInfo }
+    }, 200, {
+      'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
     });
   }
 

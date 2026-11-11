@@ -18,3 +18,9 @@ CREATE TABLE IF NOT EXISTS staff_store (
   deleted INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS marks_store (
+  id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  deleted INTEGER DEFAULT 0,
+  updated_at TEXT DEFAULT ''
+);

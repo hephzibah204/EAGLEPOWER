@@ -67,7 +67,7 @@ async function persistAttendance(env, classId, date, saved) {
 // Durable record stores (D1 tables classes_store / subjects_store / staff_store):
 // each row holds the full merged record as JSON; deleted=1 hides a baseline record.
 // In-memory maps mirror the same contract when the DB binding is absent.
-const memStores = { classes_store: new Map(), subjects_store: new Map(), staff_store: new Map() };
+const memStores = { classes_store: new Map(), subjects_store: new Map(), staff_store: new Map(), marks_store: new Map() };
 
 async function loadStoreMap(env, table) {
   if (env && env.DB) {
@@ -123,6 +123,58 @@ function enrichClassRecord(cls, staffList) {
     teacher_id: cls.class_teacher_id ?? null,
     teacher_name: teacher ? teacher.name : null
   };
+}
+
+// Division grading scheme (Abiodun, 2026-11-11): Primary & Nursery classes use
+// CA1 20 + CA2 20 and Exam 60; Secondary (Junior/Senior College) uses CA 30, Exam 70.
+function gradingSchemeForDivision(division) {
+  const div = (division || '').toLowerCase();
+  const primary = div.includes('primary') || div.includes('basic') || div.includes('nursery') || div.includes('creche') || div.includes('eyfs');
+  return primary
+    ? { primary: true, ca1Max: 20, ca2Max: 20, projectMax: 0, caMax: 40, examMax: 60 }
+    : { primary: false, ca1Max: 10, ca2Max: 10, projectMax: 10, caMax: 30, examMax: 70 };
+}
+
+function clampScore(value, max) {
+  const n = Number(value);
+  if (!isFinite(n)) return 0;
+  return Math.min(max, Math.max(0, Math.round(n * 10) / 10));
+}
+
+function computeEntryScores(scheme, entry) {
+  const hasComponents = ['ca1_score', 'ca2_score', 'project_score']
+    .some(k => entry[k] !== undefined && entry[k] !== null && entry[k] !== '');
+  let ca1 = null, ca2 = null, project = null, ca;
+  if (hasComponents) {
+    ca1 = clampScore(entry.ca1_score || 0, scheme.ca1Max);
+    ca2 = clampScore(entry.ca2_score || 0, scheme.ca2Max);
+    project = scheme.primary ? null : clampScore(entry.project_score || 0, scheme.projectMax);
+    ca = ca1 + ca2 + (project || 0);
+  } else {
+    ca = clampScore(entry.ca_score || 0, scheme.caMax);
+  }
+  const exam = clampScore(entry.exam_score || 0, scheme.examMax);
+  const total = ca + exam;
+  let grade = 'F9', remark = 'Fail';
+  if (total >= 75) { grade = 'A1'; remark = 'Distinction / Excellent'; }
+  else if (total >= 70) { grade = 'B2'; remark = 'Very Good'; }
+  else if (total >= 65) { grade = 'B3'; remark = 'Good'; }
+  else if (total >= 60) { grade = 'C4'; remark = 'Credit'; }
+  else if (total >= 55) { grade = 'C5'; remark = 'Credit'; }
+  else if (total >= 50) { grade = 'C6'; remark = 'Credit'; }
+  else if (total >= 45) { grade = 'D7'; remark = 'Pass'; }
+  else if (total >= 40) { grade = 'E8'; remark = 'Weak Pass'; }
+  return { ca1_score: ca1, ca2_score: ca2, project_score: project, ca_score: ca, exam_score: exam, total_score: total, grade, remark };
+}
+
+async function loadMergedMarks(env, dbData) {
+  const storeMap = await loadStoreMap(env, 'marks_store');
+  const stored = [];
+  for (const row of storeMap.values()) {
+    if (!row.deleted && row.data) stored.push(row.data);
+  }
+  // Stored (teacher-saved) marks come first so they win over baseline rows.
+  return [...stored, ...(dbData.marks || [])];
 }
 
 const whatsappBroadcastStore = [
@@ -1527,12 +1579,19 @@ async function handleRequest(context, dbData) {
 
   if (path === '/api/executive/scores/override' && method === 'POST') {
     const { student_id, subject_id, ca1 = 0, ca2 = 0, exam = 0 } = body;
-    const total = Number(ca1) + Number(ca2) + Number(exam);
+    const ovStudent = (dbData.students || []).find(s => String(s.id) === String(student_id));
+    const ovClass = ovStudent ? (dbData.classes || []).find(c => String(c.id) === String(ovStudent.class_id)) : null;
+    const ovScheme = gradingSchemeForDivision(ovClass?.division);
+    const ovCa1 = clampScore(ca1, ovScheme.primary ? ovScheme.ca1Max : ovScheme.caMax);
+    const ovCa2 = clampScore(ca2, ovScheme.primary ? ovScheme.ca2Max : ovScheme.caMax);
+    const ovCa = Math.min(ovScheme.caMax, ovCa1 + ovCa2);
+    const ovExam = clampScore(exam, ovScheme.examMax);
+    const total = ovCa + ovExam;
     const grade = total >= 75 ? 'A1' : total >= 70 ? 'B2' : total >= 65 ? 'B3' : total >= 50 ? 'C6' : 'F9';
     return jsonResponse({
       success: true,
       message: `Score updated: Total ${total}/100, Grade ${grade}`,
-      score: { ca1: Number(ca1), ca2: Number(ca2), exam: Number(exam), total, grade }
+      score: { ca1: ovCa1, ca2: ovCa2, exam: ovExam, total, grade }
     });
   }
 
@@ -1843,8 +1902,9 @@ async function handleRequest(context, dbData) {
     const classStudents = (dbData.students || []).filter(s => String(s.class_id) === String(classId));
     const targetStudents = classStudents.length > 0 ? classStudents : (dbData.students || []).slice(0, 15);
 
+    const allMarks = await loadMergedMarks(env, dbData);
     const rows = targetStudents.map(st => {
-      const existing = (dbData.marks || []).find(m =>
+      const existing = allMarks.find(m =>
         String(m.student_id) === String(st.id) &&
         String(m.subject_id) === String(subjectId) &&
         (m.session === session || !m.session) &&
@@ -1981,45 +2041,39 @@ async function handleRequest(context, dbData) {
 
     if (Array.isArray(entries)) {
       if (!dbData.marks) dbData.marks = [];
-      entries.forEach(entry => {
+      const schemeCls = (dbData.classes || []).find(c => String(c.id) === String(class_id));
+      const scheme = gradingSchemeForDivision(schemeCls?.division);
+      for (const entry of entries) {
         const existingIdx = dbData.marks.findIndex(m =>
           String(m.student_id) === String(entry.student_id) &&
           String(m.subject_id) === String(subject_id)
         );
-        const ca = Number(entry.ca_score || 0);
-        const exam = Number(entry.exam_score || 0);
-        const total = ca + exam;
-        let grade = 'F9', remark = 'Fail';
-        if (total >= 75) { grade = 'A1'; remark = 'Distinction / Excellent'; }
-        else if (total >= 70) { grade = 'B2'; remark = 'Very Good'; }
-        else if (total >= 65) { grade = 'B3'; remark = 'Good'; }
-        else if (total >= 60) { grade = 'C4'; remark = 'Credit'; }
-        else if (total >= 55) { grade = 'C5'; remark = 'Credit'; }
-        else if (total >= 50) { grade = 'C6'; remark = 'Credit'; }
-        else if (total >= 45) { grade = 'D7'; remark = 'Pass'; }
-        else if (total >= 40) { grade = 'E8'; remark = 'Weak Pass'; }
-
+        const scores = computeEntryScores(scheme, entry);
         const record = {
           id: existingIdx >= 0 ? dbData.marks[existingIdx].id : dbData.marks.length + 1,
           student_id: entry.student_id,
           subject_id: parseInt(subject_id),
+          class_id: class_id !== undefined && class_id !== null ? parseInt(class_id) : undefined,
           session,
           term,
-          ca_score: ca,
-          exam_score: exam,
-          total_score: total,
-          grade,
-          remark,
+          ca1_score: scores.ca1_score,
+          ca2_score: scores.ca2_score,
+          project_score: scores.project_score,
+          ca_score: scores.ca_score,
+          exam_score: scores.exam_score,
+          total_score: scores.total_score,
+          grade: scores.grade,
+          remark: scores.remark,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
-
         if (existingIdx >= 0) {
           dbData.marks[existingIdx] = { ...dbData.marks[existingIdx], ...record };
         } else {
           dbData.marks.push(record);
         }
-      });
+        await upsertStoreRow(env, 'marks_store', `${entry.student_id}|${subject_id}|${session}|${term}`, record);
+      }
     }
 
     return jsonResponse({
@@ -2091,7 +2145,15 @@ async function handleRequest(context, dbData) {
       return jsonResponse({ success: false, message: 'Student report card not found.' }, 404);
     }
 
-    const studentMarks = (dbData.marks || []).filter(m => String(m.student_id) === String(student.id));
+    const allMarks = await loadMergedMarks(env, dbData);
+    const seenMarkKeys = new Set();
+    const studentMarks = allMarks.filter(m => {
+      if (String(m.student_id) !== String(student.id)) return false;
+      const markKey = `${m.subject_id}|${m.session || ''}|${m.term || ''}`;
+      if (seenMarkKeys.has(markKey)) return false;
+      seenMarkKeys.add(markKey);
+      return true;
+    });
     const subjectsList = dbData.subjects || [];
 
     const grades = (studentMarks.length > 0 ? studentMarks : subjectsList.slice(0, 9)).map((m, idx) => {

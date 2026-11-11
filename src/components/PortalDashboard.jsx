@@ -311,6 +311,11 @@ export default function PortalDashboard({
   const [gradebookTerm, setGradebookTerm] = useState('Second Term');
   const [gradebookMode, setGradebookMode] = useState('standard'); // 'standard' (30/70) | 'multi' (10/10/10/70)
   const [gradebookClassInfo, setGradebookClassInfo] = useState(null);
+  // Division grading scheme (Abiodun, 2026-11-11): Primary & Nursery classes =
+  // CA1 20 + CA2 20 and Exam 60; Secondary (Junior/Senior College) = CA 30, Exam 70.
+  const gbDivision = (gradebookClassInfo?.division || '').toLowerCase();
+  const gbIsPrimary = gbDivision.includes('primary') || gbDivision.includes('basic') || gbDivision.includes('nursery') || gbDivision.includes('creche') || gbDivision.includes('eyfs');
+  const gbEffectiveMode = gbIsPrimary ? 'primary' : gradebookMode;
   const [classSheetRows, setClassSheetRows] = useState([]);
   const classSheetRequest = useRef(0);
   const [isSavingScores, setIsSavingScores] = useState(false);
@@ -2485,17 +2490,17 @@ export default function PortalDashboard({
     const updated = [...classSheetRows];
     const row = { ...updated[index] };
 
-    if (field === 'ca1') row.ca1_score = Math.min(10, num);
-    if (field === 'ca2') row.ca2_score = Math.min(10, num);
-    if (field === 'project') row.project_score = Math.min(10, num);
+    if (field === 'ca1') row.ca1_score = Math.min(gbIsPrimary ? 20 : 10, num);
+    if (field === 'ca2') row.ca2_score = Math.min(gbIsPrimary ? 20 : 10, num);
+    if (field === 'project') row.project_score = gbIsPrimary ? 0 : Math.min(10, num);
 
     if (field === 'ca1' || field === 'ca2' || field === 'project') {
-      row.ca_score = (row.ca1_score || 0) + (row.ca2_score || 0) + (row.project_score || 0);
+      row.ca_score = (row.ca1_score || 0) + (row.ca2_score || 0) + (gbIsPrimary ? 0 : (row.project_score || 0));
     } else if (field === 'ca') {
-      row.ca_score = Math.min(30, num);
+      row.ca_score = Math.min(gbIsPrimary ? 40 : 30, num);
     }
 
-    if (field === 'exam') row.exam_score = Math.min(70, num);
+    if (field === 'exam') row.exam_score = Math.min(gbIsPrimary ? 60 : 70, num);
 
     row.total_score = (row.ca_score || 0) + (row.exam_score || 0);
 
@@ -6651,6 +6656,11 @@ export default function PortalDashboard({
 
                       {/* Mode Switcher */}
                       <div className="flex items-center gap-2 mt-3 flex-wrap">
+                        {gbIsPrimary ? (
+                          <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-indigo-950/60 text-indigo-300 border border-indigo-800">
+                            Primary Scheme — Test 1 (20) + Test 2 (20) · Exam (60)
+                          </span>
+                        ) : (<>
                         <button
                           type="button"
                           onClick={() => setGradebookMode('standard')}
@@ -6678,6 +6688,7 @@ export default function PortalDashboard({
                         <Tooltip text="Standard: Enter one CA total (max 30) + Exam (max 70). Multi-Component: Break CA into Test 1, Test 2, and Project (10 marks each = 30 total CA). Use whichever matches your school's assessment format." wide>
                           <HelpCircle className="w-4 h-4 text-slate-600 hover:text-amber-400 cursor-help" />
                         </Tooltip>
+                        </>)}
                       </div>
                     </div>
 
@@ -7006,7 +7017,13 @@ export default function PortalDashboard({
                         <tr className="bg-slate-900 text-slate-400 border-b border-slate-800 uppercase font-semibold text-[10px]">
                           <th className="p-3">Admission No</th>
                           <th className="p-3">Student Name</th>
-                          {gradebookMode === 'multi' ? (
+                          {gbEffectiveMode === 'primary' ? (
+                            <>
+                              <th className="p-3 text-center bg-indigo-950/40 text-indigo-300">Test 1 (20)</th>
+                              <th className="p-3 text-center bg-indigo-950/40 text-indigo-300">Test 2 (20)</th>
+                              <th className="p-3 text-center bg-indigo-900/40 text-indigo-200">CA Total (40)</th>
+                            </>
+                          ) : gradebookMode === 'multi' ? (
                             <>
                               <th className="p-3 text-center bg-indigo-950/40 text-indigo-300">Test 1 (10)</th>
                               <th className="p-3 text-center bg-indigo-950/40 text-indigo-300">Test 2 (10)</th>
@@ -7016,7 +7033,7 @@ export default function PortalDashboard({
                           ) : (
                             <th className="p-3 text-center">CA Test (Max 30)</th>
                           )}
-                          <th className="p-3 text-center">Terminal Exam (Max 70)</th>
+                          <th className="p-3 text-center">Terminal Exam (Max {gbIsPrimary ? 60 : 70})</th>
                           <th className="p-3 text-center">Total (100)</th>
                           <th className="p-3 text-center">Grade</th>
                           <th className="p-3">Teacher Remark</th>
@@ -7042,7 +7059,38 @@ export default function PortalDashboard({
                             <td className="p-3 font-mono font-bold text-amber-400">{r.admission_no}</td>
                             <td className="p-3 font-bold text-white">{r.first_name} {r.last_name}</td>
                             
-                            {gradebookMode === 'multi' ? (
+                            {gbEffectiveMode === 'primary' ? (
+                              <>
+                                <td className="p-3 text-center bg-indigo-950/20">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    value={r.ca1_score !== undefined && r.ca1_score !== null ? r.ca1_score : ''}
+                                    onChange={(e) => handleScoreEdit(originalIndex, 'ca1', e.target.value)}
+                                    placeholder="0"
+                                    disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                </td>
+                                <td className="p-3 text-center bg-indigo-950/20">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    value={r.ca2_score !== undefined && r.ca2_score !== null ? r.ca2_score : ''}
+                                    onChange={(e) => handleScoreEdit(originalIndex, 'ca2', e.target.value)}
+                                    placeholder="0"
+                                    disabled={activeRole === 'teacher' && !canGradeCurrentSubject}
+                                    className="w-14 px-2 py-1 rounded bg-slate-900 border border-indigo-700/50 text-center font-bold text-indigo-300 focus:outline-none focus:border-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  />
+                                </td>
+                                
+                                <td className="p-3 text-center font-bold text-indigo-300 bg-indigo-900/20">
+                                  {r.ca_score || 0}
+                                </td>
+                              </>
+                            ) : gradebookMode === 'multi' ? (
                               <>
                                 <td className="p-3 text-center bg-indigo-950/20">
                                   <input
@@ -7102,7 +7150,7 @@ export default function PortalDashboard({
                               <input
                                 type="number"
                                 min="0"
-                                max="70"
+                                max={gbIsPrimary ? 60 : 70}
                                 value={r.exam_score || 0}
                                 onChange={(e) => handleScoreEdit(originalIndex, 'exam', e.target.value)}
                                 disabled={activeRole === 'teacher' && !canGradeCurrentSubject}

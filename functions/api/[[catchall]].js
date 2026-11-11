@@ -23,6 +23,10 @@ const auditLogStore = [
   }
 ];
 
+// Saved attendance registers for this edge isolate, keyed `${class_id}|${date}`.
+// Matches the in-memory pattern used by the audit and broadcast stores above.
+const attendanceStore = new Map();
+
 const whatsappBroadcastStore = [
   {
     id: 1,
@@ -1090,23 +1094,48 @@ async function handleRequest(context, dbData) {
   }
 
   if (path === '/api/attendance/students') {
-    const students = dbData.students || [];
+    const classId = url.searchParams.get('class_id') || '2';
+    const date = url.searchParams.get('date') || '';
+    const saved = attendanceStore.get(`${classId}|${date}`) || {};
+    const allStudents = dbData.students || [];
+    const classStudents = allStudents.filter(s => String(s.class_id) === String(classId));
+    const records = classStudents.map(s => ({
+      student_id: s.id,
+      admission_no: s.admission_no,
+      first_name: s.first_name,
+      last_name: s.last_name,
+      student_name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+      guardian_name: s.guardian_name,
+      guardian_phone: s.guardian_phone,
+      status: saved[s.id]?.status || 'Unrecorded',
+      remarks: saved[s.id]?.remarks || ''
+    }));
     return jsonResponse({
       success: true,
-      count: students.length,
-      data: students.map(s => ({
-        student_id: s.id,
-        admission_no: s.admission_no,
-        student_name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
-        status: 'present',
-        remarks: ''
-      }))
+      class_id: parseInt(classId),
+      total_students: records.length,
+      records,
+      data: records
     });
   }
 
   if (path === '/api/attendance/students/batch' && method === 'POST') {
+    const classId = body.class_id;
+    const date = body.date || '';
+    const entries = Array.isArray(body.records) ? body.records : [];
+    if (classId === undefined || classId === null || !entries.length) {
+      return jsonResponse({ success: false, message: 'class_id and a non-empty records list are required.' }, 400);
+    }
+    const saved = {};
+    for (const r of entries) {
+      if (r && r.student_id !== undefined && r.student_id !== null) {
+        saved[r.student_id] = { status: r.status || 'Present', remarks: r.remarks || '' };
+      }
+    }
+    attendanceStore.set(`${classId}|${date}`, saved);
     return jsonResponse({
       success: true,
+      count: Object.keys(saved).length,
       message: 'Daily attendance register saved successfully.'
     });
   }
@@ -1298,7 +1327,7 @@ async function handleRequest(context, dbData) {
       return jsonResponse({ success: true, total, data: students });
     }
     const page = Math.max(1, parseInt(url.searchParams.get('page'), 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit'), 10) || 50));
+    const limit = Math.min(1000, Math.max(1, parseInt(url.searchParams.get('limit'), 10) || 50));
     const offset = (page - 1) * limit;
     return jsonResponse({ success: true, total, page, limit, data: students.slice(offset, offset + limit) });
   }
@@ -1351,7 +1380,7 @@ async function handleRequest(context, dbData) {
       subjects: dbData.subjects || [],
       students: {
         total: dbData.students?.length || 0,
-        list: (dbData.students || []).slice(0, 100)
+        list: dbData.students || []
       },
       staff: {
         total: dbData.staff?.length || 0,

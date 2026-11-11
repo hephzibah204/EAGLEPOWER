@@ -316,6 +316,55 @@ export default function PortalDashboard({
   const [isSavingScores, setIsSavingScores] = useState(false);
   const [scoreSaveSuccess, setScoreSaveSuccess] = useState(false);
 
+  // Resolve the user that permission checks should see:
+  // - SuperAdmin previewing the Teacher role gets the real JSS2 Form Teacher
+  //   account (EPS-STF-48), so the preview shows what a teacher actually sees.
+  // - Every other user is merged with their staff-register record, because
+  //   class/subject assignments live on the staff record (assigned_class,
+  //   form_responsibility, role) and session users do not always carry it.
+  // Every teacher is assigned somewhere, as class teacher or subject teacher;
+  // an unresolved user resolves to zero classes and empty student lists.
+  const resolvedUser = React.useMemo(() => {
+    if (!currentUser) return null;
+    if (currentUser.role === 'superadmin' && activeRole === 'teacher') {
+      const jss2Staff = (staff || []).find(s => s.staff_no === 'EPS-STF-48') || {
+        id: 122,
+        staff_no: 'EPS-STF-48',
+        name: 'Ayatalumo Stella-Maris U.',
+        assigned_class: 'SSS1 \u2013 SSS3',
+        form_responsibility: 'Form Mistress, JSS2',
+        role: 'Senior Biology & Agric Educator / Form Mistress JSS2'
+      };
+      return {
+        id: 531,
+        username: 'ayatalumostella',
+        role: 'teacher',
+        reference_id: 'EPS-STF-48',
+        name: 'Ayatalumo Stella-Maris U.',
+        full_name: 'Ayatalumo Stella-Maris U.',
+        staff: jss2Staff,
+        assigned_class: 'JSS2',
+        form_responsibility: 'Form Mistress, JSS2'
+      };
+    }
+    if (currentUser.staff?.assigned_class || currentUser.staff?.form_responsibility) return currentUser;
+    if (currentUser.assigned_class || currentUser.form_responsibility) return currentUser;
+    const ref = String(currentUser.reference_id || '').trim().toLowerCase();
+    const fullName = String(currentUser.full_name || currentUser.name || '').trim().toLowerCase();
+    const match = (staff || []).find(s => {
+      if (ref && String(s.staff_no || '').trim().toLowerCase() === ref) return true;
+      const sName = String(s.name || '').trim().toLowerCase();
+      return Boolean(fullName && sName && (sName === fullName || sName.includes(fullName) || fullName.includes(sName)));
+    });
+    if (!match) return currentUser;
+    return {
+      ...currentUser,
+      staff: match,
+      assigned_class: currentUser.assigned_class || match.assigned_class,
+      form_responsibility: currentUser.form_responsibility || match.form_responsibility
+    };
+  }, [currentUser, activeRole, staff]);
+
   // Dynamic Academic Permissions for Gradebook
   const currentGradebookClassObj = React.useMemo(() => {
     return classes.find(c => String(c.id) === String(selectedClassId)) || classes[0] || null;
@@ -326,20 +375,20 @@ export default function PortalDashboard({
   }, [subjects, selectedSubjectId]);
 
   const allowedGradebookClasses = React.useMemo(() => {
-    return getAllowedClassesForTeacher(currentUser, classes);
-  }, [currentUser, classes]);
+    return getAllowedClassesForTeacher(resolvedUser, classes);
+  }, [resolvedUser, classes]);
 
   const allowedGradebookSubjects = React.useMemo(() => {
-    return getAllowedSubjectsForClass(currentUser, currentGradebookClassObj, subjects);
-  }, [currentUser, currentGradebookClassObj, subjects]);
+    return getAllowedSubjectsForClass(resolvedUser, currentGradebookClassObj, subjects);
+  }, [resolvedUser, currentGradebookClassObj, subjects]);
 
   const isCurrentFormTeacher = React.useMemo(() => {
-    return isFormTeacherOfClass(currentUser, currentGradebookClassObj);
-  }, [currentUser, currentGradebookClassObj]);
+    return isFormTeacherOfClass(resolvedUser, currentGradebookClassObj);
+  }, [resolvedUser, currentGradebookClassObj]);
 
   const canGradeCurrentSubject = React.useMemo(() => {
-    return canTeacherGradeSubject(currentUser, currentGradebookClassObj, currentGradebookSubjectObj, subjects);
-  }, [currentUser, currentGradebookClassObj, currentGradebookSubjectObj, subjects]);
+    return canTeacherGradeSubject(resolvedUser, currentGradebookClassObj, currentGradebookSubjectObj, subjects);
+  }, [resolvedUser, currentGradebookClassObj, currentGradebookSubjectObj, subjects]);
 
   // Bursar States
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -1088,11 +1137,23 @@ export default function PortalDashboard({
         setSubjects(d.data || []);
       }
 
-      // 3. Students
-      const sRes = await (canLoadDashboardResource(activeRole, 'students') ? fetch(`${API_BASE}/students?limit=100`, { headers }).catch(() => null) : null);
-      if (sRes?.ok) {
-        const d = await sRes.json();
-        setStudents(d.data || []);
+      // 3. Students — load the FULL register, following pagination.
+      // A single capped page silently drops whole classes (every secondary
+      // class at 379 students) and leaves teachers with empty student lists.
+      if (canLoadDashboardResource(activeRole, 'students')) {
+        const allStudents = [];
+        let page = 1;
+        const pageLimit = 1000;
+        while (page <= 10) {
+          const sRes = await fetch(`${API_BASE}/students?limit=${pageLimit}&page=${page}`, { headers }).catch(() => null);
+          if (!sRes?.ok) break;
+          const d = await sRes.json();
+          const batch = d.data || [];
+          allStudents.push(...batch);
+          if (!batch.length || !d.total || allStudents.length >= d.total) break;
+          page += 1;
+        }
+        if (allStudents.length) setStudents(allStudents);
       }
 
       // 4. Staff
@@ -1606,14 +1667,41 @@ export default function PortalDashboard({
       const res = await fetch(`${API_BASE}/attendance/students?class_id=${cId}&date=${dDate}`, { headers });
       if (res.ok) {
         const d = await res.json();
-        if (requestId === attendanceRequest.current) setAttendanceRecords(d.records || []);
+        const rawRecs = d.records || d.data || [];
+        // Keep only the requested class when the payload carries class ids,
+        // and normalize status casing ('present' -> 'Present') — the register
+        // counters and save flow compare against Title Case statuses.
+        const recs = rawRecs
+          .filter(r => r.class_id === undefined || r.class_id === null || String(r.class_id) === String(cId))
+          .map(r => ({
+            ...r,
+            student_name: r.student_name || `${r.first_name || ''} ${r.last_name || ''}`.trim(),
+            status: r.status ? (String(r.status).charAt(0).toUpperCase() + String(r.status).slice(1).toLowerCase()) : 'Unrecorded'
+          }));
+        if (requestId === attendanceRequest.current) {
+          if (recs.length > 0) {
+            setAttendanceRecords(recs);
+          } else {
+            // No register rows returned — build the roll-call from the loaded students of this class.
+            setAttendanceRecords(students.filter(s => String(s.class_id) === String(cId)).map(s => ({
+              student_id: s.id,
+              admission_no: s.admission_no,
+              first_name: s.first_name,
+              last_name: s.last_name,
+              student_name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+              guardian_phone: s.guardian_phone,
+              status: 'Unrecorded',
+              remarks: ''
+            })));
+          }
+        }
       }
     } catch (err) {
       console.warn('Error fetching student attendance:', err);
     } finally {
       if (requestId === attendanceRequest.current) setIsLoadingAttendance(false);
     }
-  }, [authToken, API_BASE]);
+  }, [authToken, API_BASE, students]);
 
   // Save student attendance batch
   const handleSaveAttendance = async () => {
@@ -1907,18 +1995,18 @@ export default function PortalDashboard({
 
   // Auto-align Gradebook, Attendance & My Students to an authorized class for the logged-in teacher
   useEffect(() => {
-    if (activeRole === 'teacher' && currentUser && classes.length > 0) {
-      const allowedCls = getAllowedClassesForTeacher(currentUser, classes);
+    if (activeRole === 'teacher' && resolvedUser && classes.length > 0) {
+      const allowedCls = getAllowedClassesForTeacher(resolvedUser, classes);
       if (allowedCls.length > 0) {
         if (!allowedCls.some(c => String(c.id) === String(selectedClassId))) {
           const targetCls = allowedCls[0];
           setSelectedClassId(targetCls.id);
-          const allowedSubs = getAllowedSubjectsForClass(currentUser, targetCls, subjects);
+          const allowedSubs = getAllowedSubjectsForClass(resolvedUser, targetCls, subjects);
           if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
             setSelectedSubjectId(allowedSubs[0].id);
           }
         } else if (currentGradebookClassObj && subjects.length > 0) {
-          const allowedSubs = getAllowedSubjectsForClass(currentUser, currentGradebookClassObj, subjects);
+          const allowedSubs = getAllowedSubjectsForClass(resolvedUser, currentGradebookClassObj, subjects);
           if (allowedSubs.length > 0 && !allowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
             setSelectedSubjectId(allowedSubs[0].id);
           }
@@ -1931,7 +2019,7 @@ export default function PortalDashboard({
         }
       }
     }
-  }, [activeRole, currentUser, classes, subjects, selectedClassId, selectedSubjectId, currentGradebookClassObj, attendanceClassId, myStudentsClassId]);
+  }, [activeRole, resolvedUser, classes, subjects, selectedClassId, selectedSubjectId, currentGradebookClassObj, attendanceClassId, myStudentsClassId]);
 
   // Load student report card
   const fetchReportCard = useCallback(async (admNo) => {
@@ -5953,7 +6041,7 @@ export default function PortalDashboard({
               {/* TEACHER "MY STUDENTS" ROSTER & COMPREHENSIVE ACADEMIC MANAGEMENT HUB */}
               {(activeRole === 'teacher' || activeRole === 'admin' || activeRole === 'superadmin') && activeTab === 'my_students' && (() => {
                 const effectiveClassList = activeRole === 'teacher'
-                  ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes)
+                  ? allowedGradebookClasses
                   : classes;
 
                 const effectiveClassId = myStudentsClassId
@@ -5961,7 +6049,7 @@ export default function PortalDashboard({
                   : (effectiveClassList[0]?.id || classes[0]?.id || 1);
 
                 const currentClassObj = classes.find(c => String(c.id) === String(effectiveClassId)) || effectiveClassList[0] || null;
-                const isFormTeacher = isFormTeacherOfClass(currentUser, currentClassObj);
+                const isFormTeacher = isFormTeacherOfClass(resolvedUser, currentClassObj);
 
                 // Strictly filter students by class
                 const filteredClassStudents = students.filter(s => {
@@ -6036,7 +6124,7 @@ export default function PortalDashboard({
                             >
                               {effectiveClassList.map(c => (
                                 <option key={c.id} value={c.id}>
-                                  {c.name} {isFormTeacherOfClass(currentUser, c) ? '👑 (Your Class)' : ''} ({c.student_count || students.filter(s => String(s.class_id) === String(c.id)).length} pupils)
+                                  {c.name} {isFormTeacherOfClass(resolvedUser, c) ? '👑 (Your Class)' : ''}
                                 </option>
                               ))}
                             </select>
@@ -6321,7 +6409,7 @@ export default function PortalDashboard({
                         className="bg-slate-950 border border-slate-800 text-slate-200 font-bold px-3 py-1.5 rounded-xl"
                       >
                         {(activeRole === 'teacher' ? allowedGradebookClasses : classes).map(c => (
-                          <option key={c.id} value={c.id}>{c.name} ({c.student_count || 0} pupils)</option>
+                          <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
 
@@ -6633,7 +6721,7 @@ export default function PortalDashboard({
                             const val = Number(e.target.value) || e.target.value;
                             setSelectedClassId(val);
                             const targetCls = classes.find(c => String(c.id) === String(val)) || null;
-                            const newAllowedSubs = getAllowedSubjectsForClass(currentUser, targetCls, subjects);
+                            const newAllowedSubs = getAllowedSubjectsForClass(resolvedUser, targetCls, subjects);
                             let nextSubId = selectedSubjectId;
                             if (newAllowedSubs.length > 0 && !newAllowedSubs.some(s => String(s.id) === String(selectedSubjectId))) {
                               nextSubId = newAllowedSubs[0].id;
@@ -6643,11 +6731,11 @@ export default function PortalDashboard({
                           }}
                           className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
                         >
-                          {(allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes).map(c => {
-                            const isForm = isFormTeacherOfClass(currentUser, c);
+                          {allowedGradebookClasses.map(c => {
+                            const isForm = isFormTeacherOfClass(resolvedUser, c);
                             return (
                               <option key={c.id} value={c.id}>
-                                {c.name} {isForm ? '👑 (Your Form Class)' : ''} ({c.student_count || students.filter(s => String(s.class_id) === String(c.id)).length} pupils)
+                                {c.name} {isForm ? '👑 (Your Form Class)' : ''}
                               </option>
                             );
                           })}
@@ -6668,7 +6756,7 @@ export default function PortalDashboard({
                           }}
                           className="bg-slate-900 border border-slate-700 text-slate-200 font-bold px-3 py-1.5 rounded-xl max-w-xs"
                         >
-                          {(allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects).map(s => (
+                          {(activeRole === 'teacher' ? allowedGradebookSubjects : (allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects)).map(s => (
                             <option key={s.id} value={s.id}>
                               {s.name} ({s.code}) {isCurrentFormTeacher ? '• All Subjects Access' : '• Your Subject'}
                             </option>
@@ -7101,7 +7189,7 @@ export default function PortalDashboard({
                         className="bg-slate-950 border border-slate-800 text-slate-200 font-bold px-3 py-1.5 rounded-xl text-xs"
                       >
                         <option value="">All Allowed Classes ({homeworkList.length})</option>
-                        {(activeRole === 'teacher' ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes) : classes).map(c => (
+                        {(activeRole === 'teacher' ? allowedGradebookClasses : classes).map(c => (
                           <option key={c.id} value={c.name}>{c.name}</option>
                         ))}
                       </select>
@@ -9056,7 +9144,7 @@ export default function PortalDashboard({
                     onChange={(e) => setQuickCaSubjectId(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
                   >
-                    {(allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects).map(s => (
+                    {(activeRole === 'teacher' ? allowedGradebookSubjects : (allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects)).map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                     ))}
                   </select>
@@ -10771,7 +10859,7 @@ export default function PortalDashboard({
                       onChange={(e) => setNewHwForm(prev => ({ ...prev, class_id: e.target.value }))}
                       className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
                     >
-                      {(activeRole === 'teacher' ? (allowedGradebookClasses.length > 0 ? allowedGradebookClasses : classes) : classes).map(c => (
+                      {(activeRole === 'teacher' ? allowedGradebookClasses : classes).map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
@@ -10783,7 +10871,7 @@ export default function PortalDashboard({
                       onChange={(e) => setNewHwForm(prev => ({ ...prev, subject_id: e.target.value }))}
                       className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white font-bold focus:outline-none focus:border-amber-400"
                     >
-                      {(activeRole === 'teacher' && allowedGradebookSubjects.length > 0 ? allowedGradebookSubjects : subjects).map(s => (
+                      {(activeRole === 'teacher' ? allowedGradebookSubjects : subjects).map(s => (
                         <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                       ))}
                     </select>

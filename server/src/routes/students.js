@@ -19,10 +19,11 @@ try {
  */
 router.get('/', authenticate, requireRoles('superadmin', 'admin', 'teacher', 'bursar'), (req, res, next) => {
   try {
-    const { q, class_id, section_id, limit = 50, page = 1 } = req.query;
-    const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 100);
-    const safePage = Math.max(parseInt(page) || 1, 1);
-    const offset = (safePage - 1) * safeLimit;
+    const { q, class_id, section_id, limit, page } = req.query;
+    const isPaginated = limit !== undefined || page !== undefined;
+    const safeLimit = isPaginated ? Math.min(Math.max(parseInt(limit) || 50, 1), 500) : null;
+    const safePage = isPaginated ? Math.max(parseInt(page) || 1, 1) : null;
+    const offset = isPaginated ? (safePage - 1) * safeLimit : null;
 
     let conditions = ['s.is_active = 1'];
     const params = [];
@@ -52,7 +53,7 @@ router.get('/', authenticate, requireRoles('superadmin', 'admin', 'teacher', 'bu
     const countStmt = db.prepare(`SELECT COUNT(*) as total FROM students s ${whereClause}`);
     const total = countStmt.get(...params).total;
 
-    const dataStmt = db.prepare(`
+    let querySql = `
       SELECT 
         s.*,
         c.name as class_name, c.division, sec.name as section_name
@@ -61,16 +62,21 @@ router.get('/', authenticate, requireRoles('superadmin', 'admin', 'teacher', 'bu
       LEFT JOIN sections sec ON s.section_id = sec.id
       ${whereClause}
       ORDER BY s.admission_no ASC
-      LIMIT ? OFFSET ?
-    `);
+    `;
 
-    const students = dataStmt.all(...params, safeLimit, offset);
+    const queryParams = [...params];
+    if (isPaginated) {
+      querySql += ' LIMIT ? OFFSET ?';
+      queryParams.push(safeLimit, offset);
+    }
+
+    const dataStmt = db.prepare(querySql);
+    const students = dataStmt.all(...queryParams);
 
     res.json({
       success: true,
       total,
-      page: safePage,
-      limit: safeLimit,
+      ...(isPaginated ? { page: safePage, limit: safeLimit } : {}),
       data: students
     });
   } catch (err) {

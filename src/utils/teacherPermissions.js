@@ -72,6 +72,14 @@ export function expandClassRange(text) {
   const t = (text || '').toUpperCase();
   const classes = new Set();
 
+  // Normalize every dash variant (hyphen with spaces, en dash, em dash, minus)
+  // so any staff range format resolves — including the middle class (SS2 / JSS2).
+  const dashNorm = t.replace(/[\u2010-\u2015\u2212]/g, '-').replace(/\s*-\s*/g, '-');
+  if (dashNorm.includes('SSS1-SSS3') || dashNorm.includes('SS1-SS3')) { classes.add('SS1'); classes.add('SS2'); classes.add('SS3'); }
+  if (dashNorm.includes('JSS1-JSS3')) { classes.add('JSS1'); classes.add('JSS2'); classes.add('JSS3'); }
+  if (dashNorm.includes('BASIC1-BASIC6') || dashNorm.includes('PRIMARY1-PRIMARY6')) { ['PRIMARY1', 'PRIMARY2', 'PRIMARY3', 'PRIMARY4', 'PRIMARY5', 'PRIMARY6'].forEach(c => classes.add(c)); }
+  if (dashNorm.includes('NURSERY1-NURSERY3')) { classes.add('NURSERY1'); classes.add('NURSERY2'); classes.add('NURSERY3'); }
+
   if (t.includes('ALL CLASSES') || t.includes('ALL')) {
     ['CRECHE', 'PRENURSERY', 'NURSERY1', 'NURSERY2', 'NURSERY3', 'PRIMARY1', 'PRIMARY2', 'PRIMARY3', 'PRIMARY4', 'PRIMARY5', 'PRIMARY6', 'JSS1', 'JSS2', 'JSS3', 'SS1', 'SS2', 'SS3'].forEach(c => classes.add(c));
     return classes;
@@ -146,6 +154,13 @@ export function isFormTeacherOfClass(userOrStaff, classObj) {
   const resp = (staff.form_responsibility || '').toUpperCase();
   if (expandClassRange(resp).has(targetNorm)) return true;
 
+  // Form/class responsibility is often carried in the role title itself,
+  // e.g. 'Senior Igbo Language Master & SSS2 Form Master', 'Lead Class Teacher, Basic 2'
+  const roleText = (staff.role || '').toUpperCase();
+  if (/(FORM|CLASS TEACHER|LEAD TEACHER|LEAD CLASS|LEAD EDUCATOR)/.test(roleText)) {
+    if (expandClassRange(roleText).has(targetNorm)) return true;
+  }
+
   // Check structured faculty roster record
   const faculty = getFacultyRecord(userOrStaff);
   if (faculty) {
@@ -196,7 +211,7 @@ export function matchesSubjectForTeacher(teacherSubjectText, sub) {
   if (sCode === 'cca' && (t.includes('cultural & creative') || t.includes('creative arts') || t.includes('cca'))) return true;
   if (sCode === 'vart' && (t.includes('visual art') || t.includes('art'))) return true;
   if (sCode === 'pvs' && (t.includes('pvs') || t.includes('pre-vocational') || t.includes('vocational'))) return true;
-  if ((sCode === 'isc' || sCode === 'bst') && (t.includes('intermediate science') || t.includes('basic science') || t.includes('science'))) return true;
+  if ((sCode === 'isc' || sCode === 'bst') && (t.includes('intermediate science') || t.includes('basic science'))) return true;
   if ((sCode === 'aigb' || sCode === 'igb') && t.includes('igbo')) return true;
   if (sCode === 'frn' && t.includes('french')) return true;
   if (sCode === 'hec' && t.includes('home economics')) return true;
@@ -259,7 +274,7 @@ export function getAllowedSubjectsForClass(userOrStaff, classObj, allSubjects = 
   }
 
   // Filter subjects to only what the teacher teaches
-  const subText = faculty ? faculty.subjects : (staff.assigned_class || '');
+  const subText = faculty ? faculty.subjects : (staff.subjects || staff.role || '');
   return allSubjects.filter(sub => matchesSubjectForTeacher(subText, sub));
 }
 

@@ -24,3 +24,9 @@ CREATE TABLE IF NOT EXISTS marks_store (
   deleted INTEGER DEFAULT 0,
   updated_at TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS otp_codes (
+  key TEXT PRIMARY KEY,
+  code_hash TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  attempts INTEGER DEFAULT 0
+);

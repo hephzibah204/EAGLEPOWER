@@ -232,6 +232,79 @@ async function loadClassAttendance(env, classId) {
   return out;
 }
 
+// ---- WhatsApp OTP store (D1 otp_codes, in-memory fallback) ----
+// Codes are stored HASHED, expire after 5 minutes, max 5 attempts.
+const otpMemory = new Map();
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function saveOtp(env, key, code) {
+  const rec = { hash: await sha256Hex(code), expires: Date.now() + 5 * 60 * 1000, attempts: 0 };
+  if (env && env.DB) {
+    try {
+      await env.DB.prepare('INSERT INTO otp_codes (key, code_hash, expires_at, attempts) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(key) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = excluded.attempts')
+        .bind(key, rec.hash, rec.expires, 0).run();
+      return;
+    } catch {}
+  }
+  otpMemory.set(key, rec);
+}
+
+async function readOtp(env, key) {
+  if (env && env.DB) {
+    try {
+      const row = await env.DB.prepare('SELECT code_hash, expires_at, attempts FROM otp_codes WHERE key = ?1').bind(key).first();
+      return row ? { hash: row.code_hash, expires: row.expires_at, attempts: row.attempts } : null;
+    } catch {}
+  }
+  return otpMemory.get(key) || null;
+}
+
+async function bumpOtpAttempts(env, key, rec) {
+  const attempts = (rec.attempts || 0) + 1;
+  if (env && env.DB) {
+    try { await env.DB.prepare('UPDATE otp_codes SET attempts = ?2 WHERE key = ?1').bind(key, attempts).run(); return; } catch {}
+  }
+  otpMemory.set(key, { ...rec, attempts });
+}
+
+async function clearOtp(env, key) {
+  if (env && env.DB) {
+    try { await env.DB.prepare('DELETE FROM otp_codes WHERE key = ?1').bind(key).run(); return; } catch {}
+  }
+  otpMemory.delete(key);
+}
+
+// Shared matcher for the WhatsApp OTP flow: by username, reference ID, or a
+// phone number suffix-matched against the linked staff record.
+function findOtpUser(dbData, rawInput) {
+  const cleanInput = (rawInput || '').trim().toLowerCase();
+  const cleanDigits = cleanInput.replace(/\D/g, '');
+  for (const u of (dbData.users || [])) {
+    const uName = (u.username || '').toLowerCase();
+    const uRef = (u.reference_id || '').toLowerCase();
+    let staffRec = null;
+    let ok = (uName === cleanInput || uRef === cleanInput);
+    if (cleanDigits && cleanDigits.length >= 7) {
+      staffRec = (dbData.staff || []).find(st => st.staff_no === u.reference_id || st.name?.toLowerCase() === u.full_name?.toLowerCase()) || null;
+      if (!ok && staffRec && staffRec.phone) {
+        const stDigits = staffRec.phone.replace(/\D/g, '');
+        if (stDigits && (stDigits.endsWith(cleanDigits) || cleanDigits.endsWith(stDigits))) ok = true;
+      }
+    }
+    if (ok) {
+      if (!staffRec) {
+        staffRec = (dbData.staff || []).find(st => st.staff_no === u.reference_id || st.name?.toLowerCase() === u.full_name?.toLowerCase()) || null;
+      }
+      return { user: u, staffRec };
+    }
+  }
+  return null;
+}
+
 const whatsappBroadcastStore = [
   {
     id: 1,
@@ -383,69 +456,47 @@ async function handleRequest(context, dbData) {
   if (path === '/api/auth/me' && method === 'GET') {
     const cookieHeader = request.headers.get('cookie') || '';
     const authHeader = request.headers.get('authorization') || '';
-    const isExec = cookieHeader.includes('eagle_root_exec_') || authHeader.includes('eagle_root_exec_') || cookieHeader.includes('superadmin');
-    const isAdmin = cookieHeader.includes('eagle_admin_') || authHeader.includes('eagle_admin_');
-    const isTeacher = cookieHeader.includes('eagle_teacher_') || authHeader.includes('eagle_teacher_');
-    const hasSession = cookieHeader.includes('eagle_session=') || authHeader.startsWith('Bearer ');
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
 
-    if (isExec) {
-      return jsonResponse({
-        success: true,
-        user: {
-          id: 1,
-          username: 'superadmin',
-          email: 'director@eaglepowerschools.com.ng',
-          role: 'superadmin',
-          full_name: 'Proprietor & Director',
-          reference_id: null
+    // Strict validation: the token must be a well-formed issued token
+    // (eagle_<role>_<base64(username:timestamp)>) whose username resolves to
+    // a real account. Substring lookalikes no longer authenticate anyone.
+    let tokenUser = null;
+    const tokenMatch = /^eagle_([a-z_]+)_([A-Za-z0-9+/=]+)$/.exec(rawToken);
+    if (tokenMatch) {
+      try {
+        const decoded = atob(tokenMatch[2]);
+        const sep = decoded.lastIndexOf(':');
+        const uname = sep > 0 ? decoded.slice(0, sep) : '';
+        const stamp = sep > 0 ? decoded.slice(sep + 1) : '';
+        if (uname && /^\d+$/.test(stamp)) {
+          const clean = uname.toLowerCase();
+          tokenUser = (dbData.users || []).find(u =>
+            (u.username || '').toLowerCase() === clean ||
+            (u.reference_id || '').toLowerCase() === clean ||
+            (u.email || '').toLowerCase() === clean
+          ) || null;
         }
-      });
+      } catch { tokenUser = null; }
     }
 
-    if (isAdmin) {
-      return jsonResponse({
-        success: true,
-        user: {
-          id: 2,
-          username: 'admin',
-          email: 'principal@eaglepowerschools.com.ng',
-          role: 'admin',
-          full_name: 'Principal / School Administrator',
-          reference_id: 'EPS-ADM-01'
-        }
-      });
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Unauthenticated' }, 401);
     }
 
-    if (isTeacher) {
-      return jsonResponse({
-        success: true,
-        user: {
-          id: 3,
-          username: 'teacher',
-          email: 'teacher@eaglepowerschools.com.ng',
-          role: 'teacher',
-          full_name: 'Senior Academic Faculty',
-          reference_id: 'EPS-TCH-01',
-          staff: { id: 1, name: 'Senior Academic Faculty', staff_no: 'EPS-TCH-01' }
-        }
-      });
-    }
+    const studentInfo = tokenUser.role === 'student'
+      ? (dbData.students || []).find(s2 => s2.admission_no === tokenUser.reference_id || s2.id === tokenUser.reference_id)
+      : undefined;
+    const staffInfo = (['teacher', 'admin', 'bursar'].includes(tokenUser.role))
+      ? (dbData.staff || []).find(st => st.staff_no === tokenUser.reference_id || st.name?.toLowerCase() === tokenUser.full_name?.toLowerCase())
+      : undefined;
 
-    if (hasSession) {
-      return jsonResponse({
-        success: true,
-        user: {
-          id: 1,
-          username: 'superadmin',
-          email: 'director@eaglepowerschools.com.ng',
-          role: 'superadmin',
-          full_name: 'Proprietor & Director',
-          reference_id: null
-        }
-      });
-    }
-
-    return jsonResponse({ success: false, message: 'Unauthenticated' }, 401);
+    return jsonResponse({
+      success: true,
+      session: true,
+      user: { ...tokenUser, student: studentInfo, staff: staffInfo }
+    });
   }
 
   // Parse JSON body for mutation endpoints
@@ -734,51 +785,38 @@ async function handleRequest(context, dbData) {
       return jsonResponse({ success: false, message: 'Phone number or Staff ID is required.' }, 400);
     }
 
-    const cleanInput = (phone || '').trim().toLowerCase();
-    const cleanDigits = cleanInput.replace(/\D/g, '');
+    // Uniform response whether or not an account matches (no enumeration),
+    // and the code is NEVER returned to the caller — it only travels to the
+    // account's registered WhatsApp number.
+    const found = findOtpUser(dbData, phone);
+    if (found) {
+      const otpCode = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+      await saveOtp(env, String(found.user.username || '').toLowerCase(), otpCode);
+      const registeredDigits = (found.staffRec?.phone || '').replace(/\D/g, '');
+      const cleanDigits = String(phone).replace(/\D/g, '');
+      const dispatchPhone = registeredDigits || cleanDigits;
+      if (dispatchPhone) {
+        try {
+          const dispatchPromise = fetch('https://eaglepower-whatsapp-bot.fly.dev/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: dispatchPhone,
+              code: otpCode,
+              recipientName: found.user.full_name || found.user.username || 'Staff/Parent'
+            })
+          }).catch(err => console.warn('WhatsApp OTP dispatch error:', err.message));
 
-    const matchedUser = (dbData.users || []).find(u => {
-      const uName = (u.username || '').toLowerCase();
-      const uRef = (u.reference_id || '').toLowerCase();
-      if (uName === cleanInput || uRef === cleanInput) return true;
-
-      if (cleanDigits && cleanDigits.length >= 7) {
-        const staffRec = (dbData.staff || []).find(st => st.staff_no === u.reference_id || st.name?.toLowerCase() === u.full_name?.toLowerCase());
-        if (staffRec && staffRec.phone) {
-          const stDigits = staffRec.phone.replace(/\D/g, '');
-          if (stDigits && (stDigits.endsWith(cleanDigits) || cleanDigits.endsWith(stDigits))) return true;
-        }
+          if (context && typeof context.waitUntil === 'function') {
+            context.waitUntil(dispatchPromise);
+          }
+        } catch (_e) {}
       }
-      return false;
-    });
-
-    if (!matchedUser) {
-      return jsonResponse({ success: false, message: 'No registered account found matching this phone number or Staff ID.' }, 404);
     }
-
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Dispatch OTP immediately to user's WhatsApp via the Fly.io WhatsApp Bot Companion Gateway
-    try {
-      const dispatchPromise = fetch('https://eaglepower-whatsapp-bot.fly.dev/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: cleanDigits || phone,
-          code: otpCode,
-          recipientName: matchedUser.full_name || matchedUser.username || 'Staff/Parent'
-        })
-      }).catch(err => console.warn('WhatsApp OTP dispatch error:', err.message));
-
-      if (context && typeof context.waitUntil === 'function') {
-        context.waitUntil(dispatchPromise);
-      }
-    } catch (_e) {}
 
     return jsonResponse({
       success: true,
-      message: `A 6-digit secure login code has been sent to your WhatsApp number. Valid for 5 minutes.`,
-      debug_code: otpCode
+      message: 'If an account matches, a 6-digit code has been sent to the registered WhatsApp number. Valid for 5 minutes.'
     }, 200);
   }
 
@@ -789,30 +827,22 @@ async function handleRequest(context, dbData) {
       return jsonResponse({ success: false, message: 'Phone number and 6-digit OTP code are required.' }, 400);
     }
 
-    const cleanInput = (phone || '').trim().toLowerCase();
-    const cleanDigits = cleanInput.replace(/\D/g, '');
+    const invalid = () => jsonResponse({ success: false, message: 'Invalid or expired code.' }, 401);
+    const found = findOtpUser(dbData, phone);
+    if (!found) return invalid();
 
-    const matchedUser = (dbData.users || []).find(u => {
-      const uName = (u.username || '').toLowerCase();
-      const uRef = (u.reference_id || '').toLowerCase();
-      if (uName === cleanInput || uRef === cleanInput) return true;
-
-      if (cleanDigits && cleanDigits.length >= 7) {
-        const staffRec = (dbData.staff || []).find(st => st.staff_no === u.reference_id || st.name?.toLowerCase() === u.full_name?.toLowerCase());
-        if (staffRec && staffRec.phone) {
-          const stDigits = staffRec.phone.replace(/\D/g, '');
-          if (stDigits && (stDigits.endsWith(cleanDigits) || cleanDigits.endsWith(stDigits))) return true;
-        }
-      }
-      return false;
-    });
-
-    if (!matchedUser) {
-      return jsonResponse({ success: false, message: 'User not found or unverified.' }, 404);
+    const otpKey = String(found.user.username || '').toLowerCase();
+    const rec = await readOtp(env, otpKey);
+    if (!rec || rec.expires <= Date.now() || rec.attempts >= 5) return invalid();
+    if ((await sha256Hex(String(code).trim())) !== rec.hash) {
+      await bumpOtpAttempts(env, otpKey, rec);
+      return invalid();
     }
+    await clearOtp(env, otpKey);
 
+    const matchedUser = found.user;
     const studentInfo = matchedUser.role === 'student'
-      ? (dbData.students || []).find(s => s.admission_no === matchedUser.reference_id || s.id === matchedUser.reference_id)
+      ? (dbData.students || []).find(s2 => s2.admission_no === matchedUser.reference_id || s2.id === matchedUser.reference_id)
       : undefined;
 
     const staffInfo = (['teacher', 'admin', 'bursar'].includes(matchedUser.role))

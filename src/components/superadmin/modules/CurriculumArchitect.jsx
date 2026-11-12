@@ -13,7 +13,8 @@ import {
   Filter,
   GraduationCap,
   Layers,
-  Sparkles
+  Sparkles,
+  Tag
 } from 'lucide-react';
 import { getApiBase, apiFetch as fetch } from '../../../config/api';
 
@@ -22,8 +23,9 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
 
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
+  const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState('classes'); // 'classes' | 'subjects'
+  const [activeSubTab, setActiveSubTab] = useState('classes'); // 'classes' | 'subjects' | 'arms'
 
   // Subject filters
   const [subjectDivision, setSubjectDivision] = useState('All');
@@ -48,6 +50,12 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
     category: 'Core'
   });
 
+  const [sectionModalOpen, setSectionModalOpen] = useState(false);
+  const [editingSection, setEditingSection] = useState(null);
+  const [sectionForm, setSectionForm] = useState({
+    name: ''
+  });
+
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
@@ -59,20 +67,25 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [classRes, subRes] = await Promise.all([
+      const [classRes, subRes, secRes] = await Promise.all([
         fetch(`${API_BASE}/academics/classes`, {
           headers: { Authorization: `Bearer ${authToken}` }
         }),
         fetch(`${API_BASE}/academics/subjects`, {
+          headers: { Authorization: `Bearer ${authToken}` }
+        }),
+        fetch(`${API_BASE}/academics/sections`, {
           headers: { Authorization: `Bearer ${authToken}` }
         })
       ]);
 
       const classData = await classRes.json();
       const subData = await subRes.json();
+      const secData = await secRes.json();
 
       if (classData.success) setClasses(classData.data || []);
       if (subData.success) setSubjects(subData.data || []);
+      if (secData.success) setSections(secData.data || []);
     } catch {
       showFeedback('error', 'Failed to retrieve curriculum structures.');
     } finally {
@@ -226,6 +239,108 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
     }
   };
 
+  // Open Add/Edit Section Modal
+  const handleOpenSectionModal = (sec = null) => {
+    if (sec) {
+      setEditingSection(sec);
+      setSectionForm({ name: sec.name });
+    } else {
+      setEditingSection(null);
+      setSectionForm({ name: '' });
+    }
+    setSectionModalOpen(true);
+  };
+
+  // Save Section (Create or Update)
+  const handleSaveSection = async (e) => {
+    e.preventDefault();
+    if (!sectionForm.name.trim()) {
+      showFeedback('error', 'Class arm name is required.');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const url = editingSection
+        ? `${API_BASE}/academics/sections/${editingSection.id}`
+        : `${API_BASE}/academics/sections`;
+      const method = editingSection ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ name: sectionForm.name.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showFeedback('success', data.message || `Class arm '${sectionForm.name}' saved.`);
+        setSectionModalOpen(false);
+        fetchData();
+      } else {
+        showFeedback('error', data.message || 'Operation failed.');
+      }
+    } catch {
+      showFeedback('error', 'Network error managing class arm.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Delete Section
+  const handleDeleteSection = async (sec) => {
+    if (!confirm(`Are you sure you want to delete class arm '${sec.name}'?`)) {
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/academics/sections/${sec.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showFeedback('success', data.message || 'Class arm deleted.');
+        fetchData();
+      } else {
+        showFeedback('error', data.message || 'Cannot delete class arm.');
+      }
+    } catch {
+      showFeedback('error', 'Network error deleting class arm.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Quick Apply Preset Arms (A, B, C or Gold, Diamond, etc.)
+  const handleApplySectionPreset = async (presetNames) => {
+    setActionLoading(true);
+    let addedCount = 0;
+    try {
+      const existingNames = new Set(sections.map(s => (s.name || '').toLowerCase()));
+      for (const name of presetNames) {
+        if (!existingNames.has(name.toLowerCase())) {
+          await fetch(`${API_BASE}/academics/sections`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ name })
+          });
+          addedCount++;
+        }
+      }
+      showFeedback('success', addedCount > 0 ? `Added ${addedCount} preset arm(s).` : 'All preset arms already exist.');
+      fetchData();
+    } catch {
+      showFeedback('error', 'Error adding preset arms.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Filtered subjects
   const filteredSubjects = subjects.filter(s => {
     const matchDiv = subjectDivision === 'All' || s.division === subjectDivision || s.division === 'All';
@@ -257,13 +372,21 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
               <Plus className="w-4 h-4" />
               Add Class
             </button>
-          ) : (
+          ) : activeSubTab === 'subjects' ? (
             <button
               onClick={() => handleOpenSubjectModal(null)}
               className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
               Add Subject
+            </button>
+          ) : (
+            <button
+              onClick={() => handleOpenSectionModal(null)}
+              className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Add Class Arm
             </button>
           )}
 
@@ -292,7 +415,7 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
       )}
 
       {/* Sub Tabs Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
         <button
           onClick={() => setActiveSubTab('classes')}
           className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
@@ -314,6 +437,17 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
         >
           <BookOpen className="w-4 h-4" />
           Curriculum Subjects ({subjects.length})
+        </button>
+        <button
+          onClick={() => setActiveSubTab('arms')}
+          className={`px-4 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 ${
+            activeSubTab === 'arms'
+              ? 'bg-amber-400 text-slate-950 shadow-md'
+              : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+          }`}
+        >
+          <Tag className="w-4 h-4" />
+          Class Arms & Streams ({sections.length})
         </button>
       </div>
 
@@ -468,6 +602,133 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* VIEW 3: CLASS ARMS & STREAMS */}
+      {activeSubTab === 'arms' && (
+        <div className="space-y-6 animate-in fade-in">
+          {/* Quick Presets Banner */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-lg space-y-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase">
+                  <Sparkles className="w-4 h-4" />
+                  Class Arms & Parallel Streams
+                </div>
+                <p className="text-xs text-slate-300 mt-1">
+                  Configure streams for classes across the institution (e.g. Letters <span className="text-amber-400 font-semibold">A, B, C</span>, Jewels <span className="text-amber-400 font-semibold">Gold, Diamond, Emerald</span>, Colors <span className="text-amber-400 font-semibold">Yellow, Blue, Green</span>, or Tracks <span className="text-amber-400 font-semibold">Science, Art, Commercial</span>).
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-800/80">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                Quick Setup Presets:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleApplySectionPreset(['A', 'B', 'C', 'D'])}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/60 transition-all flex items-center gap-1.5"
+                >
+                  <Tag className="w-3.5 h-3.5 text-amber-400" />
+                  + Letters (A, B, C, D)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplySectionPreset(['Gold', 'Diamond', 'Emerald', 'Silver', 'Ruby'])}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/60 transition-all flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  + Jewels (Gold, Diamond, Emerald, Silver, Ruby)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplySectionPreset(['Yellow', 'Blue', 'Green', 'Red'])}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/60 transition-all flex items-center gap-1.5"
+                >
+                  <Tag className="w-3.5 h-3.5 text-amber-400" />
+                  + Colors (Yellow, Blue, Green, Red)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplySectionPreset(['Science', 'Art', 'Commercial'])}
+                  disabled={actionLoading}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700/60 transition-all flex items-center gap-1.5"
+                >
+                  <Layers className="w-3.5 h-3.5 text-amber-400" />
+                  + Senior Tracks (Science, Art, Commercial)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Arms Grid */}
+          {sections.length === 0 ? (
+            <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-2xl">
+              <Tag className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+              <h4 className="text-sm font-bold text-slate-300">No Class Arms Defined</h4>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                Click one of the quick presets above or click "Add Class Arm" to register school streams (A, B, C, Gold, Yellow, etc.).
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {sections.map((sec) => (
+                <div
+                  key={sec.id}
+                  className="bg-slate-900/80 border border-slate-800 hover:border-amber-400/50 rounded-2xl p-4 shadow-lg transition-all group flex flex-col justify-between"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400/80 uppercase">
+                        <Tag className="w-3 h-3 text-amber-400" />
+                        Arm / Stream
+                      </div>
+                      <h4 className="text-lg font-black text-white mt-1 group-hover:text-amber-400 transition-colors">
+                        {sec.name}
+                      </h4>
+                    </div>
+
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleOpenSectionModal(sec)}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                        title="Edit Arm Name"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSection(sec)}
+                        className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition-colors"
+                        title="Delete Arm"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                    <span className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-slate-500" />
+                      Assigned Students
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      sec.student_count > 0
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      {sec.student_count || 0}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -664,6 +925,81 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
                 >
                   <Save className="w-4 h-4" />
                   {actionLoading ? 'Saving...' : 'Save Subject'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL 3: ADD / EDIT CLASS ARM */}
+      {sectionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
+            <button
+              onClick={() => setSectionModalOpen(false)}
+              className="absolute right-5 top-5 p-1.5 rounded-full bg-slate-800 text-slate-400 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase mb-1">
+              <Tag className="w-4 h-4" />
+              Class Arm Registry
+            </div>
+            <h3 className="text-xl font-black text-white">
+              {editingSection ? `Edit Class Arm: ${editingSection.name}` : 'Register New Class Arm'}
+            </h3>
+            <p className="text-xs text-slate-400 mb-5">
+              Specify arm or stream identifier (e.g., A, B, Gold, Yellow, Science).
+            </p>
+
+            <form onSubmit={handleSaveSection} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Arm / Stream Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. A, B, Gold, Diamond, Yellow, Science..."
+                  value={sectionForm.name}
+                  onChange={(e) => setSectionForm({ ...sectionForm, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <span className="text-[11px] font-bold text-slate-400 block mb-1.5">
+                  Popular Suggestions (Click to fill):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {['A', 'B', 'C', 'Gold', 'Diamond', 'Emerald', 'Yellow', 'Blue', 'Green', 'Science', 'Art', 'Commercial'].map((sug) => (
+                    <button
+                      key={sug}
+                      type="button"
+                      onClick={() => setSectionForm({ ...sectionForm, name: sug })}
+                      className="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 hover:text-amber-400 text-slate-300 text-[11px] font-semibold border border-slate-700/60 transition-all"
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setSectionModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading}
+                  className="px-5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-xs font-black flex items-center gap-1.5 shadow"
+                >
+                  <Save className="w-4 h-4" />
+                  {actionLoading ? 'Saving...' : 'Save Class Arm'}
                 </button>
               </div>
             </form>

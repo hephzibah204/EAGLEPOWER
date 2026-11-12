@@ -38,14 +38,111 @@ router.get('/classes', authenticate, (req, res, next) => {
 
 /**
  * GET /api/academics/sections
+ * List all class arms / sections with enrolled student counts
  */
 router.get('/sections', authenticate, (req, res, next) => {
   try {
-    const sections = db.prepare('SELECT * FROM sections ORDER BY id ASC').all();
+    const sections = db.prepare(`
+      SELECT s.*, 
+        COUNT(DISTINCT st.id) as student_count
+      FROM sections s
+      LEFT JOIN students st ON st.section_id = s.id AND st.is_active = 1
+      GROUP BY s.id, s.name
+      ORDER BY s.id ASC
+    `).all();
     res.json({
       success: true,
       count: sections.length,
       data: sections
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/academics/sections
+ * Create a new class arm / stream (Admin & SuperAdmin)
+ */
+router.post('/sections', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Class arm name is required.' });
+    }
+    const cleanName = name.trim();
+    const existing = db.prepare('SELECT id FROM sections WHERE LOWER(name) = LOWER(?)').get(cleanName);
+    if (existing) {
+      return res.status(400).json({ success: false, message: `Class arm '${cleanName}' already exists.` });
+    }
+    const stmt = db.prepare('INSERT INTO sections (name) VALUES (?)');
+    const result = stmt.run(cleanName);
+    logAudit(req.user.id, 'CREATE_SECTION', 'ACADEMICS', `Created class arm '${cleanName}' (ID: ${result.lastInsertRowid})`, req.ip);
+    res.status(201).json({
+      success: true,
+      message: `Class arm '${cleanName}' created successfully.`,
+      data: { id: result.lastInsertRowid, name: cleanName, student_count: 0 }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/academics/sections/:id
+ * Rename a class arm / stream (Admin & SuperAdmin)
+ */
+router.put('/sections/:id', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Class arm name is required.' });
+    }
+    const cleanName = name.trim();
+    const existing = db.prepare('SELECT * FROM sections WHERE id = ?').get(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Class arm not found.' });
+    }
+    const dup = db.prepare('SELECT id FROM sections WHERE LOWER(name) = LOWER(?) AND id != ?').get(cleanName, id);
+    if (dup) {
+      return res.status(400).json({ success: false, message: `Another class arm is already named '${cleanName}'.` });
+    }
+    db.prepare('UPDATE sections SET name = ? WHERE id = ?').run(cleanName, id);
+    logAudit(req.user.id, 'UPDATE_SECTION', 'ACADEMICS', `Updated class arm ID ${id} to '${cleanName}'`, req.ip);
+    res.json({
+      success: true,
+      message: `Class arm updated to '${cleanName}' successfully.`,
+      data: { id: Number(id), name: cleanName }
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * DELETE /api/academics/sections/:id
+ * Delete a class arm if no students are assigned (Admin & SuperAdmin)
+ */
+router.delete('/sections/:id', authenticate, requireRoles('admin', 'superadmin'), (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const existing = db.prepare('SELECT * FROM sections WHERE id = ?').get(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Class arm not found.' });
+    }
+    const studentCount = db.prepare('SELECT COUNT(*) as count FROM students WHERE section_id = ? AND is_active = 1').get(id)?.count || 0;
+    if (studentCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete class arm '${existing.name}' because ${studentCount} active students are currently assigned to it. Reassign them first.`
+      });
+    }
+    db.prepare('DELETE FROM sections WHERE id = ?').run(id);
+    logAudit(req.user.id, 'DELETE_SECTION', 'ACADEMICS', `Deleted class arm '${existing.name}' (ID: ${id})`, req.ip);
+    res.json({
+      success: true,
+      message: `Class arm '${existing.name}' deleted successfully.`
     });
   } catch (err) {
     next(err);

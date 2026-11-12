@@ -67,7 +67,7 @@ async function persistAttendance(env, classId, date, saved) {
 // Durable record stores (D1 tables classes_store / subjects_store / staff_store):
 // each row holds the full merged record as JSON; deleted=1 hides a baseline record.
 // In-memory maps mirror the same contract when the DB binding is absent.
-const memStores = { classes_store: new Map(), subjects_store: new Map(), staff_store: new Map(), marks_store: new Map() };
+const memStores = { classes_store: new Map(), subjects_store: new Map(), staff_store: new Map(), marks_store: new Map(), sections_store: new Map() };
 
 async function loadStoreMap(env, table) {
   if (env && env.DB) {
@@ -99,6 +99,30 @@ async function upsertStoreRow(env, table, id, dataObj, deleted = false) {
       // the in-memory mirror above still serves this isolate
     }
   }
+}
+
+// Generic store mutation helpers (used by the class-arms/sections routes).
+// persistMutation stores a record; markRecordDeleted hides it. Both ride on
+// upsertStoreRow, and the backing table is created lazily so a new store
+// works in D1 without a manual migration step.
+const ensuredStoreTables = new Set();
+async function ensureStoreTable(env, table) {
+  if (!env || !env.DB || ensuredStoreTables.has(table)) return;
+  try {
+    await env.DB.prepare(`CREATE TABLE IF NOT EXISTS ${table} (id TEXT PRIMARY KEY, data TEXT NOT NULL, deleted INTEGER DEFAULT 0, updated_at TEXT DEFAULT '')`).run();
+    ensuredStoreTables.add(table);
+  } catch {}
+}
+
+async function persistMutation(env, table, id, dataObj) {
+  await ensureStoreTable(env, table);
+  return upsertStoreRow(env, table, id, dataObj, false);
+}
+
+async function markRecordDeleted(env, table, id) {
+  await ensureStoreTable(env, table);
+  const existing = (await loadStoreMap(env, table)).get(String(id))?.data || { id: Number(id) || id };
+  return upsertStoreRow(env, table, id, existing, true);
 }
 
 function mergeStoredRecords(baseline, storeMap) {
@@ -1740,14 +1764,67 @@ async function handleRequest(context, dbData) {
   }
 
   if (path === '/api/academics/sections') {
-    return jsonResponse({
-      success: true,
-      data: [
-        { id: 1, name: 'Gold' },
-        { id: 2, name: 'Diamond' },
-        { id: 3, name: 'Emerald' }
-      ]
-    });
+    if (method === 'GET') {
+      const defaultSections = [
+        { id: 1, name: 'A', student_count: 0 },
+        { id: 2, name: 'B', student_count: 0 },
+        { id: 3, name: 'C', student_count: 0 },
+        { id: 4, name: 'Gold', student_count: 0 },
+        { id: 5, name: 'Diamond', student_count: 0 },
+        { id: 6, name: 'Emerald', student_count: 0 },
+        { id: 7, name: 'Silver', student_count: 0 },
+        { id: 8, name: 'Yellow', student_count: 0 },
+        { id: 9, name: 'Blue', student_count: 0 },
+        { id: 10, name: 'Green', student_count: 0 },
+        { id: 11, name: 'Science', student_count: 0 },
+        { id: 12, name: 'Art', student_count: 0 },
+        { id: 13, name: 'Commercial', student_count: 0 }
+      ];
+      const storedMap = await loadStoreMap(env, 'sections_store');
+      const merged = [...defaultSections];
+      for (const [idStr, row] of storedMap.entries()) {
+        const id = Number(idStr);
+        if (row.deleted) {
+          const idx = merged.findIndex(s => s.id === id);
+          if (idx >= 0) merged.splice(idx, 1);
+        } else if (row.data) {
+          const idx = merged.findIndex(s => s.id === id);
+          if (idx >= 0) merged[idx] = { ...merged[idx], ...row.data };
+          else merged.push(row.data);
+        }
+      }
+      return jsonResponse({
+        success: true,
+        count: merged.length,
+        data: merged
+      });
+    }
+
+    if (method === 'POST') {
+      const { name } = body;
+      if (!name || !name.trim()) return jsonResponse({ success: false, message: 'Class arm name is required.' }, 400);
+      const clean = name.trim();
+      const id = Date.now();
+      const newSection = { id, name: clean, student_count: 0 };
+      await persistMutation(env, 'sections_store', id, newSection);
+      return jsonResponse({ success: true, message: `Class arm '${clean}' created successfully.`, data: newSection }, 201);
+    }
+  }
+
+  if (path.startsWith('/api/academics/sections/')) {
+    const secId = path.split('/')[4];
+    if (method === 'PUT') {
+      const { name } = body;
+      if (!name || !name.trim()) return jsonResponse({ success: false, message: 'Class arm name is required.' }, 400);
+      const clean = name.trim();
+      const updated = { id: Number(secId), name: clean };
+      await persistMutation(env, 'sections_store', secId, updated);
+      return jsonResponse({ success: true, message: `Class arm '${clean}' updated successfully.`, data: updated });
+    }
+    if (method === 'DELETE') {
+      await markRecordDeleted(env, 'sections_store', secId);
+      return jsonResponse({ success: true, message: 'Class arm deleted successfully.' });
+    }
   }
 
   if (path.startsWith('/api/academics/classes/') && path.endsWith('/assign-teacher') && method === 'PUT') {

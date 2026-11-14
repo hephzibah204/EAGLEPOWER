@@ -1,5 +1,6 @@
 import { normalizeThreatTelemetry } from '../utils/threatTelemetry';
 import { getDashboardRole, canAccessTab, defaultTab, canLoadDashboardResource } from '../utils/portalPermissions';
+import { getFirstName, formatRoleWelcome } from '../utils/userGreeting';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Menu,
@@ -699,12 +700,14 @@ export default function PortalDashboard({
   const [isSavingQuickCa, setIsSavingQuickCa] = useState(false);
   const [quickCaSuccessMsg, setQuickCaSuccessMsg] = useState('');
 
-  const formatParentWhatsAppUrl = (phone, studentName, className, teacherName) => {
+  const formatParentWhatsAppUrl = (phone, studentName, className, teacherName, guardianName) => {
     if (!phone) return null;
     let clean = String(phone).replace(/\D/g, '');
     if (clean.startsWith('0')) clean = '234' + clean.slice(1);
     if (!clean.startsWith('234') && clean.length === 10) clean = '234' + clean;
-    const msg = encodeURIComponent(`Good day, respected Parent/Guardian. This is ${teacherName || 'the Class Teacher'} from Eagle Power Schools reaching out regarding your ward, ${studentName} (${className}).`);
+    const parentGreeting = guardianName ? `Hello Parent ${getFirstName(guardianName)}` : 'Good day, Parent';
+    const teacherSalutation = teacherName ? `Teacher ${getFirstName(teacherName)}` : 'the Class Teacher';
+    const msg = encodeURIComponent(`${parentGreeting}. This is ${teacherSalutation} from Eagle Power Schools reaching out regarding your ward, ${studentName} (${className}).`);
     return `https://wa.me/${clean}?text=${msg}`;
   };
 
@@ -3493,9 +3496,11 @@ export default function PortalDashboard({
                 </div>
 
                 <div className="p-3 bg-slate-900 rounded-xl border border-slate-800">
-                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">Logged in User</span>
-                  <strong className="text-white font-extrabold text-xs block mt-0.5 truncate">{currentUser.full_name}</strong>
-                  <span className="text-slate-400 text-[10px] block uppercase mt-0.5 font-mono">{currentUser.role}</span>
+                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider block">Welcome</span>
+                  <strong className="text-white font-extrabold text-xs block mt-0.5 truncate">
+                    {formatRoleWelcome(currentUser)}
+                  </strong>
+                  <span className="text-slate-400 text-[10px] block uppercase mt-0.5 font-mono">{currentUser.role} • {currentUser.full_name}</span>
                 </div>
 
                 {/* Role Specific Nav */}
@@ -4245,7 +4250,7 @@ export default function PortalDashboard({
               
               {/* EXECUTIVE SCHOOL HEAD DECISION COCKPIT */}
               {activeTab === 'executive_cockpit' && (
-                <ExecutiveReportingCockpit authToken={authToken} />
+                <ExecutiveReportingCockpit authToken={authToken} currentUser={currentUser} />
               )}
 
               {/* EXECUTIVE & SUPERADMIN DASHBOARD: OVERVIEW KPIS */}
@@ -4253,7 +4258,14 @@ export default function PortalDashboard({
                 <div className="space-y-6 animate-in fade-in">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
-                      <h3 className="text-lg font-black text-white">Executive Command Overview</h3>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-400/10 text-amber-400 border border-amber-400/30">
+                          Executive Cockpit
+                        </span>
+                      </div>
+                      <h3 className="text-lg font-black text-white">
+                        Welcome, {formatRoleWelcome(currentUser, activeRole)}
+                      </h3>
                       <p className="text-xs text-slate-400">Live school analytics & automated communication infrastructure</p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -5765,7 +5777,7 @@ export default function PortalDashboard({
                           <span>Academic Form Room & Educator Workspace</span>
                         </div>
                         <h2 className="text-2xl font-black text-white tracking-tight">
-                          Welcome, {currentUser?.name || 'Educator'}
+                          Welcome, {formatRoleWelcome(currentUser, 'teacher')}
                         </h2>
                         <p className="text-xs text-slate-400 max-w-xl">
                           Assigned Form Class: <span className="text-amber-400 font-bold">{classes.find(c => c.id === attendanceClassId)?.name || 'Junior College (JSS 1)'}</span> • 1st Term 2026/2027 Academic Session. Manage roll-calls, enter continuous assessments, coordinate homework, and prepare lesson schemes.
@@ -6432,7 +6444,8 @@ export default function PortalDashboard({
                                   student.guardian_phone,
                                   `${student.first_name} ${student.last_name}`,
                                   currentClassObj?.name || 'Class',
-                                  currentUser?.name || currentUser?.full_name
+                                  currentUser?.name || currentUser?.full_name,
+                                  student.guardian_name
                                 );
 
                                 return (
@@ -6747,11 +6760,11 @@ export default function PortalDashboard({
                                   <span>{r.guardian_phone || '—'}</span>
                                   {r.guardian_phone && (
                                     <a
-                                      href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${r.guardian_name || 'Parent'}, this is Eagle Power Schools regarding your child ${r.first_name} ${r.last_name} in ${classes.find(c => c.id === attendanceClassId)?.name || 'Class'}. Today's attendance status (${attendanceDate}): ${r.status}.`)}`}
+                                      href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello Parent ${getFirstName(r.guardian_name) || 'Guardian'}, this is Eagle Power Schools reaching out regarding your ward ${r.first_name} ${r.last_name} in ${classes.find(c => c.id === attendanceClassId)?.name || 'Class'}. Today's attendance status (${attendanceDate}): ${r.status}.`)}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="p-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all ml-1 shrink-0 inline-flex items-center gap-1 text-[10px]"
-                                      title={`Open WhatsApp chat with ${r.guardian_name || 'Parent'}`}
+                                      title={`Open WhatsApp chat with Parent ${getFirstName(r.guardian_name) || 'Guardian'}`}
                                     >
                                       <MessageCircle className="w-3 h-3" />
                                       <span className="hidden sm:inline">WhatsApp</span>
@@ -7369,11 +7382,11 @@ export default function PortalDashboard({
                                 </button>
                                 {r.guardian_phone && (
                                   <a
-                                    href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello ${r.guardian_name || 'Parent'}, this is your child's subject teacher at Eagle Power Schools. Current score for ${r.first_name} ${r.last_name} in ${subjects.find(s => s.id === selectedSubjectId)?.name || 'Subject'}: CA: ${r.ca_score || 0}/${gbIsPrimary ? 40 : 30}, Exam: ${r.exam_score || 0}/${gbIsPrimary ? 60 : 70}, Total: ${r.total_score || 0}/100 (${r.division_grade || r.grade || 'A1'}). Remark: ${r.remark || 'Dedicated student'}.`)}`}
+                                    href={`https://wa.me/${r.guardian_phone.replace(/\D/g, '').replace(/^0/, '234')}?text=${encodeURIComponent(`Hello Parent ${getFirstName(r.guardian_name) || 'Guardian'}, this is Teacher ${getFirstName(currentUser?.name || currentUser?.full_name) || 'Educator'} at Eagle Power Schools. Current score for ${r.first_name} ${r.last_name} in ${subjects.find(s => s.id === selectedSubjectId)?.name || 'Subject'}: CA: ${r.ca_score || 0}/${gbIsPrimary ? 40 : 30}, Exam: ${r.exam_score || 0}/${gbIsPrimary ? 60 : 70}, Total: ${r.total_score || 0}/100 (${r.division_grade || r.grade || 'A1'}). Remark: ${r.remark || 'Dedicated student'}.`)}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all shrink-0"
-                                    title="Send score update to parent via WhatsApp"
+                                    title={`Send score update to Parent ${getFirstName(r.guardian_name) || 'Guardian'} via WhatsApp`}
                                   >
                                     <MessageCircle className="w-3.5 h-3.5" />
                                   </a>
@@ -8853,7 +8866,7 @@ export default function PortalDashboard({
                   <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-wrap justify-between items-center gap-4">
                     <div>
                       <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">Guardian Portal</span>
-                      <h3 className="text-lg font-black text-white mt-0.5">Welcome, {currentUser?.full_name || 'Guardian'}</h3>
+                      <h3 className="text-lg font-black text-white mt-0.5">Welcome, {formatRoleWelcome(currentUser, 'parent')}</h3>
                       <p className="text-xs text-slate-400 mt-0.5">
                         Phone: <span className="font-mono text-slate-200">{currentUser?.phone || currentUser?.username}</span> &bull; Status: <span className="text-emerald-400 font-bold">Verified Parent</span>
                       </p>

@@ -21,10 +21,11 @@ import {
 } from 'lucide-react';
 
 import { getApiBase, getSessionToken, apiFetch as fetch } from '../config/api';
+import { formatRoleWelcome } from '../utils/userGreeting';
 
 const REPORT_GENERATED_DATE = new Date().toLocaleDateString('en-GB');
 
-export default function ExecutiveReportingCockpit({ authToken }) {
+export default function ExecutiveReportingCockpit({ authToken, currentUser }) {
   const [selectedSession, setSelectedSession] = useState('2026/2027');
   const [selectedTerm, setSelectedTerm] = useState('First Term');
   const [activeSection, setActiveSection] = useState('overview'); // 'overview', 'academics', 'finance', 'operations'
@@ -167,7 +168,7 @@ export default function ExecutiveReportingCockpit({ authToken }) {
             <span className="text-slate-400 text-xs">School Head & Proprietor Decision Engine</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
-            Eagle Power Comprehensive Reporting Suite
+            Welcome, {formatRoleWelcome(currentUser, 'admin')} &bull; Executive Reporting Suite
           </h2>
           <p className="text-xs text-slate-400">
             Real-time analytics across Academics, Bursary, Admissions, Campus Operations & Governance

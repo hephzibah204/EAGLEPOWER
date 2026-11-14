@@ -87,7 +87,9 @@ const subjectsData = [
   { name: 'Financial Accounting', code: 'ACC', division: 'Senior College', category: 'Commercial' },
   { name: 'Technical Drawing', code: 'TD', division: 'Senior College', category: 'Technical' },
   { name: 'Quantitative Reasoning', code: 'QR', division: 'Primary', category: 'Reasoning' },
-  { name: 'Verbal Reasoning', code: 'VR', division: 'Primary', category: 'Reasoning' }
+  { name: 'Verbal Reasoning', code: 'VR', division: 'Primary', category: 'Reasoning' },
+  { name: 'History', code: 'HIS', division: 'Primary', category: 'Core' },
+  { name: 'Writing', code: 'WRT', division: 'Primary', category: 'Core' }
 ];
 
 const insertSubject = db.prepare('INSERT INTO subjects (name, code, division, category) VALUES (?, ?, ?, ?)');

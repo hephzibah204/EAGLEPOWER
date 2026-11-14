@@ -92,6 +92,7 @@ import StaffManagementConsole from './staff/StaffManagementConsole';
 import WhatsAppBotConsoleModal from './superadmin/modules/WhatsAppBotConsoleModal';
 import StaffNotificationBell from './staff/StaffNotificationBell';
 import StaffCommunicationConsole from './staff/StaffCommunicationConsole';
+import SystemHelpGuide from './SystemHelpGuide';
 
 export default function PortalDashboard({
   isOpen = true,
@@ -3144,6 +3145,18 @@ export default function PortalDashboard({
               </button>
             )}
             <button
+              onClick={() => setActiveTab('help_guide')}
+              title="System User Manual & Operations Guide"
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg border transition-all ${
+                activeTab === 'help_guide'
+                  ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
+                  : 'bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border-amber-400/30'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">User Guide</span>
+            </button>
+            <button
               onClick={fetchAllData}
               title="Refresh Data from Live Server"
               className="p-1.5 text-slate-400 hover:text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
@@ -4194,6 +4207,21 @@ export default function PortalDashboard({
                       </button>
                     </>
                   )}
+
+                  {/* Universal System Help & User Guide Button */}
+                  <div className="pt-2 mt-2 border-t border-slate-800/80">
+                    <button
+                      onClick={() => setActiveTab('help_guide')}
+                      className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                        activeTab === 'help_guide'
+                          ? 'bg-amber-400 text-slate-950 font-black shadow-sm'
+                          : 'text-slate-400 hover:text-white bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/40'
+                      }`}
+                    >
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>System User Guide</span>
+                    </button>
+                  </div>
                 </nav>
               </div>
 
@@ -4204,6 +4232,15 @@ export default function PortalDashboard({
 
             {/* Main Panel Content */}
             <main className="grow p-4 sm:p-6 overflow-y-auto bg-slate-900/50">
+              
+              {/* SYSTEM USER MANUAL & OPERATIONS GUIDE */}
+              {activeTab === 'help_guide' && (
+                <SystemHelpGuide
+                  isStandalone={false}
+                  onNavigateTab={setActiveTab}
+                  currentUser={resolvedUser || currentUser}
+                />
+              )}
               
               
               {/* EXECUTIVE SCHOOL HEAD DECISION COCKPIT */}

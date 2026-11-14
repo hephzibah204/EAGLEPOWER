@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {
   DIVISION_ASSESSMENT_CONFIG,
   isPrimaryDivision,
-  getAssessmentConfig,
   calculateMultiComponentScore,
   calculateGradeAndRemark
 } from '../server/src/services/gradingScale.js';
@@ -154,4 +153,22 @@ test('Grade calculation reflects Primary Mastery vs Secondary WAEC rubrics', () 
   const secGrade = calculateGradeAndRemark(85, 'Senior College');
   assert.equal(secGrade.grade, 'A1');
   assert.equal(secGrade.scale_code, 'WAEC');
+});
+
+test('Primary school curriculum includes History (HIS) and Writing (WRT)', async () => {
+  const { default: db } = await import('../server/src/config/db.js');
+  
+  const historySub = db.prepare('SELECT * FROM subjects WHERE code = ?').get('HIS');
+  assert.ok(historySub, 'History subject should exist');
+  assert.equal(historySub.name, 'History');
+  assert.equal(historySub.code, 'HIS');
+  assert.equal(historySub.division, 'Primary');
+  assert.equal(historySub.category, 'Core');
+
+  const writingSub = db.prepare('SELECT * FROM subjects WHERE code = ?').get('WRT');
+  assert.ok(writingSub, 'Writing subject should exist');
+  assert.equal(writingSub.name, 'Writing');
+  assert.equal(writingSub.code, 'WRT');
+  assert.equal(writingSub.division, 'Primary');
+  assert.equal(writingSub.category, 'Core');
 });

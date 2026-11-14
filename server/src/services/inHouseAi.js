@@ -659,6 +659,50 @@ export const CURRICULUM_TAXONOMY = {
     studyInterventions: [
       'Practice solving word puzzles and crosswords to expand verbal reasoning logic.'
     ]
+  },
+
+  'History': {
+    code: 'HIS',
+    divisions: ['Primary'],
+    keyTopics: [
+      'Nigerian Heroes & National Symbols',
+      'Ancient Civilizations & Kingdoms (Nok, Benin, Oyo, Igbo-Ukwu)',
+      'Colonial Era, Amalgamation (1914) & Independence (1960)',
+      'World History, African Heritage & Historical Sources'
+    ],
+    formulasAndTheorems: [
+      'Chronological Order: Pre-colonial societies -> Colonial transition -> Independence era',
+      'Primary Sources: Oral history, archaeological artifacts (Igbo-Ukwu bronze, Nok culture), and official documents'
+    ],
+    typicalMisconceptions: [
+      'Confusing the 1914 Amalgamation with 1960 Nigerian Independence',
+      'Viewing oral tradition as fiction rather than valid historical testimony'
+    ],
+    studyInterventions: [
+      'Draw timeline charts of national historical milestones and memorize dates of key founding leaders.'
+    ]
+  },
+
+  'Writing': {
+    code: 'WRT',
+    divisions: ['Primary'],
+    keyTopics: [
+      'Cursive Handwriting & Letter Formation',
+      'Sentence Structure, Capitalization & Punctuation',
+      'Descriptive & Narrative Paragraph Composition',
+      'Penmanship Neatness, Spacing & Letter Craft'
+    ],
+    formulasAndTheorems: [
+      'Paragraph Blueprint: Topic Sentence + Supporting Descriptive Details + Conclusion',
+      'Penmanship Standards: Consistent letter height, ascenders, descenders, and uniform word spacing'
+    ],
+    typicalMisconceptions: [
+      'Writing long run-on sentences without punctuation marks or full stops',
+      'Inconsistent cursive joining and mixing uppercase and lowercase mid-word'
+    ],
+    studyInterventions: [
+      'Perform daily penmanship copy drills and outline compositions with bullet-pointed concept maps before drafting.'
+    ]
   }
 };
 

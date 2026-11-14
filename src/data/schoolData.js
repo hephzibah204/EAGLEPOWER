@@ -38,7 +38,7 @@ export const schoolInfo = {
       ages: "Primary 1 - 6 (Ages 5 - 11)",
       tag: "Primary Division",
       description: "Developing robust intellectual rigor, critical thinking, linguistic eloquence, and computational ability rooted in strong moral character.",
-      curriculum: ["Mathematics & Mental Arithmetic", "English Language, Diction & Literature", "Basic Science & Technology (STEM)", "ICT & Intro to Coding", "Civic Education & History", "French & Cultural Studies"],
+      curriculum: ["Mathematics & Mental Arithmetic", "English Language, Diction & Literature", "Basic Science & Technology (STEM)", "History", "Writing & Penmanship", "ICT & Intro to Coding", "French & Cultural Studies"],
       highlights: "Small class sizes, active spelling bee drills, and interactive science discovery."
     },
     {

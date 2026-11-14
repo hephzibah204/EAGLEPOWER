@@ -173,6 +173,11 @@ export default function Footer({ onOpenAdmission, onOpenPortal }) {
                 </a>
               </li>
               <li>
+                <a href="/help" className="hover:text-amber-400 transition-colors block text-amber-300 font-semibold">
+                  📖 System User Guide &amp; Manual
+                </a>
+              </li>
+              <li>
                 <a href="#campus" onClick={() => scrollTo('#campus')} className="hover:text-amber-400 transition-colors block">
                   Campus Facilities
                 </a>

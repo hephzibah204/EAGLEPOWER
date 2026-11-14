@@ -131,7 +131,15 @@
       "class_teacher_id": 140,
       "student_count": 19
     },
-        {
+    {
+      "id": 16,
+      "name": "SS 2",
+      "division": "Senior College",
+      "termly_tuition": 55000,
+      "class_teacher_id": 76,
+      "student_count": 0
+    },
+    {
       "id": 20,
       "name": "JSS1",
       "division": "Junior College",
@@ -172,6 +180,38 @@
     {
       "id": 6,
       "name": "Commercial"
+    },
+    {
+      "id": 7,
+      "name": "Gold"
+    },
+    {
+      "id": 8,
+      "name": "Diamond"
+    },
+    {
+      "id": 9,
+      "name": "Emerald"
+    },
+    {
+      "id": 10,
+      "name": "Silver"
+    },
+    {
+      "id": 11,
+      "name": "Yellow"
+    },
+    {
+      "id": 12,
+      "name": "Blue"
+    },
+    {
+      "id": 13,
+      "name": "Green"
+    },
+    {
+      "id": 14,
+      "name": "Ruby"
     }
   ],
   "subjects": [
@@ -411,6 +451,20 @@
       "name": "Intermediate Science",
       "code": "ISC",
       "division": "Junior College",
+      "category": "Core"
+    },
+    {
+      "id": 128,
+      "name": "History",
+      "code": "HIS",
+      "division": "Primary",
+      "category": "Core"
+    },
+    {
+      "id": 129,
+      "name": "Writing",
+      "code": "WRT",
+      "division": "Primary",
       "category": "Core"
     }
   ],

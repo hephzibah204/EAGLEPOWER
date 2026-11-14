@@ -1724,9 +1724,33 @@ export default function PortalDashboard({
             })));
           }
         }
+      } else if (requestId === attendanceRequest.current) {
+        // Fallback to local students if API endpoint returns non-200
+        setAttendanceRecords(students.filter(s => String(s.class_id) === String(cId)).map(s => ({
+          student_id: s.id,
+          admission_no: s.admission_no,
+          first_name: s.first_name,
+          last_name: s.last_name,
+          student_name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          guardian_phone: s.guardian_phone,
+          status: 'Unrecorded',
+          remarks: ''
+        })));
       }
     } catch (err) {
       console.warn('Error fetching student attendance:', err);
+      if (requestId === attendanceRequest.current) {
+        setAttendanceRecords(students.filter(s => String(s.class_id) === String(cId)).map(s => ({
+          student_id: s.id,
+          admission_no: s.admission_no,
+          first_name: s.first_name,
+          last_name: s.last_name,
+          student_name: `${s.first_name || ''} ${s.last_name || ''}`.trim(),
+          guardian_phone: s.guardian_phone,
+          status: 'Unrecorded',
+          remarks: ''
+        })));
+      }
     } finally {
       if (requestId === attendanceRequest.current) setIsLoadingAttendance(false);
     }
@@ -2049,6 +2073,13 @@ export default function PortalDashboard({
       }
     }
   }, [activeRole, resolvedUser, classes, subjects, selectedClassId, selectedSubjectId, currentGradebookClassObj, attendanceClassId, myStudentsClassId]);
+
+  // Auto-fetch student attendance whenever attendance tab is active, or class/date changes
+  useEffect(() => {
+    if (activeTab === 'attendance' && attendanceClassId) {
+      fetchStudentAttendance(attendanceClassId, attendanceDate);
+    }
+  }, [activeTab, attendanceClassId, attendanceDate, fetchStudentAttendance]);
 
   // Load student report card
   const fetchReportCard = useCallback(async (admNo) => {

@@ -16,7 +16,7 @@
     "server:migrate": "node server/src/scripts/migrateLegacy.js",
     "server:backup": "node server/src/scripts/backupDb.js",
     "server:test": "node server/src/scripts/testApi.js",
-    "test": "node --test tests/edge-proxy.test.mjs tests/hr-management.test.mjs tests/continuous-assessment-grading.test.mjs",
+    "test": "node --test tests/edge-proxy.test.mjs tests/hr-management.test.mjs tests/continuous-assessment-grading.test.mjs tests/user-greeting.test.mjs",
     "start:prod": "npm run build && node server/src/index.js",
     "deploy": "wrangler pages deploy out",
     "pages:build": "next build"

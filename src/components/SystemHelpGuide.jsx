@@ -173,7 +173,7 @@ export default function SystemHelpGuide({ isStandalone = false, onNavigateTab = 
           steps: [
             {
               step: 'Step 1: Access Curriculum Architect',
-              detail: 'Navigate to "Academic Classes & Setup" on the sidebar. Select the "Curriculum & Subjects" sub-tab to inspect all 36 active school subjects.',
+              detail: 'Navigate to "Curriculum Architect" on the sidebar (or click "Open Feature" above). Select the "Curriculum Subjects" sub-tab to inspect all 36 active school subjects.',
               badge: 'Curriculum Hub'
             },
             {

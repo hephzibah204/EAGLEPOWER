@@ -3835,11 +3835,11 @@ export default function PortalDashboard({
                       <button
                         onClick={() => setActiveTab('classes')}
                         className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
-                          activeTab === 'classes' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/30' : 'text-slate-400 hover:text-white'
+                          activeTab === 'classes' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
                         }`}
                       >
-                        <BookOpen className="w-3.5 h-3.5" />
-                        <span>16 Classes</span>
+                        <Layers className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span className="truncate">Curriculum Architect</span>
                       </button>
                       <button
                         onClick={() => setActiveTab('staff')}
@@ -4281,7 +4281,7 @@ export default function PortalDashboard({
               
               {/* EXECUTIVE SCHOOL HEAD DECISION COCKPIT */}
               {activeTab === 'executive_cockpit' && (
-                <ExecutiveReportingCockpit authToken={authToken} currentUser={currentUser} />
+                <ExecutiveReportingCockpit authToken={authToken} currentUser={currentUser} onNavigateTab={setActiveTab} />
               )}
 
               {/* EXECUTIVE & SUPERADMIN DASHBOARD: OVERVIEW KPIS */}
@@ -5296,81 +5296,10 @@ export default function PortalDashboard({
                 </div>
               )}
 
-              {/* SUPERADMIN: Curriculum Architect */}
-              {(activeRole === 'superadmin') && activeTab === 'classes' && (
+              {/* ADMIN & SUPERADMIN: Curriculum Architect */}
+              {(activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'classes' && (
                 <div className="animate-in fade-in">
                   <CurriculumArchitect authToken={authToken} staffList={staff} />
-                </div>
-              )}
-
-              {/* PRINCIPAL & SUPERADMIN: Classes */}
-              {(activeRole === 'admin') && activeTab === 'classes' && (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex flex-wrap justify-between items-center gap-3">
-                    <div>
-                      <h3 className="text-lg font-bold text-white">Class Registry & Enrolled Pupils</h3>
-                      <p className="text-xs text-slate-400">Click any class card to view its master academic broadsheet & marks matrix</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-amber-400 font-bold bg-amber-950/40 px-3 py-1.5 rounded-xl border border-amber-800/40">
-                        {classes.length} Total Cohorts
-                      </span>
-                      <button
-                        onClick={() => { setEnrollStudentModalOpen(true); setEnrolledStudentSuccess(null); }}
-                        className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Enroll Student & Parent</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                    {classes.map(c => (
-                      <div
-                        key={c.id}
-                        className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 hover:border-amber-400/60 transition-all text-xs space-y-1.5 shadow-sm group"
-                      >
-                        <div className="flex justify-between items-center">
-                          <strong 
-                            onClick={() => { setSelectedClassId(c.id); setActiveTab('broadsheet'); }}
-                            className="text-white text-sm group-hover:text-amber-400 transition-colors cursor-pointer"
-                          >
-                            {c.name}
-                          </strong>
-                          <span className="text-[10px] text-amber-400 bg-amber-950/40 px-2 py-0.5 rounded font-bold">{c.division}</span>
-                        </div>
-                        <div className="text-slate-400">Enrolled Pupils: <strong className="text-white">{c.student_count || 0}</strong></div>
-                        <div className="text-slate-400 flex items-center justify-between">
-                          <span>Form Teacher:</span>
-                          <span className={`font-semibold text-[11px] truncate max-w-[120px] ${c.teacher_name ? 'text-amber-300' : 'text-slate-500 italic'}`}>
-                            {c.teacher_name || 'Unassigned'}
-                          </span>
-                        </div>
-                        <div className="text-slate-500 text-[11px] flex justify-between items-center pt-1.5 border-t border-slate-900">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedClassForTeacher(c);
-                              setSelectedTeacherIdToAssign(c.teacher_id ? String(c.teacher_id) : '');
-                              setSelectedStaffForClass(null);
-                              setAssignClassModalOpen(true);
-                            }}
-                            className="text-[10px] text-amber-400 hover:text-amber-300 bg-amber-400/10 hover:bg-amber-400/20 px-2 py-0.5 rounded font-bold border border-amber-400/30 transition-colors"
-                          >
-                            {c.teacher_name ? 'Change Teacher' : 'Assign Teacher'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setSelectedClassId(c.id); setActiveTab('broadsheet'); }}
-                            className="text-slate-300 hover:text-white font-bold text-[10px] group-hover:underline"
-                          >
-                            Broadsheet &rarr;
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
 

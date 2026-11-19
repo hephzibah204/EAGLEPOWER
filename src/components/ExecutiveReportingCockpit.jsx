@@ -25,7 +25,7 @@ import { formatRoleWelcome } from '../utils/userGreeting';
 
 const REPORT_GENERATED_DATE = new Date().toLocaleDateString('en-GB');
 
-export default function ExecutiveReportingCockpit({ authToken, currentUser }) {
+export default function ExecutiveReportingCockpit({ authToken, currentUser, onNavigateTab }) {
   const [selectedSession, setSelectedSession] = useState('2026/2027');
   const [selectedTerm, setSelectedTerm] = useState('First Term');
   const [activeSection, setActiveSection] = useState('overview'); // 'overview', 'academics', 'finance', 'operations'
@@ -619,11 +619,24 @@ export default function ExecutiveReportingCockpit({ authToken, currentUser }) {
 
           {/* Subject Performance & High Risk Table */}
           <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden">
-            <div className="p-3.5 border-b border-slate-800 flex justify-between items-center">
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-200">
-                Subject Performance & Failure Risk Benchmark
-              </h4>
-              <span className="text-[10px] text-slate-400 font-mono">Curriculum Diagnostic</span>
+            <div className="p-3.5 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2">
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-200">
+                  Subject Performance & Failure Risk Benchmark
+                </h4>
+                <span className="text-[10px] text-slate-400 font-mono">Curriculum Diagnostic</span>
+              </div>
+              {onNavigateTab && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab('classes')}
+                  className="px-2.5 py-1 rounded-lg bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                  title="Open Curriculum Architect to manage subjects, arms, and class structures"
+                >
+                  <Layers className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Curriculum Architect &rarr;</span>
+                </button>
+              )}
             </div>
 
             <div className="overflow-x-auto">

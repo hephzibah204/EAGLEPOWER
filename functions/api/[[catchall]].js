@@ -311,10 +311,10 @@ async function clearOtp(env, key) {
 // Individual passwords are PBKDF2-hashed (the HR console scheme) in D1 table
 // user_credentials; a single-use, SHA-256-hashed token in pwd_change_tokens
 // (15-minute expiry) authorises the forced change.
-const GENERIC_PASSWORDS = ['EagleSuperAdmin2025!', 'EagleAdmin2025!', 'EagleStaff2025!', 'Teacher2025!', 'Bursar2025!', 'Eagle2025!', 'EagleParent2025!'];
+const GENERIC_PASSWORDS = ['EagleSuperAdmin2026!', 'EagleSuperAdmin2025!', 'EagleAdmin2025!', 'EagleStaff2025!', 'Teacher2025!', 'Bursar2025!', 'Eagle2025!', 'EagleParent2025!'];
 const STAFF_ROLES = ['superadmin', 'admin', 'teacher', 'bursar'];
 const STAFF_GENERIC_BY_ROLE = {
-  superadmin: ['EagleSuperAdmin2025!', 'EagleAdmin2025!'],
+  superadmin: ['EagleSuperAdmin2026!', 'EagleSuperAdmin2025!', 'EagleAdmin2025!'],
   admin: ['EagleAdmin2025!', 'EagleStaff2025!'],
   teacher: ['EagleStaff2025!', 'Teacher2025!'],
   bursar: ['Bursar2025!', 'EagleStaff2025!']
@@ -698,23 +698,30 @@ async function handleRequest(context, dbData) {
     const cleanDigits = cleanUser.replace(/\D/g, '');
     const phoneKey = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : (cleanDigits.length >= 7 ? cleanDigits : '');
 
-    const isSuperAdminMatch = cleanUser === 'superadmin' || cleanUser === 'director@eaglepowerschools.com.ng';
-    if (isSuperAdminMatch) {
-      const execUser = (dbData.users || []).find(u => (u.username || '').toLowerCase() === 'superadmin')
-        || { id: 1, username: 'superadmin', email: 'director@eaglepowerschools.com.ng', role: 'superadmin', full_name: 'Proprietor & Director', reference_id: null };
+    const execUser = (dbData.users || []).find(u => {
+      if (u.role !== 'superadmin') return false;
+      const uName = (u.username || '').toLowerCase();
+      const uEmail = (u.email || '').toLowerCase();
+      const uRef = (u.reference_id || '').toLowerCase();
+      return uName === cleanUser || uEmail === cleanUser || (uRef && uRef === cleanUser);
+    }) || ((cleanUser === 'superadmin' || cleanUser === 'director@eaglepowerschools.com.ng') ? {
+      id: 1, username: 'superadmin', email: 'director@eaglepowerschools.com.ng', role: 'superadmin', full_name: 'Proprietor & Director', reference_id: null
+    } : null);
 
+    if (execUser) {
+      const credKey = (execUser.username || '').toLowerCase();
       // Once an individual password is set it replaces the shared executive
       // passwords; while only a shared password exists, signing in with it
       // forces a password change before the console opens.
-      if (await getUserCredential(env, 'superadmin')) {
-        if (!(await verifyUserCredential(env, 'superadmin', password || ''))) {
+      if (await getUserCredential(env, credKey)) {
+        if (!(await verifyUserCredential(env, credKey, password || ''))) {
           return jsonResponse({
             success: false,
             session: false,
             message: 'Invalid executive credentials. Please verify your root passphrase.'
           }, 401);
         }
-      } else if (password === 'EagleSuperAdmin2025!' || password === 'EagleAdmin2025!') {
+      } else if (STAFF_GENERIC_BY_ROLE.superadmin.includes(password)) {
         return mustChangeResponse(env, execUser);
       } else {
         return jsonResponse({
@@ -729,14 +736,14 @@ async function handleRequest(context, dbData) {
         timestamp: new Date().toISOString(),
         action: 'EXECUTIVE_CONSOLE_LOGIN',
         module: 'AUTH',
-        user_id: 1,
-        username: 'superadmin',
+        user_id: execUser.id,
+        username: execUser.username,
         role: 'superadmin',
         ip_address: request.headers.get('cf-connecting-ip') || '127.0.0.1',
-        details: 'SuperAdmin authenticated to Executive Console from Cloudflare Edge'
+        details: `SuperAdmin (${execUser.username}) authenticated to Executive Console from Cloudflare Edge`
       });
 
-      const token = 'eagle_root_exec_' + btoa('superadmin:' + Date.now());
+      const token = 'eagle_root_exec_' + btoa(`${execUser.username}:${Date.now()}`);
       return jsonResponse({
         success: true,
         session: true,
@@ -744,8 +751,8 @@ async function handleRequest(context, dbData) {
         token,
         user: {
           id: execUser.id,
-          username: 'superadmin',
-          email: 'director@eaglepowerschools.com.ng',
+          username: execUser.username,
+          email: execUser.email || 'director@eaglepowerschools.com.ng',
           role: 'superadmin',
           full_name: execUser.full_name || 'Proprietor & Director',
           reference_id: execUser.reference_id ?? null
@@ -755,7 +762,7 @@ async function handleRequest(context, dbData) {
       });
     }
 
-    if (cleanUser && cleanUser !== 'superadmin') {
+    if (cleanUser) {
       return jsonResponse({
         success: false,
         session: false,

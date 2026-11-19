@@ -30823,6 +30823,19 @@
       "is_active": 1,
       "last_login": null,
       "created_at": "2026-11-07 19:07:18"
+    },
+    {
+      "id": 1220,
+      "username": "hephzibah",
+      "email": "director@eaglepowerschools.com.ng",
+      "role": "superadmin",
+      "reference_id": "EPS-DIR-02",
+      "full_name": "Hephzibah (Executive Director)",
+      "avatar_url": null,
+      "signature_url": null,
+      "is_active": 1,
+      "last_login": null,
+      "created_at": "2026-11-19 18:04:26"
     }
   ],
   "audit_logs": [

@@ -53,3 +53,11 @@ test('formatRoleWelcome mentions teacher, parent, or admin with first name', () 
   assert.equal(formatRoleWelcome(null, 'parent'), 'Parent');
   assert.equal(formatRoleWelcome(null, 'admin'), 'Admin');
 });
+
+test('Curriculum Architect (classes tab) is fully accessible to admin and superadmin', async () => {
+  const { canAccessTab, ROLE_TABS } = await import('../src/utils/portalPermissions.js');
+  assert.equal(canAccessTab('admin', 'classes'), true, 'admin must have access to classes tab');
+  assert.equal(canAccessTab('superadmin', 'classes'), true, 'superadmin must have access to classes tab');
+  assert.ok(ROLE_TABS.admin.includes('classes'), 'ROLE_TABS.admin must include classes');
+  assert.ok(ROLE_TABS.superadmin.includes('classes'), 'ROLE_TABS.superadmin must include classes');
+});

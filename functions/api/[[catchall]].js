@@ -1,5 +1,5 @@
 import baselineData from '../../src/data/portalDbData.json' with { type: 'json' };
-import { handleHr, passwordHash } from '../_lib/hr.js';
+import { handleHr, passwordHash, loadHr } from '../_lib/hr.js';
 
 // In-Memory Cloudflare Edge State
 let maintenanceMode = {
@@ -167,6 +167,26 @@ async function ensureStaffCommTables(env) {
       )`
     ).run();
     await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS staff_automation_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_key TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        is_enabled INTEGER DEFAULT 1,
+        schedule_time TEXT DEFAULT '07:45',
+        schedule_days TEXT DEFAULT 'MON,TUE,WED,THU,FRI',
+        template_title TEXT NOT NULL,
+        template_body TEXT NOT NULL,
+        target_audience TEXT NOT NULL DEFAULT 'TEACHERS',
+        channels TEXT NOT NULL DEFAULT 'IN_APP,WHATSAPP',
+        priority TEXT DEFAULT 'HIGH',
+        action_url TEXT,
+        last_run_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`
+    ).run();
+    await env.DB.prepare(
       `CREATE TABLE IF NOT EXISTS staff_broadcast_campaigns (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
@@ -316,6 +336,130 @@ const STAFF_COMMUNICATION_TEMPLATES = [
   { id: 'ca_marks_deadline', category: 'Academics & Curriculum', title: 'Continuous Assessment (CA) Score Entry Deadline', subject: 'Continuous Assessment (CA) Score Entry Deadline', targetGroup: 'TEACHERS', priority: 'URGENT', actionUrl: 'gradebook', body: 'Urgent Academic Directive: Terminal Continuous Assessment (CA1, CA2) and Examination scores for your assigned subjects must be finalized in the Gradebook before the close of work this Friday.' },
   { id: 'monthly_payslip', category: 'Finance & Payroll', title: 'Monthly E-Payslip & Salary Disbursement Notice', subject: 'Monthly Electronic Payslip Available', targetGroup: 'ALL_STAFF', priority: 'NORMAL', actionUrl: 'payroll', body: 'Dear Faculty Colleague, your official electronic payslip for this month has been processed and signed. You can review your salary breakdown, allowances, and statutory deductions under Payroll in your portal.' },
 ];
+
+// Default automation rules, identical to the Express seed
+// (server/src/services/staffCommunicationService.js). Seeded once when the
+// rules table is empty.
+const STAFF_AUTOMATION_DEFAULT_RULES = [
+  { rule_key: 'DAILY_MORNING_DUTY_REMINDER', name: 'Daily Morning Duty & Attendance Roll-Call', description: 'Automated 7:45 AM reminder for Form Masters and Duty Teachers to conduct morning assembly and submit class roll calls before 8:30 AM.', schedule_time: '07:45', schedule_days: 'MON,TUE,WED,THU,FRI', target_audience: 'FORM_MASTERS', channels: 'IN_APP,WHATSAPP', priority: 'HIGH', action_url: 'attendance', template_title: '📋 Morning Roll Call & Gate Duty Reminder', template_body: 'Good morning Educator! Please ensure your classroom attendance roll-call is marked and submitted on the portal before 8:30 AM prompt. Ensure every scholar in your assigned form room is accounted for.' },
+  { rule_key: 'WEEKLY_LESSON_PLAN_SUBMISSION', name: 'Friday Lesson Notes & Scheme Submission Alert', description: 'Automated weekly alert every Friday (1:00 PM) prompting all teaching faculty to submit next week’s lesson plans and scheme of work for HOD review.', schedule_time: '13:00', schedule_days: 'FRI', target_audience: 'TEACHERS', channels: 'IN_APP,WHATSAPP', priority: 'HIGH', action_url: 'lesson_notes', template_title: '📚 Weekly Lesson Notes & Scheme Submission Due', template_body: 'Good day Colleague! A reminder that your curriculum lesson notes, behavioral objectives, and schemes of work for next week’s academic schedule must be submitted on the portal by 3:00 PM today for HOD approval.' },
+  { rule_key: 'TERMINAL_GRADEBOOK_DEADLINE', name: 'Continuous Assessment & Exam Score Upload Countdown', description: 'Alerts all subject teachers to enter Continuous Assessment (CA1, CA2) and terminal exam scores into the Master Gradebook before deadline.', schedule_time: '08:00', schedule_days: 'WED,THU,FRI', target_audience: 'TEACHERS', channels: 'IN_APP,WHATSAPP', priority: 'URGENT', action_url: 'gradebook', template_title: '📊 Continuous Assessment (CA) & Exam Score Entry Deadline', template_body: 'Urgent Academic Directive: Terminal Continuous Assessment (CA1, CA2) and Examination scores for your assigned subjects must be finalized in the Gradebook before the close of work this Friday.' },
+  { rule_key: 'MONTHLY_PAYSLIP_PUBLISHED', name: 'Monthly Staff Payroll & Payslip Issuance', description: 'Instant notification alerting staff when monthly payroll has been finalized and electronic payslips are available for download.', schedule_time: '16:00', schedule_days: 'MON,TUE,WED,THU,FRI', target_audience: 'ALL_STAFF', channels: 'IN_APP,WHATSAPP', priority: 'NORMAL', action_url: 'payroll', template_title: '💳 Monthly Electronic Payslip Available', template_body: 'Dear Faculty Colleague, your official electronic payslip for this month has been processed and signed. You can review your salary breakdown, allowances, and statutory deductions under Payroll in your portal.' },
+  { rule_key: 'STAFF_GENERAL_ANNOUNCEMENT', name: 'Executive Management Directive & Staff Briefing', description: 'Direct communication channel from the Principal and Management for general staff notices, PTA coordination, and academic calendars.', schedule_time: '09:00', schedule_days: 'MON', target_audience: 'ALL_STAFF', channels: 'IN_APP,WHATSAPP', priority: 'NORMAL', action_url: 'overview', template_title: '📢 Executive Academic Notice from School Management', template_body: 'Good day esteemed staff members! Please check your portal noticeboard for important operational guidelines, term calendar updates, and upcoming institutional events.' },
+];
+const staffRulesMem = STAFF_AUTOMATION_DEFAULT_RULES.map((r, i) => ({ id: i + 1, is_enabled: 1, last_run_at: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), ...r }));
+let staffRuleSeq = staffRulesMem.length;
+
+async function seedStaffRulesIfEmpty(env) {
+  if (env && env.DB) {
+    try {
+      const row = await env.DB.prepare('SELECT COUNT(*) AS c FROM staff_automation_rules').first();
+      if (row && (row.c || 0) === 0) {
+        for (const r of STAFF_AUTOMATION_DEFAULT_RULES) {
+          await env.DB.prepare(
+            `INSERT OR IGNORE INTO staff_automation_rules (rule_key, name, description, schedule_time, schedule_days, target_audience, channels, priority, action_url, template_title, template_body)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+          ).bind(r.rule_key, r.name, r.description, r.schedule_time, r.schedule_days, r.target_audience, r.channels, r.priority, r.action_url, r.template_title, r.template_body).run();
+        }
+        const seeded = await env.DB.prepare('SELECT * FROM staff_automation_rules ORDER BY id ASC').all();
+        if (seeded?.results?.length) { staffRulesMem.length = 0; staffRulesMem.push(...seeded.results); staffRuleSeq = staffRulesMem.length; }
+      }
+    } catch (err) { /* memory defaults still serve */ }
+  }
+}
+
+async function loadStaffRules(env) {
+  await ensureStaffCommTables(env);
+  await seedStaffRulesIfEmpty(env);
+  if (env && env.DB) {
+    try {
+      const { results } = await env.DB.prepare('SELECT * FROM staff_automation_rules ORDER BY id ASC').all();
+      if (results) return results;
+    } catch (err) { /* fall through to memory */ }
+  }
+  return staffRulesMem.slice().sort((a, b) => a.id - b.id);
+}
+
+async function updateStaffRule(env, ruleKey, fields) {
+  const now = new Date().toISOString();
+  await ensureStaffCommTables(env);
+  if (env && env.DB) {
+    try {
+      const keys = Object.keys(fields);
+      if (keys.length) {
+        const sql = `UPDATE staff_automation_rules SET ${keys.map((k, i) => `${k} = ?${i + 1}`).join(', ')}, updated_at = ?${keys.length + 1} WHERE rule_key = ?${keys.length + 2}`;
+        await env.DB.prepare(sql).bind(...keys.map(k => fields[k]), now, ruleKey).run();
+      }
+    } catch (err) { /* memory copy below still updates */ }
+  }
+  const mem = staffRulesMem.find(r => r.rule_key === ruleKey);
+  if (mem) { Object.assign(mem, fields, { updated_at: now }); }
+  const rules = await loadStaffRules(env);
+  return rules.find(r => r.rule_key === ruleKey) || null;
+}
+
+// Shared dispatch used by the broadcast endpoint, manual rule triggers and
+// the scheduler: one notification row per recipient plus a campaign record.
+async function dispatchStaffBroadcast(env, staffMerged, { title, message, targetGroup = 'ALL_STAFF', specificIds = [], priority = 'NORMAL', actionUrl = null, senderName = 'Administration', triggerType = 'MANUAL', channels = 'IN_APP' }) {
+  const recipients = resolveBroadcastRecipients(staffMerged, targetGroup, specificIds);
+  for (const st of recipients) {
+    await insertStaffNotification(env, {
+      staff_id: st.id, title, message,
+      type: priority === 'URGENT' ? 'EXECUTIVE_DIRECTIVE' : 'ANNOUNCEMENT',
+      priority, action_url: actionUrl, sender_name: senderName
+    });
+  }
+  await insertStaffCampaign(env, {
+    title, message, target_group: targetGroup, channels,
+    trigger_type: triggerType,
+    recipient_count: recipients.length, delivered_count: recipients.length,
+    dispatched_by: senderName
+  });
+  return { totalRecipients: recipients.length, inAppDelivered: recipients.length };
+}
+
+async function dispatchStaffRule(env, dbData, rule, dispatchedBy) {
+  const staffMerged = mergeStoredRecords(dbData.staff || [], await loadStoreMap(env, 'staff_store'));
+  const result = await dispatchStaffBroadcast(env, staffMerged, {
+    title: rule.template_title, message: rule.template_body,
+    targetGroup: rule.target_audience, priority: rule.priority || 'HIGH',
+    actionUrl: rule.action_url, senderName: dispatchedBy,
+    triggerType: 'AUTOMATED_SCHEDULE', channels: rule.channels || 'IN_APP'
+  });
+  await updateStaffRule(env, rule.rule_key, { last_run_at: new Date().toISOString() });
+  return { ...result, ruleKey: rule.rule_key, ruleName: rule.name };
+}
+
+// Scheduler entry point, called from the worker's `scheduled` handler (wired
+// in the deploy bundle) when a Cloudflare cron trigger fires. Mirrors the
+// Express scheduler: Lagos time, rule fires when the current time is within
+// 15 minutes after its schedule_time on a listed day, at most once per day.
+export async function runStaffCommScheduler(env) {
+  let dbData = baselineData;
+  if (env && env.HR_DB) {
+    try { const { data } = await loadHr(env.HR_DB, baselineData); if (data) dbData = data; } catch {}
+  }
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short' }).formatToParts(new Date());
+  const hour = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10) % 24;
+  const minute = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+  const weekday = (parts.find(p => p.type === 'weekday')?.value || '').toUpperCase().slice(0, 3);
+  const todayLagos = lagosToday();
+  const rules = await loadStaffRules(env);
+  const fired = [];
+  for (const rule of rules) {
+    if (!rule.is_enabled) continue;
+    const days = (rule.schedule_days || '').split(',').map(d => d.trim().toUpperCase());
+    if (!days.includes(weekday)) continue;
+    const [rHour, rMin] = (rule.schedule_time || '07:45').split(':').map(Number);
+    const diff = (hour * 60 + minute) - (rHour * 60 + rMin);
+    if (diff < 0 || diff > 15) continue;
+    const lastRunLagos = rule.last_run_at ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(rule.last_run_at)) : '';
+    if (lastRunLagos === todayLagos) continue;
+    const res = await dispatchStaffRule(env, dbData, rule, 'Eagle Power Automated Cron');
+    fired.push(res);
+  }
+  return fired;
+}
 
 // Durable record stores (D1 tables classes_store / subjects_store / staff_store):
 // each row holds the full merged record as JSON; deleted=1 hides a baseline record.
@@ -1596,26 +1740,76 @@ async function handleRequest(context, dbData) {
       if (!title || !message) return jsonResponse({ success: false, message: 'Title and message are required for staff broadcast.' }, 400);
       const targetGroup = body.target_group || 'ALL_STAFF';
       const priority = ['LOW', 'NORMAL', 'HIGH', 'URGENT'].includes(body.priority) ? body.priority : 'NORMAL';
-      const recipients = resolveBroadcastRecipients(staffMerged, targetGroup, body.specific_staff_ids || []);
       const senderName = tokenUser.full_name || tokenUser.username || 'Administration';
-      for (const st of recipients) {
-        await insertStaffNotification(env, {
-          staff_id: st.id, title, message,
-          type: priority === 'URGENT' ? 'EXECUTIVE_DIRECTIVE' : 'ANNOUNCEMENT',
-          priority, action_url: body.action_url || null, sender_name: senderName
-        });
-      }
-      await insertStaffCampaign(env, {
-        title, message, target_group: targetGroup,
-        channels: Array.isArray(body.channels) ? body.channels.join(',') : (body.channels || 'IN_APP'),
-        recipient_count: recipients.length, delivered_count: recipients.length,
-        dispatched_by: senderName
+      const result = await dispatchStaffBroadcast(env, staffMerged, {
+        title, message, targetGroup,
+        specificIds: body.specific_staff_ids || [],
+        priority, actionUrl: body.action_url || null, senderName,
+        channels: Array.isArray(body.channels) ? body.channels.join(',') : (body.channels || 'IN_APP')
       });
       return jsonResponse({
         success: true,
-        message: `Broadcast delivered to ${recipients.length} staff members successfully.`,
-        result: { totalRecipients: recipients.length, inAppDelivered: recipients.length }
+        message: `Broadcast delivered to ${result.totalRecipients} staff members successfully.`,
+        result
       }, 201);
+    }
+
+    if (path === '/api/staff-communication/rules' && method === 'GET') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'Automation rules are restricted to school leadership.' }, 403);
+      const rules = await loadStaffRules(env);
+      return jsonResponse({ success: true, count: rules.length, rules });
+    }
+
+    const ruleMatch = /^\/api\/staff-communication\/rules\/([A-Za-z0-9_]+)$/.exec(path);
+    if (ruleMatch && method === 'PUT') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'Automation rules are restricted to school leadership.' }, 403);
+      const rules = await loadStaffRules(env);
+      const rule = rules.find(r => r.rule_key === ruleMatch[1]);
+      if (!rule) return jsonResponse({ success: false, message: `Rule '${ruleMatch[1]}' not found.` }, 404);
+      const fields = {};
+      if (body.is_enabled !== undefined) {
+        if (![0, 1].includes(body.is_enabled)) return jsonResponse({ success: false, message: 'is_enabled must be 0 or 1.' }, 400);
+        fields.is_enabled = body.is_enabled;
+      }
+      if (body.schedule_time !== undefined) {
+        if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(body.schedule_time)) return jsonResponse({ success: false, message: 'Time must be HH:MM.' }, 400);
+        fields.schedule_time = body.schedule_time;
+      }
+      if (body.schedule_days !== undefined) fields.schedule_days = String(body.schedule_days);
+      if (body.template_title !== undefined) {
+        if (String(body.template_title).length < 3) return jsonResponse({ success: false, message: 'template_title is too short.' }, 400);
+        fields.template_title = String(body.template_title);
+      }
+      if (body.template_body !== undefined) {
+        if (String(body.template_body).length < 5) return jsonResponse({ success: false, message: 'template_body is too short.' }, 400);
+        fields.template_body = String(body.template_body);
+      }
+      if (body.target_audience !== undefined) {
+        if (!['ALL_STAFF', 'TEACHERS', 'FORM_MASTERS', 'NON_TEACHING', 'MANAGEMENT'].includes(body.target_audience)) return jsonResponse({ success: false, message: 'Invalid target_audience.' }, 400);
+        fields.target_audience = body.target_audience;
+      }
+      if (body.channels !== undefined) fields.channels = String(body.channels);
+      if (body.priority !== undefined) {
+        if (!['LOW', 'NORMAL', 'HIGH', 'URGENT'].includes(body.priority)) return jsonResponse({ success: false, message: 'Invalid priority.' }, 400);
+        fields.priority = body.priority;
+      }
+      if (body.action_url !== undefined) fields.action_url = body.action_url;
+      const updated = await updateStaffRule(env, ruleMatch[1], fields);
+      return jsonResponse({ success: true, message: `Rule '${rule.name}' updated successfully.`, rule: updated });
+    }
+
+    const triggerMatch = /^\/api\/staff-communication\/rules\/([A-Za-z0-9_]+)\/trigger$/.exec(path);
+    if (triggerMatch && method === 'POST') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'Automation rules are restricted to school leadership.' }, 403);
+      const rules = await loadStaffRules(env);
+      const rule = rules.find(r => r.rule_key === triggerMatch[1]);
+      if (!rule) return jsonResponse({ success: false, message: `Rule '${triggerMatch[1]}' not found.` }, 404);
+      const result = await dispatchStaffRule(env, dbData, rule, tokenUser.username || 'Administrator');
+      return jsonResponse({
+        success: true,
+        message: `Successfully triggered automated campaign '${result.ruleName}' to ${result.totalRecipients} staff members.`,
+        result
+      });
     }
 
     if (path === '/api/staff-communication/campaigns' && method === 'GET') {

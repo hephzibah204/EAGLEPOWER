@@ -1010,13 +1010,17 @@ https://eaglepower.pages.dev/portal/login?phone=${encodeURIComponent(intlPhone)}
     req.on('data', chunk => { raw += chunk; });
     req.on('end', async () => {
       let targetPhone = url.searchParams.get('phone');
-      if (!targetPhone && raw) {
+      let period = null;
+      const qFrom = url.searchParams.get('from'), qTo = url.searchParams.get('to');
+      if (qFrom && qTo) period = { from: qFrom, to: qTo };
+      if (raw) {
         try {
           const body = JSON.parse(raw);
-          targetPhone = body.phone;
+          targetPhone = targetPhone || body.phone;
+          if (body.from && body.to) period = { from: body.from, to: body.to };
         } catch (_) {}
       }
-      const result = await dispatchWeeklyReport(targetPhone || null);
+      const result = await dispatchWeeklyReport(targetPhone || null, period);
       res.writeHead(result.success ? 200 : 500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     });
@@ -1035,7 +1039,7 @@ export const LEADERSHIP_RECIPIENTS = [
 
 let lastWeeklyReportTime = 0;
 
-export async function dispatchWeeklyReport(targetPhone = null) {
+export async function dispatchWeeklyReport(targetPhone = null, period = null) {
   if (!activeSocket) {
     console.warn('[Weekly Report] Socket not ready to dispatch report.');
     return { success: false, reason: 'WhatsApp companion socket not ready.' };
@@ -1047,7 +1051,7 @@ export async function dispatchWeeklyReport(targetPhone = null) {
     const intlPhone = clean.startsWith('0') ? '234' + clean.slice(1) : (clean.startsWith('234') ? clean : '234' + clean);
     const targetJid = `${intlPhone}@s.whatsapp.net`;
     const leader = LEADERSHIP_RECIPIENTS.find(l => l.phone === intlPhone || l.phone.slice(-10) === clean.slice(-10));
-    const reportText = await getWeeklyReportText(leader?.name, leader?.role);
+    const reportText = await getWeeklyReportText(leader?.name, leader?.role, period);
 
     console.log(`[Weekly Report] Dispatching Executive Weekly Report to ${targetJid}...`);
     try {
@@ -1064,7 +1068,7 @@ export async function dispatchWeeklyReport(targetPhone = null) {
   const results = [];
   for (const leader of LEADERSHIP_RECIPIENTS) {
     const targetJid = `${leader.phone}@s.whatsapp.net`;
-    const reportText = await getWeeklyReportText(leader.name, leader.role);
+    const reportText = await getWeeklyReportText(leader.name, leader.role, period);
     console.log(`[Weekly Report] Dispatching Executive Weekly Report to ${leader.name} (${targetJid})...`);
     try {
       await activeSocket.sendMessage(targetJid, { text: reportText });

@@ -14,14 +14,35 @@
 
 const PORTAL_BASE = (process.env.PORTAL_BASE_URL || 'https://eaglepowerschools.com.ng').replace(/\/$/, '');
 
-export async function fetchProductionReportData(days = 7) {
+// Monday-Friday school week containing `date` (Africa/Lagos), as ISO dates.
+export function schoolWeekPeriod(date = new Date()) {
+  const lagos = new Date(date.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+  const dow = lagos.getDay(); // 0 Sun .. 6 Sat
+  const monday = new Date(lagos);
+  monday.setDate(lagos.getDate() - ((dow + 6) % 7));
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { from: iso(monday), to: iso(friday) };
+}
+
+export function lastSchoolWeekPeriod(date = new Date()) {
+  const lagos = new Date(date.toLocaleString('en-US', { timeZone: 'Africa/Lagos' }));
+  lagos.setDate(lagos.getDate() - 7);
+  return schoolWeekPeriod(lagos);
+}
+
+export async function fetchProductionReportData(period = null) {
   const key = process.env.WEEKLY_REPORT_KEY || '';
   if (key.length < 32) {
     console.warn('[Weekly Report] WEEKLY_REPORT_KEY is not configured on the bot; cannot fetch production data.');
     return null;
   }
+  const query = period?.from && period?.to
+    ? `from=${period.from}&to=${period.to}`
+    : `days=${period?.days || 7}`;
   try {
-    const res = await fetch(`${PORTAL_BASE}/api/executive/weekly-report-data?days=${days}`, {
+    const res = await fetch(`${PORTAL_BASE}/api/executive/weekly-report-data?${query}`, {
       headers: { 'x-weekly-report-key': key },
       signal: AbortSignal.timeout(20000),
     });
@@ -135,8 +156,8 @@ _Eagle Power Intelligent Assistant — Executive Dispatch_`;
   return out;
 }
 
-export async function getWeeklyReportText(recipientName = null, recipientRole = null, days = 7) {
-  const data = await fetchProductionReportData(days);
+export async function getWeeklyReportText(recipientName = null, recipientRole = null, period = null) {
+  const data = await fetchProductionReportData(period || schoolWeekPeriod());
   if (!data) {
     return `🦅 *EAGLE POWER SCHOOLS & COLLEGES, AWKA*
 🏛️ *EXECUTIVE WEEKLY REPORT*

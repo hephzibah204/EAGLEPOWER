@@ -1455,12 +1455,21 @@ async function handleRequest(context, dbData) {
       return jsonResponse({ success: false, message: 'Unauthorized' }, 401);
     }
     try {
-      const daysParam = parseInt(url.searchParams.get('days') || '7', 10);
-      const days = Number.isFinite(daysParam) ? Math.min(Math.max(daysParam, 1), 31) : 7;
-      const toDate = new Date();
-      const fromDate = new Date(toDate.getTime() - (days - 1) * 86400000);
       const iso = (d) => d.toISOString().slice(0, 10);
-      const from = iso(fromDate), to = iso(toDate);
+      const validDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || '') && !Number.isNaN(Date.parse(s));
+      let from, to, days;
+      if (validDate(url.searchParams.get('from')) && validDate(url.searchParams.get('to'))) {
+        // Explicit period, e.g. a Monday-Friday school week: ?from=2026-11-16&to=2026-11-20
+        from = url.searchParams.get('from');
+        to = url.searchParams.get('to');
+        days = Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1;
+      } else {
+        const daysParam = parseInt(url.searchParams.get('days') || '7', 10);
+        days = Number.isFinite(daysParam) ? Math.min(Math.max(daysParam, 1), 31) : 7;
+        const toDate = new Date();
+        const fromDate = new Date(toDate.getTime() - (days - 1) * 86400000);
+        from = iso(fromDate); to = iso(toDate);
+      }
       const session = dbData.system?.current_session || dbData.system_settings?.current_session || '2026/2027';
       const term = dbData.system?.current_term || dbData.system_settings?.current_term || 'First Term';
 

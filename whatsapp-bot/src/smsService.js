@@ -588,6 +588,13 @@ export function triggerDbBackup() {
 /**
  * 10. Executive Weekly Report Generator for School Leadership
  */
+/**
+ * DEPRECATED (2026-11-26): this generator reads the bot's local SQLite
+ * snapshot, which does not sync with the production portal database, and it
+ * produced stale figures for leadership. The weekly report now comes from
+ * productionReport.js (live portal aggregates). Kept only so legacy imports
+ * do not break; do not wire it back into any dispatch path.
+ */
 export function generateWeeklyExecutiveReport(recipientName = null, recipientRole = null) {
   const settings = db.prepare(`SELECT * FROM system_settings WHERE id = 1`).get();
   const session = settings?.current_session || '2026/2027';
@@ -730,7 +737,7 @@ ${recipientHeader}
 
 📊 *1. SCHOLAR ENROLLMENT & ACADEMIC FACULTY*
 • Registered Scholars: *${totalPupils} Active Pupils*
-• Academic & Administrative Roster: *${totalStaff} Personnel* (28 Faculty Teachers + 2 Leadership Executives)
+• Academic & Administrative Roster: *${totalStaff} Personnel*
 • School Structure: *Creche, Nursery, Primary, Junior College, Senior College*
 
 👨‍🏫 *2. TEACHER ATTENDANCE & DUTY SIGN-IN*
@@ -759,7 +766,7 @@ ${recipientHeader}
 • First Term Invoices: *${invoiceStats.count > 0 ? `₦${Number(invoiceStats.totalDue).toLocaleString()} billed across ${invoiceStats.count} accounts` : 'Term fee billing schedule awaiting Bursary generation'}*
 
 💻 *7. PLATFORM USAGE & ACTIVITY FREQUENCY*
-• Total Registered User Accounts: *${totalUsers} accounts* (28 Teachers, 99 Students, 41 Parents, 6 Admin)
+• Total Registered User Accounts: *${totalUsers} accounts*
 • Active Users (Past 7 Days): *${activeLogins7d} logged-in accounts*
 • Total Platform Audit Logs: *${totalAudit} verified operations*
 • Weekly Platform Actions: *${audit7d} events*
@@ -859,7 +866,7 @@ export function generatePerformanceAnalyticsReport(category = 'all') {
 • Curriculum Pacing: *First Term 2026/2027 curriculum active across all classes.*
 
 💻 *5. PLATFORM USAGE & ACTIVITY FREQUENCY*
-• Total Registered User Accounts: *${totalUsers} accounts* (28 Teachers, 99 Students, 41 Parents, 6 Admin)
+• Total Registered User Accounts: *${totalUsers} accounts*
 • Active Users (Past 7 Days): *${activeLogins7d} logged-in accounts*
 • Total Portal Operations Tracked: *${totalAudit} database interactions*
 • Weekly Platform Actions: *${audit7d} events*

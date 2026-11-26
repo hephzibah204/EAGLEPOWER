@@ -23,9 +23,9 @@ import {
   getTodayCollections,
   getSystemTelemetry,
   triggerDbBackup,
-  generateWeeklyExecutiveReport,
   generatePerformanceAnalyticsReport,
 } from "./smsService.js";
+import { getWeeklyReportText } from "./productionReport.js";
 import { buildRoleMenu } from "./roleMenus.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1049,7 +1049,7 @@ _Once transferred, send your receipt right here for automated Bursary clearance!
     if (session.isPrincipal || session.isVP || session.isDirector || session.role === 'superadmin' || session.role === 'admin' || senderPhone.includes('7066397577') || senderPhone.includes('8033591058') || senderPhone.includes('8037000456')) {
       const recipientName = session.title || (session.profile?.name);
       const recipientRole = session.profile?.role;
-      return generateWeeklyExecutiveReport(recipientName, recipientRole);
+      return await getWeeklyReportText(recipientName, recipientRole);
     } else {
       return `⛔ *Access Restricted:* The Executive Weekly Report is reserved exclusively for the School Leadership.`;
     }

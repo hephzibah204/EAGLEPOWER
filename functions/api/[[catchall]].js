@@ -1442,6 +1442,168 @@ async function handleRequest(context, dbData) {
     return jsonResponse({ success: true, maintenance: maintenanceMode });
   }
 
+  // Weekly Executive Report data (production aggregates for the WhatsApp bot).
+  // The bot used to report from its own stale local SQLite snapshot; this endpoint
+  // is the single source of truth: baseline portalDbData merged with the D1
+  // stores (marks_store, classes_store, staff_store) and attendance_records.
+  // Auth: shared key in the x-weekly-report-key header, compared against the
+  // WEEKLY_REPORT_KEY Pages secret. Fails closed when the secret is not set.
+  if (path === '/api/executive/weekly-report-data' && method === 'GET') {
+    const expectedKey = typeof env.WEEKLY_REPORT_KEY === 'string' ? env.WEEKLY_REPORT_KEY : '';
+    const givenKey = request.headers.get('x-weekly-report-key') || '';
+    if (expectedKey.length < 32 || givenKey !== expectedKey) {
+      return jsonResponse({ success: false, message: 'Unauthorized' }, 401);
+    }
+    try {
+      const daysParam = parseInt(url.searchParams.get('days') || '7', 10);
+      const days = Number.isFinite(daysParam) ? Math.min(Math.max(daysParam, 1), 31) : 7;
+      const toDate = new Date();
+      const fromDate = new Date(toDate.getTime() - (days - 1) * 86400000);
+      const iso = (d) => d.toISOString().slice(0, 10);
+      const from = iso(fromDate), to = iso(toDate);
+      const session = dbData.system?.current_session || dbData.system_settings?.current_session || '2026/2027';
+      const term = dbData.system?.current_term || dbData.system_settings?.current_term || 'First Term';
+
+      const staffMerged = mergeStoredRecords(dbData.staff || [], await loadStoreMap(env, 'staff_store'));
+      const classesMerged = mergeStoredRecords(dbData.classes || [], await loadStoreMap(env, 'classes_store'));
+      const staffById = new Map(staffMerged.map(s => [String(s.id), s]));
+      const classById = new Map(classesMerged.map(c => [String(c.id), c]));
+      const studentsById = new Map((dbData.students || []).map(s => [String(s.id), s]));
+      const teacherNameFor = (cls) => {
+        const t = cls?.class_teacher_id != null ? staffById.get(String(cls.class_teacher_id)) : null;
+        return t ? t.name : null;
+      };
+
+      // Attendance: D1 attendance_records is authoritative.
+      let att = { total: 0, present: 0, absent: 0, students: 0, days: 0, byClass: [] };
+      let attAllTime = 0;
+      if (env.DB) {
+        const win = await env.DB.prepare(
+          `SELECT COUNT(*) total,
+                  SUM(CASE WHEN status='Present' THEN 1 ELSE 0 END) present,
+                  SUM(CASE WHEN status='Absent' THEN 1 ELSE 0 END) absent,
+                  COUNT(DISTINCT student_id) students,
+                  COUNT(DISTINCT attendance_date) days
+           FROM attendance_records WHERE attendance_date >= ?1 AND attendance_date <= ?2`
+        ).bind(from, to).first();
+        if (win) att = { ...att, total: win.total || 0, present: win.present || 0, absent: win.absent || 0, students: win.students || 0, days: win.days || 0 };
+        const byClassRes = await env.DB.prepare(
+          `SELECT class_id, COUNT(*) total, COUNT(DISTINCT attendance_date) days
+           FROM attendance_records WHERE attendance_date >= ?1 AND attendance_date <= ?2
+           GROUP BY class_id ORDER BY total DESC`
+        ).bind(from, to).all();
+        att.byClass = (byClassRes?.results || []).map(r => {
+          const cls = classById.get(String(r.class_id));
+          return { class_id: r.class_id, class_name: cls?.name || `Class ${r.class_id}`, form_teacher: teacherNameFor(cls), total: r.total || 0, register_days: r.days || 0 };
+        });
+        const allRes = await env.DB.prepare('SELECT COUNT(*) total FROM attendance_records').first();
+        attAllTime = allRes?.total || 0;
+        var attRegisterDaysByClass = {};
+        const regRes = await env.DB.prepare(
+          'SELECT class_id, COUNT(DISTINCT attendance_date) days, COUNT(*) total FROM attendance_records GROUP BY class_id'
+        ).all();
+        for (const r of (regRes?.results || [])) attRegisterDaysByClass[String(r.class_id)] = { days: r.days || 0, total: r.total || 0 };
+      }
+
+      // Marks: merged baseline + marks_store, current session/term.
+      const mergedMarks = await loadMergedMarks(env, dbData);
+      const termMarks = mergedMarks.filter(m => (m.session || session) === session && (m.term || term) === term);
+      const inWindow = (m) => { const d = String(m.updated_at || m.created_at || '').slice(0, 10); return d >= from && d <= to; };
+      const marksByClass = new Map();
+      for (const m of termMarks) {
+        const k = String(m.class_id ?? '');
+        if (!marksByClass.has(k)) marksByClass.set(k, 0);
+        marksByClass.set(k, marksByClass.get(k) + 1);
+      }
+      const caScores = termMarks.map(m => Number(m.ca_score)).filter(Number.isFinite);
+      const byStudent = new Map();
+      for (const m of termMarks) {
+        const k = String(m.student_id);
+        if (!byStudent.has(k)) byStudent.set(k, []);
+        byStudent.get(k).push(Number(m.ca_score) || 0);
+      }
+      const topScholars = [...byStudent.entries()]
+        .filter(([, v]) => v.length >= 5)
+        .map(([sid, v]) => {
+          const st = studentsById.get(sid);
+          const cls = st ? classById.get(String(st.class_id)) : null;
+          return { name: st ? `${st.first_name} ${st.last_name}` : `Student ${sid}`, class_name: cls?.name || null, subjects: v.length, avg_ca: Math.round((v.reduce((a, b) => a + b, 0) / v.length) * 10) / 10 };
+        })
+        .sort((a, b) => b.avg_ca - a.avg_ca).slice(0, 5);
+
+      // Most active teachers: CA entries + register days, attributed by class
+      // to the assigned form teacher (the portal does not stamp entries by user).
+      const activity = new Map();
+      const bump = (classId, field, n) => {
+        const cls = classById.get(String(classId));
+        if (!cls) return;
+        const name = teacherNameFor(cls) || `Unassigned (${cls.name})`;
+        const key = `${name}|${cls.name}`;
+        if (!activity.has(key)) activity.set(key, { teacher: name, class_name: cls.name, ca_scores: 0, register_days: 0, attendance_records: 0 });
+        activity.get(key)[field] += n;
+      };
+      for (const [cid, n] of marksByClass.entries()) bump(cid, 'ca_scores', n);
+      if (typeof attRegisterDaysByClass !== 'undefined') {
+        for (const [cid, v] of Object.entries(attRegisterDaysByClass)) { bump(cid, 'register_days', v.days); bump(cid, 'attendance_records', v.total); }
+      }
+      const mostActiveTeachers = [...activity.values()]
+        .filter(a => a.ca_scores > 0 || a.register_days > 0)
+        .sort((a, b) => (b.ca_scores + b.register_days * 10) - (a.ca_scores + a.register_days * 10))
+        .slice(0, 5);
+
+      const payments = dbData.payments || [];
+      const invoices = dbData.invoices || [];
+      const payInWindow = payments.filter(p => { const d = String(p.payment_date || p.date || p.created_at || '').slice(0, 10); return d >= from && d <= to; });
+      const admissions = dbData.admissions || [];
+      const admInWindow = admissions.filter(a => { const d = String(a.submitted_at || a.created_at || '').slice(0, 10); return d >= from && d <= to; });
+      const visitors = dbData.visitors || [];
+      const visInWindow = visitors.filter(v => { const d = String(v.check_in_time || v.created_at || '').slice(0, 10); return d >= from && d <= to; });
+      const unassignedClasses = classesMerged
+        .filter(c => c.class_teacher_id == null)
+        .map(c => c.name);
+
+      return jsonResponse({
+        success: true,
+        source: 'portal-production',
+        generated_at: new Date().toISOString(),
+        period: { from, to, days },
+        session, term,
+        enrollment: {
+          active_students: (dbData.students || []).filter(s => s.is_active !== 0 && s.is_active !== false).length,
+          total_students: (dbData.students || []).length,
+          staff: staffMerged.filter(s => s.is_active !== 0 && s.is_active !== false).length,
+          classes: classesMerged.length,
+          portal_accounts: (dbData.users || []).length,
+          classes_without_form_teacher: unassignedClasses
+        },
+        attendance: { ...att, all_time_total: attAllTime },
+        marks: {
+          term_total: termMarks.length,
+          entered_in_window: termMarks.filter(inWindow).length,
+          students_covered: new Set(termMarks.map(m => String(m.student_id))).size,
+          subjects_covered: new Set(termMarks.map(m => String(m.subject_id))).size,
+          avg_ca: caScores.length ? Math.round((caScores.reduce((a, b) => a + b, 0) / caScores.length) * 10) / 10 : null,
+          exam_scores_entered: termMarks.filter(m => Number(m.exam_score) > 0).length,
+          by_class: [...marksByClass.entries()].map(([cid, n]) => ({ class_name: classById.get(cid)?.name || `Class ${cid}`, count: n })).sort((a, b) => b.count - a.count),
+          top_scholars_ca: topScholars
+        },
+        most_active_teachers: mostActiveTeachers,
+        bursary: {
+          payments_in_window: payInWindow.length,
+          payments_in_window_total: payInWindow.reduce((a, p) => a + (Number(p.amount) || 0), 0),
+          payments_all_time: payments.length,
+          invoices_count: invoices.length,
+          invoiced_total: invoices.reduce((a, i) => a + (Number(i.amount_due) || 0), 0),
+          invoiced_paid: invoices.reduce((a, i) => a + (Number(i.amount_paid) || 0), 0)
+        },
+        admissions: { in_window: admInWindow.length, total: admissions.length },
+        visitors: { in_window: visInWindow.length, total: visitors.length }
+      });
+    } catch (err) {
+      return jsonResponse({ success: false, message: 'Report data unavailable', detail: String(err?.message || err) }, 500);
+    }
+  }
+
   // WhatsApp Bot Status & Management
   if (path === '/api/executive/whatsapp/status') {
     const parentCount = (dbData.students || []).filter(s => s.guardian_phone).length || 92;

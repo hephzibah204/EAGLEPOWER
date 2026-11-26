@@ -25,8 +25,8 @@ import {
   getClassBroadsheetSummary,
   getStudentSummary,
   getStaffPayslipByPhoneOrNumber,
-  generateWeeklyExecutiveReport,
 } from "./smsService.js";
+import { getWeeklyReportText } from "./productionReport.js";
 import { processConversationalMessage } from "./aiBrain.js";
 
 const AUTH_DIR = process.env.AUTH_DIR || path.join(process.cwd(), "auth_info");
@@ -1047,7 +1047,7 @@ export async function dispatchWeeklyReport(targetPhone = null) {
     const intlPhone = clean.startsWith('0') ? '234' + clean.slice(1) : (clean.startsWith('234') ? clean : '234' + clean);
     const targetJid = `${intlPhone}@s.whatsapp.net`;
     const leader = LEADERSHIP_RECIPIENTS.find(l => l.phone === intlPhone || l.phone.slice(-10) === clean.slice(-10));
-    const reportText = generateWeeklyExecutiveReport(leader?.name, leader?.role);
+    const reportText = await getWeeklyReportText(leader?.name, leader?.role);
 
     console.log(`[Weekly Report] Dispatching Executive Weekly Report to ${targetJid}...`);
     try {
@@ -1064,7 +1064,7 @@ export async function dispatchWeeklyReport(targetPhone = null) {
   const results = [];
   for (const leader of LEADERSHIP_RECIPIENTS) {
     const targetJid = `${leader.phone}@s.whatsapp.net`;
-    const reportText = generateWeeklyExecutiveReport(leader.name, leader.role);
+    const reportText = await getWeeklyReportText(leader.name, leader.role);
     console.log(`[Weekly Report] Dispatching Executive Weekly Report to ${leader.name} (${targetJid})...`);
     try {
       await activeSocket.sendMessage(targetJid, { text: reportText });

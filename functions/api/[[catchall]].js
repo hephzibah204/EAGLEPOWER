@@ -64,6 +64,76 @@ async function persistAttendance(env, classId, date, saved) {
   }
 }
 
+// Staff self-attendance (added 2026-11-26): teachers clock themselves in/out on
+// the portal. Durable storage is D1 (env.DB, table staff_attendance_records,
+// created lazily like the other stores) with an in-memory map as the
+// same-isolate fallback when the binding is absent. One row per staff member
+// per day; staff_id is the staff record id from the merged staff list.
+const staffAttendanceStore = new Map();
+let staffAttendanceTableReady = false;
+const STAFF_ATTENDANCE_STATUSES = ['Present', 'Absent', 'Late', 'On Leave'];
+
+async function ensureStaffAttendanceTable(env) {
+  if (!env || !env.DB || staffAttendanceTableReady) return;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS staff_attendance_records (
+        staff_id TEXT NOT NULL,
+        attendance_date TEXT NOT NULL,
+        status TEXT NOT NULL,
+        clock_in TEXT DEFAULT '',
+        clock_out TEXT DEFAULT '',
+        marked_by TEXT DEFAULT '',
+        updated_at TEXT DEFAULT '',
+        PRIMARY KEY (staff_id, attendance_date)
+      )`
+    ).run();
+    staffAttendanceTableReady = true;
+  } catch {}
+}
+
+async function loadStaffAttendance(env, from, to, staffId = null) {
+  await ensureStaffAttendanceTable(env);
+  if (env && env.DB) {
+    try {
+      const sql = staffId
+        ? 'SELECT staff_id, attendance_date, status, clock_in, clock_out, marked_by, updated_at FROM staff_attendance_records WHERE attendance_date >= ?1 AND attendance_date <= ?2 AND staff_id = ?3 ORDER BY attendance_date DESC'
+        : 'SELECT staff_id, attendance_date, status, clock_in, clock_out, marked_by, updated_at FROM staff_attendance_records WHERE attendance_date >= ?1 AND attendance_date <= ?2 ORDER BY attendance_date DESC';
+      const stmt = staffId ? env.DB.prepare(sql).bind(from, to, String(staffId)) : env.DB.prepare(sql).bind(from, to);
+      const { results } = await stmt.all();
+      return results || [];
+    } catch (err) {
+      // fall through to the in-memory store
+    }
+  }
+  return [...staffAttendanceStore.values()]
+    .filter(r => r.attendance_date >= from && r.attendance_date <= to && (!staffId || String(r.staff_id) === String(staffId)))
+    .sort((a, b) => (a.attendance_date < b.attendance_date ? 1 : -1));
+}
+
+async function saveStaffAttendance(env, record) {
+  const key = `${record.staff_id}|${record.attendance_date}`;
+  staffAttendanceStore.set(key, record);
+  await ensureStaffAttendanceTable(env);
+  if (env && env.DB) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO staff_attendance_records (staff_id, attendance_date, status, clock_in, clock_out, marked_by, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(staff_id, attendance_date) DO UPDATE SET status = excluded.status, clock_in = excluded.clock_in, clock_out = excluded.clock_out, marked_by = excluded.marked_by, updated_at = excluded.updated_at`
+      ).bind(String(record.staff_id), record.attendance_date, record.status, record.clock_in || '', record.clock_out || '', record.marked_by || '', record.updated_at).run();
+    } catch (err) {
+      // the in-memory copy above still serves this isolate
+    }
+  }
+  return record;
+}
+
+// Today's date on the school clock (Africa/Lagos), YYYY-MM-DD.
+function lagosToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
 // Durable record stores (D1 tables classes_store / subjects_store / staff_store):
 // each row holds the full merged record as JSON; deleted=1 hides a baseline record.
 // In-memory maps mirror the same contract when the DB binding is absent.
@@ -1157,6 +1227,143 @@ async function handleRequest(context, dbData) {
       count: auditLogStore.length,
       logs: auditLogStore
     });
+  }
+
+  // 4c. Staff Attendance (self clock-in/out + executive register)
+  // Auth follows the change-password pattern: Bearer token or eagle_session
+  // cookie, resolved strictly with resolveTokenUser. HR sessions reach this
+  // handler already translated to the same token format by functions/_lib/hr.js.
+  if (path.startsWith('/api/staff-attendance') || path.startsWith('/api/executive/staff-attendance')) {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Authentication required for staff attendance.' }, 401);
+    }
+    const staffMerged = mergeStoredRecords(dbData.staff || [], await loadStoreMap(env, 'staff_store'));
+    const findStaffForUser = (u) => staffMerged.find(st =>
+      (u.reference_id && st.staff_no === u.reference_id) ||
+      (u.full_name && (st.name || '').toLowerCase() === u.full_name.toLowerCase())
+    ) || null;
+    const isExecutive = ['superadmin', 'admin'].includes(tokenUser.role); // VP signs in with the admin role
+
+    // Teacher self-service: clock in (marks self Present for today, Lagos time)
+    if (path === '/api/staff-attendance/clock-in' && method === 'POST') {
+      const staffRec = findStaffForUser(tokenUser);
+      if (!staffRec) return jsonResponse({ success: false, message: 'No staff record is linked to your account, so attendance cannot be marked. Please see the ICT desk.' }, 400);
+      const today = lagosToday();
+      const existing = (await loadStaffAttendance(env, today, today, staffRec.id))[0] || null;
+      if (existing && existing.clock_in) {
+        return jsonResponse({ success: true, message: 'You have already clocked in today.', record: existing });
+      }
+      const now = new Date().toISOString();
+      const record = await saveStaffAttendance(env, {
+        staff_id: String(staffRec.id), attendance_date: today,
+        status: existing?.status === 'Late' ? 'Late' : 'Present',
+        clock_in: now, clock_out: existing?.clock_out || '',
+        marked_by: `self:${tokenUser.username}`, updated_at: now
+      });
+      return jsonResponse({ success: true, message: 'Clocked in. Have a great day at school.', record });
+    }
+
+    // Teacher self-service: clock out
+    if (path === '/api/staff-attendance/clock-out' && method === 'POST') {
+      const staffRec = findStaffForUser(tokenUser);
+      if (!staffRec) return jsonResponse({ success: false, message: 'No staff record is linked to your account.' }, 400);
+      const today = lagosToday();
+      const existing = (await loadStaffAttendance(env, today, today, staffRec.id))[0] || null;
+      if (!existing || !existing.clock_in) {
+        return jsonResponse({ success: false, message: 'You have not clocked in today yet.' }, 400);
+      }
+      if (existing.clock_out) {
+        return jsonResponse({ success: true, message: 'You have already clocked out today.', record: existing });
+      }
+      const now = new Date().toISOString();
+      const record = await saveStaffAttendance(env, { ...existing, clock_out: now, marked_by: existing.marked_by || `self:${tokenUser.username}`, updated_at: now });
+      return jsonResponse({ success: true, message: 'Clocked out. See you tomorrow.', record });
+    }
+
+    // Teacher self-service: my records in a date range (default: last 14 days)
+    if (path === '/api/staff-attendance/mine' && method === 'GET') {
+      const staffRec = findStaffForUser(tokenUser);
+      if (!staffRec) return jsonResponse({ success: false, message: 'No staff record is linked to your account.' }, 400);
+      const today = lagosToday();
+      const to = url.searchParams.get('to') || today;
+      const from = url.searchParams.get('from') || new Date(Date.now() - 13 * 86400000).toISOString().slice(0, 10);
+      const records = await loadStaffAttendance(env, from, to, staffRec.id);
+      return jsonResponse({
+        success: true,
+        staff: { id: staffRec.id, staff_no: staffRec.staff_no, name: staffRec.name, role: staffRec.role },
+        today: records.find(r => r.attendance_date === today) || null,
+        records
+      });
+    }
+
+    // Executive register: every staff member with their status for one day,
+    // or all records in a from/to range when both are supplied.
+    if (path === '/api/executive/staff-attendance' && method === 'GET') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'The staff attendance register is restricted to school leadership.' }, 403);
+      const today = lagosToday();
+      const fromParam = url.searchParams.get('from');
+      const toParam = url.searchParams.get('to');
+      if (fromParam && toParam) {
+        const records = await loadStaffAttendance(env, fromParam, toParam);
+        const byId = new Map(staffMerged.map(s => [String(s.id), s]));
+        return jsonResponse({
+          success: true, from: fromParam, to: toParam,
+          records: records.map(r => ({ ...r, staff_name: byId.get(String(r.staff_id))?.name || `Staff ${r.staff_id}`, staff_no: byId.get(String(r.staff_id))?.staff_no || null }))
+        });
+      }
+      const date = url.searchParams.get('date') || today;
+      const dayRecords = await loadStaffAttendance(env, date, date);
+      const byStaff = new Map(dayRecords.map(r => [String(r.staff_id), r]));
+      const staff = staffMerged
+        .filter(s => s.is_active !== 0 && s.is_active !== false)
+        .map(s => {
+          const rec = byStaff.get(String(s.id));
+          return {
+            staff_id: s.id, staff_no: s.staff_no, name: s.name, role: s.role,
+            assigned_class: s.assigned_class || null,
+            status: rec?.status || 'Not marked',
+            clock_in: rec?.clock_in || '', clock_out: rec?.clock_out || '',
+            marked_by: rec?.marked_by || ''
+          };
+        });
+      const summary = { total: staff.length, present: 0, absent: 0, late: 0, on_leave: 0, not_marked: 0 };
+      for (const s of staff) {
+        if (s.status === 'Present') summary.present++;
+        else if (s.status === 'Absent') summary.absent++;
+        else if (s.status === 'Late') summary.late++;
+        else if (s.status === 'On Leave') summary.on_leave++;
+        else summary.not_marked++;
+      }
+      return jsonResponse({ success: true, date, summary, staff });
+    }
+
+    // Executive correction: mark or amend any staff member for a date.
+    if (path === '/api/executive/staff-attendance/mark' && method === 'POST') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'Only school leadership can mark staff attendance for others.' }, 403);
+      const { staff_id, staff_no, date, status, clock_in, clock_out } = body;
+      const target = staffMerged.find(s => String(s.id) === String(staff_id) || (staff_no && s.staff_no === staff_no));
+      if (!target) return jsonResponse({ success: false, message: 'Staff member not found.' }, 404);
+      if (!STAFF_ATTENDANCE_STATUSES.includes(status)) {
+        return jsonResponse({ success: false, message: `Status must be one of: ${STAFF_ATTENDANCE_STATUSES.join(', ')}.` }, 400);
+      }
+      const markDate = /^\d{4}-\d{2}-\d{2}$/.test(date || '') ? date : lagosToday();
+      const existing = (await loadStaffAttendance(env, markDate, markDate, target.id))[0] || null;
+      const now = new Date().toISOString();
+      const record = await saveStaffAttendance(env, {
+        staff_id: String(target.id), attendance_date: markDate, status,
+        clock_in: clock_in !== undefined ? clock_in : (existing?.clock_in || ''),
+        clock_out: clock_out !== undefined ? clock_out : (existing?.clock_out || ''),
+        marked_by: `admin:${tokenUser.username}`, updated_at: now
+      });
+      return jsonResponse({ success: true, message: `${target.name} marked ${status} for ${markDate}.`, record });
+    }
+
+    return jsonResponse({ success: false, message: 'Unknown staff attendance endpoint.' }, 404);
   }
 
   // 5. SuperAdmin User Accounts & IAM Console

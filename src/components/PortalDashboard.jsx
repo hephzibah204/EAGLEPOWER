@@ -94,6 +94,7 @@ import WhatsAppBotConsoleModal from './superadmin/modules/WhatsAppBotConsoleModa
 import StaffNotificationBell from './staff/StaffNotificationBell';
 import StaffCommunicationConsole from './staff/StaffCommunicationConsole';
 import SystemHelpGuide from './SystemHelpGuide';
+import StaffAttendance from './StaffAttendance';
 
 export default function PortalDashboard({
   isOpen = true,
@@ -3635,6 +3636,15 @@ export default function PortalDashboard({
                           <span className="truncate">Staff Faculty</span>
                         </button>
                         <button
+                          onClick={() => setActiveTab('staff_attendance')}
+                          className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
+                            activeTab === 'staff_attendance' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Clock className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                          <span className="truncate">Staff Attendance</span>
+                        </button>
+                        <button
                           onClick={() => setActiveTab('admissions')}
                           className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl font-bold transition-colors ${
                             activeTab === 'admissions' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
@@ -3851,6 +3861,15 @@ export default function PortalDashboard({
                         <span>Staff Faculty</span>
                       </button>
                       <button
+                        onClick={() => setActiveTab('staff_attendance')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'staff_attendance' ? 'bg-amber-400/10 text-amber-400 border border-amber-400/30' : 'text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-teal-400" />
+                        <span>Staff Attendance</span>
+                      </button>
+                      <button
                         onClick={() => setActiveTab('students')}
                         className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
                           activeTab === 'students' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-400 hover:text-white'
@@ -3947,6 +3966,15 @@ export default function PortalDashboard({
                       >
                         <GraduationCap className="w-3.5 h-3.5 text-amber-400" />
                         <span>My Students Roster</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('staff_attendance')}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl font-bold transition-colors ${
+                          activeTab === 'staff_attendance' ? 'bg-amber-400 text-slate-950 font-black shadow-sm' : 'text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60'
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5 text-teal-400" />
+                        <span>My Attendance</span>
                       </button>
                       <button
                         onClick={() => {
@@ -6537,6 +6565,11 @@ export default function PortalDashboard({
                   </div>
                 );
               })()}
+
+              {/* STAFF ATTENDANCE (SELF CLOCK-IN/OUT + EXECUTIVE REGISTER) */}
+              {activeTab === 'staff_attendance' && (
+                <StaffAttendance authToken={authToken} activeRole={activeRole} />
+              )}
 
               {/* ATTENDANCE REGISTER (TEACHER, SUPERADMIN & PRINCIPAL) */}
               {(activeRole === 'teacher' || activeRole === 'superadmin' || activeRole === 'admin') && activeTab === 'attendance' && (

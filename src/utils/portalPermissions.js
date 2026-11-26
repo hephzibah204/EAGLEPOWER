@@ -1,8 +1,8 @@
-const management = ['executive_cockpit', 'overview', 'students', 'student_profile', 'staff', 'admissions', 'classes', 'attendance', 'gradebook', 'broadsheet', 'reportcard', 'templates', 'homework', 'lesson_notes', 'ai_progress', 'invoices', 'payroll', 'visitors', 'staff_communication', 'help_guide'];
+const management = ['executive_cockpit', 'overview', 'students', 'student_profile', 'staff', 'staff_attendance', 'admissions', 'classes', 'attendance', 'gradebook', 'broadsheet', 'reportcard', 'templates', 'homework', 'lesson_notes', 'ai_progress', 'invoices', 'payroll', 'visitors', 'staff_communication', 'help_guide'];
 export const ROLE_TABS = Object.freeze({
   superadmin: [...management, 'users', 'system_settings', 'threat_radar', 'security', 'audit', 'ai_analytics'],
   admin: management,
-  teacher: ['teacher_cockpit', 'my_students', 'attendance', 'gradebook', 'broadsheet', 'homework', 'lesson_notes', 'reportcard', 'ai_progress', 'help_guide'],
+  teacher: ['teacher_cockpit', 'my_students', 'staff_attendance', 'attendance', 'gradebook', 'broadsheet', 'homework', 'lesson_notes', 'reportcard', 'ai_progress', 'help_guide'],
   bursar: ['invoices', 'payroll', 'reportcard', 'help_guide'],
   student: ['reportcard', 'homework', 'student_profile', 'ai_progress', 'help_guide'],
   parent: ['child_overview', 'reportcard', 'homework', 'student_profile', 'invoices', 'ai_progress', 'help_guide'],

@@ -134,6 +134,189 @@ function lagosToday() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
+// Staff Communication (added 2026-11-26): in-app notifications for the portal's
+// StaffNotificationBell + StaffCommunicationConsole. The Express backend has
+// these routes (server/src/routes/staffCommunication.js) but the edge handler
+// never did, so the bell always showed "unavailable" on the live site. This
+// port mirrors the Express data model exactly: staff_notifications holds one
+// row per recipient (staff_id set) or a broadcast row (staff_id NULL, visible
+// to everyone); staff_broadcast_campaigns logs each dispatch. D1 tables are
+// created lazily like staff_attendance_records, with in-memory fallbacks.
+const staffNotificationsMem = [];
+const staffCampaignsMem = [];
+let staffCommTablesReady = false;
+let staffNotificationSeq = 0;
+let staffCampaignSeq = 0;
+
+async function ensureStaffCommTables(env) {
+  if (!env || !env.DB || staffCommTablesReady) return;
+  try {
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS staff_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        staff_id INTEGER,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT 'ANNOUNCEMENT',
+        priority TEXT NOT NULL DEFAULT 'NORMAL',
+        action_url TEXT,
+        is_read INTEGER DEFAULT 0,
+        read_at TEXT,
+        sender_name TEXT DEFAULT 'Administration',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`
+    ).run();
+    await env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS staff_broadcast_campaigns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        message TEXT NOT NULL,
+        target_group TEXT NOT NULL,
+        channels TEXT NOT NULL DEFAULT 'IN_APP',
+        trigger_type TEXT NOT NULL DEFAULT 'MANUAL',
+        recipient_count INTEGER DEFAULT 0,
+        delivered_count INTEGER DEFAULT 0,
+        dispatched_by TEXT NOT NULL,
+        status TEXT DEFAULT 'COMPLETED',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`
+    ).run();
+    staffCommTablesReady = true;
+  } catch {}
+}
+
+async function loadStaffNotifications(env, staffId, limit = 30, unreadOnly = false) {
+  await ensureStaffCommTables(env);
+  if (env && env.DB) {
+    try {
+      const sql = `SELECT id, staff_id, title, message, type, priority, action_url, is_read, read_at, sender_name, created_at
+        FROM staff_notifications
+        WHERE (staff_id = ?1 OR staff_id IS NULL)${unreadOnly ? ' AND is_read = 0' : ''}
+        ORDER BY id DESC LIMIT ?2`;
+      const { results } = await env.DB.prepare(sql).bind(staffId === null ? -1 : Number(staffId), limit).all();
+      if (results) return results;
+    } catch (err) { /* fall through to memory */ }
+  }
+  return staffNotificationsMem
+    .filter(n => n.staff_id === null || String(n.staff_id) === String(staffId))
+    .filter(n => !unreadOnly || !n.is_read)
+    .slice()
+    .sort((a, b) => b.id - a.id)
+    .slice(0, limit);
+}
+
+async function countUnreadStaffNotifications(env, staffId) {
+  await ensureStaffCommTables(env);
+  if (env && env.DB) {
+    try {
+      const row = await env.DB.prepare(
+        'SELECT COUNT(*) AS c FROM staff_notifications WHERE (staff_id = ?1 OR staff_id IS NULL) AND is_read = 0'
+      ).bind(staffId === null ? -1 : Number(staffId)).first();
+      if (row) return row.c || 0;
+    } catch (err) { /* fall through to memory */ }
+  }
+  return staffNotificationsMem.filter(n => (n.staff_id === null || String(n.staff_id) === String(staffId)) && !n.is_read).length;
+}
+
+async function insertStaffNotification(env, n) {
+  const record = { is_read: 0, read_at: null, created_at: new Date().toISOString(), ...n };
+  await ensureStaffCommTables(env);
+  if (env && env.DB) {
+    try {
+      const res = await env.DB.prepare(
+        `INSERT INTO staff_notifications (staff_id, title, message, type, priority, action_url, is_read, sender_name, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8)`
+      ).bind(n.staff_id === null ? null : Number(n.staff_id), n.title, n.message, n.type || 'ANNOUNCEMENT', n.priority || 'NORMAL', n.action_url || null, n.sender_name || 'Administration', record.created_at).run();
+      record.id = res?.meta?.last_row_id || ++staffNotificationSeq;
+      staffNotificationsMem.push(record);
+      return record;
+    } catch (err) { /* fall through to memory */ }
+  }
+  record.id = ++staffNotificationSeq;
+  staffNotificationsMem.push(record);
+  return record;
+}
+
+async function markStaffNotificationRead(env, staffId, idOrAll) {
+  const now = new Date().toISOString();
+  await ensureStaffCommTables(env);
+  if (env && env.DB) {
+    try {
+      if (idOrAll === 'ALL') {
+        await env.DB.prepare('UPDATE staff_notifications SET is_read = 1, read_at = ?2 WHERE (staff_id = ?1 OR staff_id IS NULL) AND is_read = 0')
+          .bind(staffId === null ? -1 : Number(staffId), now).run();
+      } else {
+        await env.DB.prepare('UPDATE staff_notifications SET is_read = 1, read_at = ?3 WHERE id = ?1 AND (staff_id = ?2 OR staff_id IS NULL)')
+          .bind(Number(idOrAll), staffId === null ? -1 : Number(staffId), now).run();
+      }
+    } catch (err) { /* memory copy below still updates */ }
+  }
+  for (const n of staffNotificationsMem) {
+    if (n.staff_id !== null && String(n.staff_id) !== String(staffId)) continue;
+    if (idOrAll === 'ALL' || n.id === Number(idOrAll)) { n.is_read = 1; n.read_at = now; }
+  }
+}
+
+async function insertStaffCampaign(env, c) {
+  const record = { created_at: new Date().toISOString(), status: 'COMPLETED', trigger_type: 'MANUAL', channels: 'IN_APP', ...c };
+  await ensureStaffCommTables(env);
+  if (env && env.DB) {
+    try {
+      const res = await env.DB.prepare(
+        `INSERT INTO staff_broadcast_campaigns (title, message, target_group, channels, trigger_type, recipient_count, delivered_count, dispatched_by, status, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`
+      ).bind(c.title, c.message, c.target_group, record.channels, record.trigger_type, c.recipient_count || 0, c.delivered_count || 0, c.dispatched_by, record.status, record.created_at).run();
+      record.id = res?.meta?.last_row_id || ++staffCampaignSeq;
+      staffCampaignsMem.push(record);
+      return record;
+    } catch (err) { /* fall through to memory */ }
+  }
+  record.id = ++staffCampaignSeq;
+  staffCampaignsMem.push(record);
+  return record;
+}
+
+async function loadStaffCampaigns(env, limit = 20) {
+  await ensureStaffCommTables(env);
+  if (env && env.DB) {
+    try {
+      const { results } = await env.DB.prepare('SELECT * FROM staff_broadcast_campaigns ORDER BY id DESC LIMIT ?1').bind(limit).all();
+      if (results) return results;
+    } catch (err) { /* fall through to memory */ }
+  }
+  return staffCampaignsMem.slice().sort((a, b) => b.id - a.id).slice(0, limit);
+}
+
+// Recipient resolution for broadcasts, mirroring the Express
+// resolveTargetStaff groups against the merged staff list.
+function resolveBroadcastRecipients(staffMerged, targetGroup, specificIds = []) {
+  const active = (staffMerged || []).filter(s => s.is_active !== 0 && s.is_active !== false);
+  const role = (s) => (s.role || '').toLowerCase();
+  if (targetGroup === 'SPECIFIC_STAFF' && specificIds.length) {
+    return active.filter(s => specificIds.map(String).includes(String(s.id)));
+  }
+  if (targetGroup === 'FORM_MASTERS') {
+    return active.filter(s => s.form_responsibility || (s.assigned_class && !['', 'General Faculty', 'None'].includes(s.assigned_class)) || role(s).includes('form'));
+  }
+  if (targetGroup === 'TEACHERS') {
+    return active.filter(s => ['teacher', 'educator', 'master', 'mistress', 'faculty'].some(k => role(s).includes(k)));
+  }
+  if (targetGroup === 'MANAGEMENT') {
+    return active.filter(s => ['principal', 'director', 'admin', 'manager', 'head'].some(k => role(s).includes(k)));
+  }
+  if (targetGroup === 'NON_TEACHING') {
+    return active.filter(s => !['teacher', 'educator', 'master', 'mistress', 'faculty'].some(k => role(s).includes(k)));
+  }
+  return active; // ALL_STAFF
+}
+
+const STAFF_COMMUNICATION_TEMPLATES = [
+  { id: 'morning_rollcall', category: 'Attendance & Duty', title: 'Daily Morning Roll Call & Gate Duty Reminder', subject: 'Morning Roll Call & Gate Duty Reminder', targetGroup: 'FORM_MASTERS', priority: 'HIGH', actionUrl: 'attendance', body: 'Good morning Educator! Please ensure your classroom attendance roll-call is marked and submitted on the portal before 8:30 AM prompt. Ensure every scholar in your assigned form room is accounted for.' },
+  { id: 'lesson_notes_friday', category: 'Academics & Curriculum', title: 'Friday Lesson Scheme & Notes Submission Due', subject: 'Weekly Lesson Notes & Scheme Submission Due', targetGroup: 'TEACHERS', priority: 'HIGH', actionUrl: 'lesson_notes', body: 'Good day Colleague! A reminder that your curriculum lesson notes, behavioral objectives, and schemes of work for next week must be submitted on the portal by 3:00 PM today for HOD approval.' },
+  { id: 'ca_marks_deadline', category: 'Academics & Curriculum', title: 'Continuous Assessment (CA) Score Entry Deadline', subject: 'Continuous Assessment (CA) Score Entry Deadline', targetGroup: 'TEACHERS', priority: 'URGENT', actionUrl: 'gradebook', body: 'Urgent Academic Directive: Terminal Continuous Assessment (CA1, CA2) and Examination scores for your assigned subjects must be finalized in the Gradebook before the close of work this Friday.' },
+  { id: 'monthly_payslip', category: 'Finance & Payroll', title: 'Monthly E-Payslip & Salary Disbursement Notice', subject: 'Monthly Electronic Payslip Available', targetGroup: 'ALL_STAFF', priority: 'NORMAL', actionUrl: 'payroll', body: 'Dear Faculty Colleague, your official electronic payslip for this month has been processed and signed. You can review your salary breakdown, allowances, and statutory deductions under Payroll in your portal.' },
+];
+
 // Durable record stores (D1 tables classes_store / subjects_store / staff_store):
 // each row holds the full merged record as JSON; deleted=1 hides a baseline record.
 // In-memory maps mirror the same contract when the DB binding is absent.
@@ -1364,6 +1547,101 @@ async function handleRequest(context, dbData) {
     }
 
     return jsonResponse({ success: false, message: 'Unknown staff attendance endpoint.' }, 404);
+  }
+
+  // 4d. Staff Communication (in-app notifications, bell + admin console)
+  // Mirrors server/src/routes/staffCommunication.js, which the edge handler
+  // never implemented. Auth: Bearer <redacted> or eagle_session cookie via
+  // resolveTokenUser, same as staff attendance.
+  if (path.startsWith('/api/staff-communication')) {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Authentication required for staff notifications.' }, 401);
+    }
+    const staffMerged = mergeStoredRecords(dbData.staff || [], await loadStoreMap(env, 'staff_store'));
+    const myStaff = staffMerged.find(st =>
+      (tokenUser.reference_id && st.staff_no === tokenUser.reference_id) ||
+      (tokenUser.full_name && (st.name || '').toLowerCase() === tokenUser.full_name.toLowerCase())
+    ) || null;
+    const myStaffId = myStaff ? myStaff.id : null;
+    const isExecutive = ['superadmin', 'admin'].includes(tokenUser.role);
+
+    if (path === '/api/staff-communication/notifications' && method === 'GET') {
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '30', 10) || 30, 100);
+      const unreadOnly = url.searchParams.get('unread') === 'true';
+      const notifications = await loadStaffNotifications(env, myStaffId, limit, unreadOnly);
+      const unreadCount = await countUnreadStaffNotifications(env, myStaffId);
+      return jsonResponse({ success: true, staffId: myStaffId, unreadCount, notifications });
+    }
+
+    if (path === '/api/staff-communication/notifications/read-all' && method === 'POST') {
+      await markStaffNotificationRead(env, myStaffId, 'ALL');
+      return jsonResponse({ success: true, message: 'All notifications marked as read.' });
+    }
+
+    const readMatch = /^\/api\/staff-communication\/notifications\/(\d+)\/read$/.exec(path);
+    if (readMatch && method === 'POST') {
+      await markStaffNotificationRead(env, myStaffId, readMatch[1]);
+      return jsonResponse({ success: true, notificationId: parseInt(readMatch[1], 10) });
+    }
+
+    if (path === '/api/staff-communication/broadcast' && method === 'POST') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'Broadcasts are restricted to school leadership.' }, 403);
+      const title = (body.title || '').trim();
+      const message = (body.message || '').trim();
+      if (!title || !message) return jsonResponse({ success: false, message: 'Title and message are required for staff broadcast.' }, 400);
+      const targetGroup = body.target_group || 'ALL_STAFF';
+      const priority = ['LOW', 'NORMAL', 'HIGH', 'URGENT'].includes(body.priority) ? body.priority : 'NORMAL';
+      const recipients = resolveBroadcastRecipients(staffMerged, targetGroup, body.specific_staff_ids || []);
+      const senderName = tokenUser.full_name || tokenUser.username || 'Administration';
+      for (const st of recipients) {
+        await insertStaffNotification(env, {
+          staff_id: st.id, title, message,
+          type: priority === 'URGENT' ? 'EXECUTIVE_DIRECTIVE' : 'ANNOUNCEMENT',
+          priority, action_url: body.action_url || null, sender_name: senderName
+        });
+      }
+      await insertStaffCampaign(env, {
+        title, message, target_group: targetGroup,
+        channels: Array.isArray(body.channels) ? body.channels.join(',') : (body.channels || 'IN_APP'),
+        recipient_count: recipients.length, delivered_count: recipients.length,
+        dispatched_by: senderName
+      });
+      return jsonResponse({
+        success: true,
+        message: `Broadcast delivered to ${recipients.length} staff members successfully.`,
+        result: { totalRecipients: recipients.length, inAppDelivered: recipients.length }
+      }, 201);
+    }
+
+    if (path === '/api/staff-communication/campaigns' && method === 'GET') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'Campaign history is restricted to school leadership.' }, 403);
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '20', 10) || 20, 100);
+      const campaigns = await loadStaffCampaigns(env, limit);
+      return jsonResponse({ success: true, campaigns });
+    }
+
+    if (path === '/api/staff-communication/overview' && method === 'GET') {
+      if (!isExecutive) return jsonResponse({ success: false, message: 'The communication overview is restricted to school leadership.' }, 403);
+      const campaigns = await loadStaffCampaigns(env, 100);
+      const totalNotifications = campaigns.reduce((a, c) => a + (c.delivered_count || 0), 0);
+      return jsonResponse({
+        success: true,
+        totalCampaigns: campaigns.length,
+        totalNotificationsSent: totalNotifications,
+        recentCampaigns: campaigns.slice(0, 5)
+      });
+    }
+
+    if (path === '/api/staff-communication/templates' && method === 'GET') {
+      return jsonResponse({ success: true, templates: STAFF_COMMUNICATION_TEMPLATES });
+    }
+
+    return jsonResponse({ success: false, message: 'Staff communication route not available on this service yet.' }, 404);
   }
 
   // 5. SuperAdmin User Accounts & IAM Console

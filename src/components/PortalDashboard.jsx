@@ -858,6 +858,13 @@ export default function PortalDashboard({
   const [userStatusFilter, setUserStatusFilter] = useState('all');
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [userActionMessage, setUserActionMessage] = useState(null);
+  // User action modals (reset password / freeze / unfreeze) - replaces the
+  // browser prompt()/confirm() dialogs with proper portal UI.
+  const [userModal, setUserModal] = useState(null); // { type: 'reset'|'status', user, newStatus? }
+  const [resetForm, setResetForm] = useState({ password: '', confirm: '' });
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [userModalError, setUserModalError] = useState(null);
+  const [userModalBusy, setUserModalBusy] = useState(false);
 
   const fetchUsers = useCallback(async (page = 1, role = userRoleFilter, status = userStatusFilter, q = userSearchQuery) => {
     setIsLoadingUsers(true);
@@ -881,10 +888,16 @@ export default function PortalDashboard({
     }
   }, [authToken, API_BASE, userRoleFilter, userStatusFilter, userSearchQuery]);
 
-  const handleToggleUserStatus = async (user) => {
-    const newStatus = user.is_active ? 0 : 1;
-    const actionText = newStatus === 1 ? 'activate' : 'suspend';
-    if (!confirm(`Are you sure you want to ${actionText} user account '${user.username}'?`)) return;
+  const handleToggleUserStatus = (user) => {
+    setUserModalError(null);
+    setUserModal({ type: 'status', user, newStatus: user.is_active ? 0 : 1 });
+  };
+
+  const submitToggleUserStatus = async () => {
+    if (!userModal || userModal.type !== 'status') return;
+    const { user, newStatus } = userModal;
+    setUserModalBusy(true);
+    setUserModalError(null);
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -897,11 +910,14 @@ export default function PortalDashboard({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to update status');
+      setUserModal(null);
       setUserActionMessage(`Account ${user.username} is now ${newStatus === 1 ? 'Active' : 'Suspended'}`);
       fetchUsers(userPage);
       setTimeout(() => setUserActionMessage(null), 3500);
     } catch (err) {
-      alert(`Status update failed: ${err.message}`);
+      setUserModalError(err.message);
+    } finally {
+      setUserModalBusy(false);
     }
   };
 
@@ -922,9 +938,27 @@ export default function PortalDashboard({
     }
   };
 
-  const handleResetUserPassword = async (user) => {
-    const newPass = prompt(`Enter new secure password for user '${user.username}' (min 8 chars, letters & digits):`);
-    if (!newPass) return;
+  const handleResetUserPassword = (user) => {
+    setUserModalError(null);
+    setResetForm({ password: '', confirm: '' });
+    setShowResetPassword(false);
+    setUserModal({ type: 'reset', user });
+  };
+
+  const submitResetUserPassword = async () => {
+    if (!userModal || userModal.type !== 'reset') return;
+    const { user } = userModal;
+    const newPass = resetForm.password;
+    if (newPass.length < 8 || !/[A-Za-z]/.test(newPass) || !/\d/.test(newPass)) {
+      setUserModalError('Password must be at least 8 characters long and contain both letters and digits.');
+      return;
+    }
+    if (newPass !== resetForm.confirm) {
+      setUserModalError('The two passwords do not match.');
+      return;
+    }
+    setUserModalBusy(true);
+    setUserModalError(null);
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -937,10 +971,14 @@ export default function PortalDashboard({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'Failed to reset password');
+      setUserModal(null);
+      setResetForm({ password: '', confirm: '' });
       setUserActionMessage(`Password for ${user.username} successfully updated!`);
       setTimeout(() => setUserActionMessage(null), 3500);
     } catch (err) {
-      alert(`Password reset failed: ${err.message}`);
+      setUserModalError(err.message);
+    } finally {
+      setUserModalBusy(false);
     }
   };
 
@@ -9176,6 +9214,140 @@ export default function PortalDashboard({
               {activeTab === 'staff_communication' && ['admin', 'superadmin'].includes(activeRole) && (
                 <StaffCommunicationConsole currentUser={currentUser} />
               )}
+
+        {/* Modal: User Actions (Reset Password / Freeze / Unfreeze) */}
+        {userModal && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 border border-slate-800 text-left space-y-4 shadow-2xl">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className={`p-2.5 rounded-2xl ${userModal.type === 'reset' ? 'bg-amber-400/10 border border-amber-400/30' : userModal.newStatus === 0 ? 'bg-rose-500/10 border border-rose-500/30' : 'bg-emerald-500/10 border border-emerald-500/30'}`}>
+                    {userModal.type === 'reset'
+                      ? <KeyRound className="w-5 h-5 text-amber-400" />
+                      : userModal.newStatus === 0
+                        ? <UserX className="w-5 h-5 text-rose-400" />
+                        : <UserCheck className="w-5 h-5 text-emerald-400" />}
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-white">
+                      {userModal.type === 'reset' ? 'Reset Password' : userModal.newStatus === 0 ? 'Suspend Account' : 'Reactivate Account'}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {userModal.user.full_name || userModal.user.username}
+                      <span className="text-slate-500"> · @{userModal.user.username} · {userModal.user.role}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => !userModalBusy && setUserModal(null)}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {userModal.type === 'status' && (
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {userModal.newStatus === 0
+                    ? <>Suspending <strong className="text-white">{userModal.user.username}</strong> takes effect immediately: they will no longer be able to sign in to the portal until the account is reactivated.</>
+                    : <>Reactivating <strong className="text-white">{userModal.user.username}</strong> restores their access: they will be able to sign in to the portal again right away.</>}
+                </p>
+              )}
+
+              {userModal.type === 'reset' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1.5">New password</label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showResetPassword ? 'text' : 'password'}
+                        value={resetForm.password}
+                        onChange={(e) => setResetForm({ ...resetForm, password: e.target.value })}
+                        placeholder="Enter a new secure password"
+                        autoComplete="new-password"
+                        className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/20 rounded-xl pl-9 pr-10 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none transition"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResetPassword(!showResetPassword)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                        aria-label={showResetPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wide block mb-1.5">Confirm new password</label>
+                    <div className="relative">
+                      <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type={showResetPassword ? 'text' : 'password'}
+                        value={resetForm.confirm}
+                        onChange={(e) => setResetForm({ ...resetForm, confirm: e.target.value })}
+                        placeholder="Type the password again"
+                        autoComplete="new-password"
+                        className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/20 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder:text-slate-500 outline-none transition"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                    {[
+                      { ok: resetForm.password.length >= 8, label: 'At least 8 characters' },
+                      { ok: /[A-Za-z]/.test(resetForm.password), label: 'Contains a letter' },
+                      { ok: /\d/.test(resetForm.password), label: 'Contains a digit' },
+                      { ok: resetForm.confirm.length > 0 && resetForm.password === resetForm.confirm, label: 'Both passwords match' }
+                    ].map((rule) => (
+                      <span key={rule.label} className={`flex items-center gap-1.5 ${rule.ok ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        <Check className="w-3.5 h-3.5 shrink-0" />
+                        {rule.label}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    The new password takes effect at the user's next sign-in. Share it with them privately and ask them to change it after signing in.
+                  </p>
+                </div>
+              )}
+
+              {userModalError && (
+                <div className="p-3 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-300 text-xs font-semibold">
+                  {userModalError}
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => !userModalBusy && setUserModal(null)}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-bold transition-colors"
+                >
+                  Cancel
+                </button>
+                {userModal.type === 'reset' ? (
+                  <button
+                    onClick={submitResetUserPassword}
+                    disabled={userModalBusy}
+                    className="flex-1 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 disabled:opacity-60 text-slate-950 text-sm font-black flex items-center justify-center gap-2 transition-colors"
+                  >
+                    {userModalBusy && <RefreshCw className="w-4 h-4 animate-spin" />}
+                    Reset Password
+                  </button>
+                ) : (
+                  <button
+                    onClick={submitToggleUserStatus}
+                    disabled={userModalBusy}
+                    className={`flex-1 px-4 py-2.5 rounded-xl disabled:opacity-60 text-sm font-black flex items-center justify-center gap-2 transition-colors ${userModal.newStatus === 0 ? 'bg-rose-500 hover:bg-rose-600 text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white'}`}
+                  >
+                    {userModalBusy && <RefreshCw className="w-4 h-4 animate-spin" />}
+                    {userModal.newStatus === 0 ? 'Suspend Account' : 'Reactivate Account'}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal: Bursar Record Payment */}
         {paymentModalOpen && selectedInvoice && (

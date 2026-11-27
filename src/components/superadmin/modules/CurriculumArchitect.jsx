@@ -457,7 +457,9 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
           {classes.map((cls) => (
             <div
               key={cls.id}
-              className="bg-slate-900/80 border border-slate-800 hover:border-amber-400/50 rounded-2xl p-5 shadow-lg transition-all group"
+              onClick={() => handleOpenClassModal(cls)}
+              className="bg-slate-900/80 border border-slate-800 hover:border-amber-400/50 rounded-2xl p-5 shadow-lg transition-all group cursor-pointer"
+              title="Click to edit class or assign its Form Teacher"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -496,6 +498,20 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
                   </span>
                 </div>
               </div>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenClassModal(cls);
+                }}
+                className={`mt-4 w-full px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 transition-colors ${
+                  cls.teacher_name
+                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                    : 'bg-amber-400 hover:bg-amber-500 text-slate-950 shadow'
+                }`}
+              >
+                {cls.teacher_name ? 'Change Form Teacher' : 'Assign Form Teacher'}
+              </button>
             </div>
           ))}
         </div>
@@ -795,7 +811,7 @@ export default function CurriculumArchitect({ authToken, staffList = [] }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Class Teacher (Optional)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Form Teacher (Class Teacher)</label>
                 <select
                   value={classForm.class_teacher_id}
                   onChange={(e) => setClassForm({ ...classForm, class_teacher_id: e.target.value })}

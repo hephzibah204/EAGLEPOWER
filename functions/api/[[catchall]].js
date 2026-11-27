@@ -1490,8 +1490,17 @@ async function handleRequest(context, dbData) {
     // including the synthetic ESE2009012 student (not a real account), were
     // removed 2026-11-11.
 
-    // Dynamic user lookup for all faculty, students, parents, and administrative staff
-    const matchedUser = (dbData.users || []).find(u => {
+    // Dynamic user lookup for all faculty, students, parents, and administrative staff.
+    // All matches are collected, not just the first: the shared role accounts
+    // ('teacher', 'admin', 'bursar') carry a real staff member's reference_id,
+    // so a phone number or staff number can match BOTH the shared account and
+    // that person's own account. First-match used to pick the shared account,
+    // which shadowed the personal one: its password was checked instead, so
+    // the staff member's own reset password could never sign in by phone
+    // (user 531, fixed 2026-11-27). A personal account now wins over a
+    // shared role account; an exact username match wins overall.
+    const GENERIC_LOGIN_USERNAMES = ['teacher', 'admin', 'bursar', 'superadmin'];
+    const loginMatches = (dbData.users || []).filter(u => {
       const uName = (u.username || '').toLowerCase();
       const uRef = (u.reference_id || '').toLowerCase();
       const uEmail = (u.email || '').toLowerCase();
@@ -1530,6 +1539,9 @@ async function handleRequest(context, dbData) {
 
       return false;
     });
+    const matchedUser = loginMatches.find(u => (u.username || '').toLowerCase() === cleanUser)
+      || loginMatches.find(u => !GENERIC_LOGIN_USERNAMES.includes((u.username || '').toLowerCase()))
+      || loginMatches[0];
 
     if (matchedUser) {
       const loginFlags = await loadUserFlags(env);

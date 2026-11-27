@@ -761,6 +761,110 @@ async function verifyUserCredential(env, username, password) {
   return attempt.hash === cred.hash;
 }
 
+// --- Account status flags + login lockouts --------------------------------
+// The Users console Freeze/Unfreeze and Release Lockout buttons were placebo
+// handlers on the edge: they returned success without storing anything, and
+// no lockout state existed at all (the threat panel's lockout count was a
+// hardcoded zero). These stores make both real. Status flags live in D1
+// table user_account_flags and overlay the roster's is_active everywhere it
+// matters (user list, login). Lockouts mirror the Express policy
+// (server/src/routes/auth.js): 5 failed sign-ins lock the account key for
+// 15 minutes; a successful sign-in or an admin release clears the counter.
+const userFlagMemory = new Map();
+const lockoutMemory = new Map();
+let accountTablesReady = false;
+const LOGIN_LOCK_THRESHOLD = 5;
+const LOGIN_LOCK_MINUTES = 15;
+
+async function ensureAccountTables(env) {
+  if (!env || !env.DB || accountTablesReady) return;
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS user_account_flags (user_id TEXT PRIMARY KEY, is_active INTEGER NOT NULL, updated_by TEXT DEFAULT \'\', updated_at INTEGER NOT NULL)').run();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS login_lockouts (key TEXT PRIMARY KEY, fail_count INTEGER NOT NULL DEFAULT 0, locked_until INTEGER DEFAULT 0, updated_at INTEGER NOT NULL)').run();
+    accountTablesReady = true;
+  } catch {}
+}
+
+async function loadUserFlags(env) {
+  if (env && env.DB) {
+    await ensureAccountTables(env);
+    try {
+      const { results } = await env.DB.prepare('SELECT user_id, is_active FROM user_account_flags').all();
+      if (results) return new Map(results.map(r => [String(r.user_id), Number(r.is_active)]));
+    } catch {}
+  }
+  return new Map(userFlagMemory);
+}
+
+async function setUserFlag(env, userId, isActive, updatedBy) {
+  const key = String(userId);
+  userFlagMemory.set(key, isActive);
+  if (env && env.DB) {
+    await ensureAccountTables(env);
+    try {
+      await env.DB.prepare('INSERT INTO user_account_flags (user_id, is_active, updated_by, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(user_id) DO UPDATE SET is_active = excluded.is_active, updated_by = excluded.updated_by, updated_at = excluded.updated_at')
+        .bind(key, isActive, updatedBy || '', Date.now()).run();
+    } catch {}
+  }
+}
+
+async function getLockout(env, key) {
+  if (env && env.DB) {
+    await ensureAccountTables(env);
+    try {
+      const row = await env.DB.prepare('SELECT fail_count, locked_until FROM login_lockouts WHERE key = ?1').bind(key).first();
+      if (row) return { count: row.fail_count || 0, lockedUntil: row.locked_until || 0 };
+    } catch {}
+  }
+  return lockoutMemory.get(key) || null;
+}
+
+async function saveLockout(env, key, rec) {
+  lockoutMemory.set(key, rec);
+  if (env && env.DB) {
+    await ensureAccountTables(env);
+    try {
+      await env.DB.prepare('INSERT INTO login_lockouts (key, fail_count, locked_until, updated_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(key) DO UPDATE SET fail_count = excluded.fail_count, locked_until = excluded.locked_until, updated_at = excluded.updated_at')
+        .bind(key, rec.count, rec.lockedUntil || 0, Date.now()).run();
+    } catch {}
+  }
+}
+
+async function clearLoginFailure(env, key) {
+  lockoutMemory.delete(key);
+  if (env && env.DB) {
+    await ensureAccountTables(env);
+    try { await env.DB.prepare('DELETE FROM login_lockouts WHERE key = ?1').bind(key).run(); } catch {}
+  }
+}
+
+async function recordLoginFailure(env, key) {
+  if (!key) return;
+  const rec = (await getLockout(env, key)) || { count: 0, lockedUntil: 0 };
+  rec.count += 1;
+  if (rec.count >= LOGIN_LOCK_THRESHOLD) {
+    rec.lockedUntil = Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000;
+  }
+  await saveLockout(env, key, rec);
+}
+
+async function lockedMinutesRemaining(env, key) {
+  const rec = await getLockout(env, key);
+  if (!rec || !rec.lockedUntil) return 0;
+  const now = Date.now();
+  if (rec.lockedUntil > now) return Math.ceil((rec.lockedUntil - now) / 60000);
+  await clearLoginFailure(env, key); // expired lock clears itself
+  return 0;
+}
+
+// Effective suspension state for a user: an admin-set flag wins over the
+// roster value.
+function isSuspended(user, flags) {
+  const flag = flags.get(String(user.id));
+  if (flag !== undefined) return flag === 0;
+  return user.is_active === 0 || user.is_active === false;
+}
+
 async function issueChangeToken(env, user) {
   const token = [...crypto.getRandomValues(new Uint8Array(32))].map(b => b.toString(16).padStart(2, '0')).join('');
   const key = String(user.username || '').toLowerCase();
@@ -1107,11 +1211,21 @@ async function handleRequest(context, dbData) {
 
     if (execUser) {
       const credKey = (execUser.username || '').toLowerCase();
+      const execFlags = await loadUserFlags(env);
+      if (isSuspended(execUser, execFlags)) {
+        return jsonResponse({ success: false, session: false, message: 'This account has been suspended. Please contact the school office.' }, 403);
+      }
+      const execLockKey = `user:${credKey}`;
+      const execLockMins = await lockedMinutesRemaining(env, execLockKey);
+      if (execLockMins > 0) {
+        return jsonResponse({ success: false, session: false, message: `This account is temporarily locked after repeated failed sign-in attempts. Try again in ${execLockMins} minute${execLockMins === 1 ? '' : 's'}, or ask an administrator to release the lockout.` }, 423);
+      }
       // Once an individual password is set it replaces the shared executive
       // passwords; while only a shared password exists, signing in with it
       // forces a password change before the console opens.
       if (await getUserCredential(env, credKey)) {
         if (!(await verifyUserCredential(env, credKey, password || ''))) {
+          await recordLoginFailure(env, execLockKey);
           return jsonResponse({
             success: false,
             session: false,
@@ -1119,8 +1233,10 @@ async function handleRequest(context, dbData) {
           }, 401);
         }
       } else if (STAFF_GENERIC_BY_ROLE.superadmin.includes(password)) {
+        await clearLoginFailure(env, execLockKey);
         return mustChangeResponse(env, execUser);
       } else {
+        await recordLoginFailure(env, execLockKey);
         return jsonResponse({
           success: false,
           session: false,
@@ -1128,6 +1244,7 @@ async function handleRequest(context, dbData) {
         }, 401);
       }
 
+      await clearLoginFailure(env, execLockKey);
       auditLogStore.unshift({
         id: auditLogStore.length + 101,
         timestamp: new Date().toISOString(),
@@ -1230,6 +1347,23 @@ async function handleRequest(context, dbData) {
     });
 
     if (matchedUser) {
+      const loginFlags = await loadUserFlags(env);
+      if (isSuspended(matchedUser, loginFlags)) {
+        return jsonResponse({
+          success: false,
+          session: false,
+          message: 'This account has been suspended. Please contact the school office.'
+        }, 403);
+      }
+      const loginLockKey = `user:${(matchedUser.username || '').toLowerCase()}`;
+      const lockMins = await lockedMinutesRemaining(env, loginLockKey);
+      if (lockMins > 0) {
+        return jsonResponse({
+          success: false,
+          session: false,
+          message: `This account is temporarily locked after repeated failed sign-in attempts. Try again in ${lockMins} minute${lockMins === 1 ? '' : 's'}, or ask an administrator to release the lockout.`
+        }, 423);
+      }
       let isValidPass = false;
       let usedGeneric = false;
       if (STAFF_ROLES.includes(matchedUser.role)) {
@@ -1246,10 +1380,12 @@ async function handleRequest(context, dbData) {
       else if (matchedUser.role === 'parent' && (password === 'EagleParent2025!' || password === 'Eagle2025!' || password === matchedUser.reference_id)) isValidPass = true;
 
       if (isValidPass && usedGeneric) {
+        await clearLoginFailure(env, loginLockKey);
         return mustChangeResponse(env, matchedUser);
       }
 
       if (isValidPass) {
+        await clearLoginFailure(env, loginLockKey);
         const studentInfo = matchedUser.role === 'student'
           ? (dbData.students || []).find(s => s.admission_no === matchedUser.reference_id || s.id === matchedUser.reference_id)
           : undefined;
@@ -1273,6 +1409,8 @@ async function handleRequest(context, dbData) {
           'Set-Cookie': `eagle_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`
         });
       }
+
+      if (!isValidPass) await recordLoginFailure(env, loginLockKey);
     }
 
     return jsonResponse({
@@ -1840,7 +1978,8 @@ async function handleRequest(context, dbData) {
 
   // 5. SuperAdmin User Accounts & IAM Console
   if (path === '/api/users' || path === '/api/executive/users') {
-    const users = dbData.users || [];
+    const listFlags = await loadUserFlags(env);
+    const users = (dbData.users || []).map(u => listFlags.has(String(u.id)) ? { ...u, is_active: listFlags.get(String(u.id)) } : u);
     const role = url.searchParams.get('role');
     const status = url.searchParams.get('status');
     const q = (url.searchParams.get('q') || '').toLowerCase();
@@ -1924,17 +2063,67 @@ async function handleRequest(context, dbData) {
     });
   }
 
-  if (path.startsWith('/api/users/') && path.endsWith('/status') && method === 'PATCH') {
+  // Freeze / Unfreeze (fixed 2026-11-27): previously a placebo that returned
+  // success without storing anything. Now persists an admin flag in
+  // user_account_flags; the user list overlays it and login refuses
+  // suspended accounts.
+  const userStatusMatch = /^\/api\/(?:executive\/)?users\/(\d+)\/status$/.exec(path);
+  if (userStatusMatch && method === 'PATCH') {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Authentication required to change account status.' }, 401);
+    }
+    if (!['superadmin', 'admin'].includes(tokenUser.role)) {
+      return jsonResponse({ success: false, message: 'Changing account status is restricted to school leadership.' }, 403);
+    }
+    const target = (dbData.users || []).find(u => String(u.id) === userStatusMatch[1]);
+    if (!target) {
+      return jsonResponse({ success: false, message: 'User account not found.' }, 404);
+    }
+    let isActive;
+    if (body.is_active !== undefined) {
+      isActive = (body.is_active === 1 || body.is_active === true || body.is_active === '1') ? 1 : 0;
+    } else if (typeof body.status === 'string') {
+      isActive = body.status.toLowerCase() === 'active' ? 1 : 0;
+    } else {
+      return jsonResponse({ success: false, message: 'Provide is_active (0 or 1) or status (active/suspended).' }, 400);
+    }
+    await setUserFlag(env, target.id, isActive, tokenUser.username);
     return jsonResponse({
       success: true,
-      message: 'User account active status updated successfully.'
+      message: `Account ${target.username} is now ${isActive === 1 ? 'Active' : 'Suspended'}.`,
+      user: { id: target.id, username: target.username, is_active: isActive }
     });
   }
 
-  if (path.startsWith('/api/users/') && path.endsWith('/release-lockout') && method === 'POST') {
+  // Release lockout (fixed 2026-11-27): previously a placebo. Now clears the
+  // account's real login_lockouts entry, the same store the login handlers
+  // record failures into (5 failures = 15 minute lock, the Express policy).
+  const releaseLockoutMatch = /^\/api\/(?:executive\/)?users\/(\d+)\/release-lockout$/.exec(path);
+  if (releaseLockoutMatch && method === 'POST') {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Authentication required to release a lockout.' }, 401);
+    }
+    if (!['superadmin', 'admin'].includes(tokenUser.role)) {
+      return jsonResponse({ success: false, message: 'Releasing a lockout is restricted to school leadership.' }, 403);
+    }
+    const target = (dbData.users || []).find(u => String(u.id) === releaseLockoutMatch[1]);
+    if (!target) {
+      return jsonResponse({ success: false, message: 'User account not found.' }, 404);
+    }
+    await clearLoginFailure(env, `user:${(target.username || '').toLowerCase()}`);
     return jsonResponse({
       success: true,
-      message: 'Account lockout released successfully.'
+      message: `Lockout released for ${target.username}. They can sign in again immediately.`
     });
   }
 

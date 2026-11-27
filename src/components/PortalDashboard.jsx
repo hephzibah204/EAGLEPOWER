@@ -5012,7 +5012,7 @@ export default function PortalDashboard({
                       <div className="text-2xl font-black text-rose-400 mt-1">
                         {threatTelemetry ? threatTelemetry.totalBanned : '0'}
                       </div>
-                      <span className="text-[11px] text-rose-400/80 mt-1 block">Automatic 2-hour quarantine</span>
+                      <span className="text-[11px] text-rose-400/80 mt-1 block">Automatic 24-hour quarantine</span>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800">
@@ -5029,8 +5029,8 @@ export default function PortalDashboard({
                         <span>Firewall Rate Limiter</span>
                         <ShieldCheck className="w-4 h-4 text-amber-400" />
                       </div>
-                      <div className="text-2xl font-black text-amber-400 mt-1">100 req / 15m</div>
-                      <span className="text-[11px] text-slate-400 mt-1 block">Exponential backoff active</span>
+                      <div className="text-2xl font-black text-amber-400 mt-1">5 attempts</div>
+                      <span className="text-[11px] text-slate-400 mt-1 block">Then a 15-minute account lock</span>
                     </div>
                   </div>
 

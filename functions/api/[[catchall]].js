@@ -838,14 +838,25 @@ async function clearLoginFailure(env, key) {
   }
 }
 
-async function recordLoginFailure(env, key) {
+async function recordLoginFailure(env, key, ip = '') {
   if (!key) return;
   const rec = (await getLockout(env, key)) || { count: 0, lockedUntil: 0 };
   rec.count += 1;
+  const justLocked = rec.count === LOGIN_LOCK_THRESHOLD;
   if (rec.count >= LOGIN_LOCK_THRESHOLD) {
     rec.lockedUntil = Date.now() + LOGIN_LOCK_MINUTES * 60 * 1000;
   }
   await saveLockout(env, key, rec);
+  // Bring the source IP onto the threat radar (tracked, no strike) and log
+  // the moment an account lock engages.
+  if (ip && ip !== 'unknown') {
+    const threat = (await getIpThreat(env, ip)) || { strikes: 0, bannedUntil: 0, lastSeen: 0 };
+    threat.lastSeen = Date.now();
+    await saveIpThreat(env, ip, threat);
+  }
+  if (justLocked) {
+    await recordSecurityEvent(env, { ip, event: 'ACCOUNT_LOCKED', detail: key.replace(/^user:/, ''), action: `LOCKED_${LOGIN_LOCK_MINUTES}M` });
+  }
 }
 
 async function lockedMinutesRemaining(env, key) {
@@ -855,6 +866,175 @@ async function lockedMinutesRemaining(env, key) {
   if (rec.lockedUntil > now) return Math.ceil((rec.lockedUntil - now) / 60000);
   await clearLoginFailure(env, key); // expired lock clears itself
   return 0;
+}
+
+// --- Threat defense (WAF) ---------------------------------------------------
+// The Threat Radar panel was fed invented data (142 probes blocked, two fake
+// telemetry rows with made-up IPs, lockouts hardcoded to zero) and nothing
+// actually inspected or blocked any request. This is a real port of the
+// Express middleware (server/src/middleware/threatDefense.js) to the edge:
+// per-IP strikes in D1 table ip_threats, 3 strikes = 24 hour ban for
+// external IPs, probe/SQLi pattern blocking, and a real event feed in
+// security_events plus a persistent probes_blocked counter.
+const ipThreatMemory = new Map();
+const securityEventMemory = [];
+const securityCounterMemory = new Map();
+let threatTablesReady = false;
+
+const MALICIOUS_PATH_PATTERNS = [
+  /\/(?:\.(?:env|git|svn|hg|bzr|htaccess|htpasswd|ssh|aws|docker))/i,
+  /\b(?:wp-admin|wp-login|wp-content|xmlrpc\.php|phpmyadmin|pma|padmin|adminer)\b/i,
+  /\b(?:eval-stdin|shell\.php|c99\.php|r57\.php|alfa\.php|wso\.php|cmd\.exe|\/bin\/sh|\/bin\/bash)\b/i,
+  /(?:\/etc\/(?:passwd|shadow|hosts|issue)|\/proc\/self\/environ|\/windows\/win\.ini)/i,
+  /(?:\.\.[/\\]|\.\.%2f|\.\.%5c)/i,
+  /\0|%00/i
+];
+const MALICIOUS_QUERY_PATTERNS = [
+  /(?:union\s+(?:all\s+)?select)/i,
+  /(?:information_schema|performance_schema)/i,
+  /(?:benchmark\s*\(|sleep\s*\(\s*\d+\s*\))/i,
+  /<script\b[^>]*>/i,
+  /\0|%00/i
+];
+
+async function ensureThreatTables(env) {
+  if (!env || !env.DB || threatTablesReady) return;
+  try {
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS ip_threats (ip TEXT PRIMARY KEY, strikes INTEGER NOT NULL DEFAULT 0, banned_until INTEGER NOT NULL DEFAULT 0, last_seen INTEGER NOT NULL DEFAULT 0)').run();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS security_events (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, ip TEXT DEFAULT \'\', event TEXT DEFAULT \'\', detail TEXT DEFAULT \'\', action TEXT DEFAULT \'\')').run();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS security_counters (key TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)').run();
+    threatTablesReady = true;
+  } catch {}
+}
+
+async function getIpThreat(env, ip) {
+  if (env && env.DB) {
+    await ensureThreatTables(env);
+    try {
+      const row = await env.DB.prepare('SELECT strikes, banned_until, last_seen FROM ip_threats WHERE ip = ?1').bind(ip).first();
+      if (row) return { strikes: row.strikes || 0, bannedUntil: row.banned_until || 0, lastSeen: row.last_seen || 0 };
+    } catch {}
+  }
+  return ipThreatMemory.get(ip) || null;
+}
+
+async function saveIpThreat(env, ip, rec) {
+  ipThreatMemory.set(ip, rec);
+  if (env && env.DB) {
+    await ensureThreatTables(env);
+    try {
+      await env.DB.prepare('INSERT INTO ip_threats (ip, strikes, banned_until, last_seen) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(ip) DO UPDATE SET strikes = excluded.strikes, banned_until = excluded.banned_until, last_seen = excluded.last_seen')
+        .bind(ip, rec.strikes || 0, rec.bannedUntil || 0, rec.lastSeen || 0).run();
+    } catch {}
+  }
+}
+
+async function loadIpThreats(env) {
+  if (env && env.DB) {
+    await ensureThreatTables(env);
+    try {
+      const { results } = await env.DB.prepare('SELECT ip, strikes, banned_until, last_seen FROM ip_threats').all();
+      if (results) return new Map(results.map(r => [r.ip, { strikes: r.strikes || 0, bannedUntil: r.banned_until || 0, lastSeen: r.last_seen || 0 }]));
+    } catch {}
+  }
+  return new Map(ipThreatMemory);
+}
+
+async function recordSecurityEvent(env, { ip = '', event = '', detail = '', action = '' }) {
+  const rec = { ts: Date.now(), ip, event, detail: String(detail).slice(0, 200), action };
+  securityEventMemory.unshift(rec);
+  if (securityEventMemory.length > 100) securityEventMemory.length = 100;
+  if (env && env.DB) {
+    await ensureThreatTables(env);
+    try {
+      await env.DB.prepare('INSERT INTO security_events (ts, ip, event, detail, action) VALUES (?1, ?2, ?3, ?4, ?5)')
+        .bind(rec.ts, rec.ip, rec.event, rec.detail, rec.action).run();
+    } catch {}
+  }
+}
+
+async function loadSecurityEvents(env, limit = 20) {
+  if (env && env.DB) {
+    await ensureThreatTables(env);
+    try {
+      const { results } = await env.DB.prepare('SELECT ts, ip, event, detail, action FROM security_events ORDER BY id DESC LIMIT ?1').bind(limit).all();
+      if (results) return results;
+    } catch {}
+  }
+  return securityEventMemory.slice(0, limit);
+}
+
+async function bumpSecurityCounter(env, key) {
+  securityCounterMemory.set(key, (securityCounterMemory.get(key) || 0) + 1);
+  if (env && env.DB) {
+    await ensureThreatTables(env);
+    try {
+      await env.DB.prepare('INSERT INTO security_counters (key, value) VALUES (?1, 1) ON CONFLICT(key) DO UPDATE SET value = value + 1').bind(key).run();
+    } catch {}
+  }
+}
+
+async function readSecurityCounter(env, key) {
+  if (env && env.DB) {
+    await ensureThreatTables(env);
+    try {
+      const row = await env.DB.prepare('SELECT value FROM security_counters WHERE key = ?1').bind(key).first();
+      if (row) return row.value || 0;
+    } catch {}
+  }
+  return securityCounterMemory.get(key) || 0;
+}
+
+// Returns a 403/400 response when the request must be stopped, else null.
+async function threatGate(request, env, url) {
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  const now = Date.now();
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === 'localhost';
+  const rec = ip !== 'unknown' ? await getIpThreat(env, ip) : null;
+
+  if (!isLocal && ip !== 'unknown' && rec && rec.bannedUntil > now) {
+    const mins = Math.ceil((rec.bannedUntil - now) / 60000);
+    return jsonResponse({
+      success: false,
+      message: `Access denied. Your IP address has been temporarily blocked for security policy violations. Try again in ${mins} minutes.`
+    }, 403);
+  }
+
+  let rawUrl;
+  try {
+    rawUrl = decodeURIComponent(url.pathname + url.search);
+  } catch {
+    return jsonResponse({ success: false, message: 'Malformed request URL.' }, 400);
+  }
+  let threatEvent = null;
+  for (const pattern of MALICIOUS_PATH_PATTERNS) {
+    if (pattern.test(rawUrl)) { threatEvent = 'BLOCKED_SCANNER_PATH'; break; }
+  }
+  if (!threatEvent) {
+    // Query patterns run against the DECODED query string: url.search keeps
+    // %20-style encoding, which would hide "UNION SELECT" from the \s+ in
+    // the patterns. (Express scanned the parsed, decoded query object.)
+    const qIndex = rawUrl.indexOf('?');
+    const decodedQuery = qIndex >= 0 ? rawUrl.slice(qIndex + 1) : '';
+    for (const pattern of MALICIOUS_QUERY_PATTERNS) {
+      if (pattern.test(decodedQuery)) { threatEvent = 'BLOCKED_MALICIOUS_QUERY'; break; }
+    }
+  }
+  if (threatEvent) {
+    const cur = rec || { strikes: 0, bannedUntil: 0, lastSeen: 0 };
+    cur.strikes += 1;
+    cur.lastSeen = now;
+    let banned = false;
+    if (cur.strikes >= 3 && !isLocal && ip !== 'unknown') {
+      cur.bannedUntil = now + 24 * 60 * 60 * 1000;
+      banned = true;
+    }
+    if (ip !== 'unknown') await saveIpThreat(env, ip, cur);
+    await bumpSecurityCounter(env, 'probes_blocked');
+    await recordSecurityEvent(env, { ip, event: threatEvent, detail: rawUrl, action: banned ? 'IP_BANNED_24H' : '403_REJECTED' });
+    return jsonResponse({ success: false, message: 'Forbidden. Your request violated institutional security firewalls.' }, 403);
+  }
+  return null;
 }
 
 // Effective suspension state for a user: an admin-set flag wins over the
@@ -1124,6 +1304,11 @@ async function handleRequest(context, dbData) {
     });
   }
 
+  // Threat defense gate: banned IPs are refused and known probe/SQLi
+  // patterns are blocked with a strike, before any route runs.
+  const threatBlocked = await threatGate(request, env, url);
+  if (threatBlocked) return threatBlocked;
+
   // 1. Health Check
   if (path === '/api/health' || path === '/api') {
     return jsonResponse({
@@ -1225,7 +1410,7 @@ async function handleRequest(context, dbData) {
       // forces a password change before the console opens.
       if (await getUserCredential(env, credKey)) {
         if (!(await verifyUserCredential(env, credKey, password || ''))) {
-          await recordLoginFailure(env, execLockKey);
+          await recordLoginFailure(env, execLockKey, request.headers.get('cf-connecting-ip') || '');
           return jsonResponse({
             success: false,
             session: false,
@@ -1236,7 +1421,7 @@ async function handleRequest(context, dbData) {
         await clearLoginFailure(env, execLockKey);
         return mustChangeResponse(env, execUser);
       } else {
-        await recordLoginFailure(env, execLockKey);
+        await recordLoginFailure(env, execLockKey, request.headers.get('cf-connecting-ip') || '');
         return jsonResponse({
           success: false,
           session: false,
@@ -1410,7 +1595,7 @@ async function handleRequest(context, dbData) {
         });
       }
 
-      if (!isValidPass) await recordLoginFailure(env, loginLockKey);
+      if (!isValidPass) await recordLoginFailure(env, loginLockKey, request.headers.get('cf-connecting-ip') || '');
     }
 
     return jsonResponse({
@@ -2190,30 +2375,104 @@ async function handleRequest(context, dbData) {
     });
   }
 
+  // Threat Radar (fixed 2026-11-27): every figure is now computed from the
+  // real stores: ip_threats (strikes/bans enforced by threatGate),
+  // security_counters (probes blocked), login_lockouts (account locks) and
+  // security_events (the feed). The previous handler returned invented
+  // numbers and two fake telemetry rows.
   if (path === '/api/system/threat-defense' || path === '/api/executive/threat-intel') {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Authentication required for threat telemetry.' }, 401);
+    }
+    if (tokenUser.role !== 'superadmin') {
+      return jsonResponse({ success: false, message: 'Threat telemetry is restricted to the SuperAdmin.' }, 403);
+    }
+    const nowTs = Date.now();
+    const threats = await loadIpThreats(env);
+    const bannedIps = [];
+    const monitoredIps = [];
+    for (const [ip, rec] of threats.entries()) {
+      const isBanned = rec.bannedUntil > nowTs;
+      const item = {
+        ip,
+        strikes: rec.strikes || 0,
+        lastSeen: rec.lastSeen || null,
+        isBanned,
+        bannedUntil: rec.bannedUntil || null,
+        minutesRemaining: isBanned ? Math.ceil((rec.bannedUntil - nowTs) / 60000) : 0
+      };
+      (isBanned ? bannedIps : monitoredIps).push(item);
+    }
+    let activeLockouts = [];
+    if (env && env.DB) {
+      await ensureAccountTables(env);
+      try {
+        const { results } = await env.DB.prepare('SELECT key, locked_until FROM login_lockouts WHERE locked_until > ?1').bind(nowTs).all();
+        activeLockouts = (results || []).map(r => ({ key: r.key, account: String(r.key).replace(/^user:/, ''), minutesRemaining: Math.ceil((r.locked_until - nowTs) / 60000) }));
+      } catch {}
+    } else {
+      for (const [k, v] of lockoutMemory.entries()) {
+        if (v.lockedUntil > nowTs) activeLockouts.push({ key: k, account: k.replace(/^user:/, ''), minutesRemaining: Math.ceil((v.lockedUntil - nowTs) / 60000) });
+      }
+    }
+    const events = (await loadSecurityEvents(env, 20)).map(e => ({
+      ip: e.ip || '', event: e.event || '', path: e.detail || '', action: e.action || '',
+      time: new Date(e.ts).toISOString()
+    }));
     return jsonResponse({
       success: true,
       data: {
         status: 'SHIELD_ACTIVE',
         active_mode: 'STRICT_DEFENSE',
-        banned_ips_count: 0,
-        banned_ips: [],
-        probes_blocked_count: 142,
-        active_lockouts_count: 0,
-        threat_telemetry: [
-          { ip: '102.89.44.12', event: 'BLOCKED_SCANNER_PATH', path: '/.env', action: '403_REJECTED', time: 'Just now' },
-          { ip: '41.203.77.91', event: 'BLOCKED_SQLI_QUERY', path: '/api/academics/classes?probe=UNION', action: 'DEFENDED', time: '5m ago' }
-        ]
+        totalTracked: threats.size,
+        totalTrackedIps: threats.size,
+        totalBanned: bannedIps.length,
+        banned_ips_count: bannedIps.length,
+        banned_ips: bannedIps,
+        bannedIps,
+        monitoredIps: monitoredIps.slice(0, 50),
+        probes_blocked_count: await readSecurityCounter(env, 'probes_blocked'),
+        active_lockouts_count: activeLockouts.length,
+        threat_telemetry: events
       },
-      active_lockouts: [],
-      recent_security_events: []
+      active_lockouts: activeLockouts,
+      recent_security_events: events
     });
   }
 
   if (path === '/api/system/threat-defense/unban' && method === 'POST') {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Authentication required to lift an IP ban.' }, 401);
+    }
+    if (tokenUser.role !== 'superadmin') {
+      return jsonResponse({ success: false, message: 'Lifting an IP ban is restricted to the SuperAdmin.' }, 403);
+    }
+    const ip = String(body.ip || '').trim();
+    if (!ip) {
+      return jsonResponse({ success: false, message: 'Provide the IP address to unban.' }, 400);
+    }
+    const rec = await getIpThreat(env, ip);
+    if (!rec) {
+      return jsonResponse({ success: true, message: `IP ${ip} is not tracked by the threat radar; no ban to lift.` });
+    }
+    const wasBanned = rec.bannedUntil > Date.now();
+    rec.bannedUntil = 0;
+    rec.strikes = 0;
+    await saveIpThreat(env, ip, rec);
+    await recordSecurityEvent(env, { ip, event: 'IP_UNBANNED', detail: `by ${tokenUser.username}`, action: 'BAN_LIFTED' });
     return jsonResponse({
       success: true,
-      message: `IP ${body.ip || 'target'} unbanned successfully.`
+      message: wasBanned ? `IP ${ip} unbanned successfully.` : `IP ${ip} had no active ban; its strikes have been cleared.`
     });
   }
 

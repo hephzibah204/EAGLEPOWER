@@ -1880,6 +1880,50 @@ async function handleRequest(context, dbData) {
     });
   }
 
+  // Admin password reset (added 2026-11-27): the edge handler never had this
+  // route, so the Users console reset fell through to the generic stub
+  // ("API route POST /api/users/:id/reset-password is active on Cloudflare
+  // Edge"). Mirrors the Express contract (server/src/routes/users.js):
+  // leadership only, password at least 8 characters with letters and digits.
+  // The write goes through saveUserCredential, the same user_credentials
+  // store the login handler checks first for staff roles, so the new
+  // password is the account's only password from the next login.
+  const resetPasswordMatch = /^\/api\/(?:executive\/)?users\/(\d+)\/reset-password$/.exec(path);
+  if (resetPasswordMatch && method === 'POST') {
+    const authHeader = request.headers.get('Authorization') || '';
+    const cookieHeader = request.headers.get('Cookie') || '';
+    const cookieToken = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('eagle_session='))?.split('=')[1];
+    const rawToken = (authHeader.replace(/^Bearer\s+/i, '').trim()) || cookieToken || '';
+    const tokenUser = resolveTokenUser(dbData, rawToken);
+    if (!tokenUser) {
+      return jsonResponse({ success: false, message: 'Authentication required for password reset.' }, 401);
+    }
+    if (!['superadmin', 'admin'].includes(tokenUser.role)) {
+      return jsonResponse({ success: false, message: 'Password reset is restricted to school leadership.' }, 403);
+    }
+    const newPassword = typeof body.new_password === 'string' ? body.new_password : '';
+    if (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      return jsonResponse({ success: false, message: 'Password must be at least 8 characters long and contain both letters and digits.' }, 400);
+    }
+    const target = (dbData.users || []).find(u => String(u.id) === resetPasswordMatch[1]);
+    if (!target) {
+      return jsonResponse({ success: false, message: 'User account not found.' }, 404);
+    }
+    await saveUserCredential(env, target.username, newPassword);
+    // Drop any pending forced-change token for the account so the reset
+    // password is the single way in.
+    const targetKey = String(target.username || '').toLowerCase();
+    if (env && env.DB) {
+      await ensureAuthTables(env);
+      try { await env.DB.prepare('DELETE FROM pwd_change_tokens WHERE username = ?1').bind(targetKey).run(); } catch {}
+    }
+    for (const [k, v] of changeTokenMemory) if (v.username === targetKey) changeTokenMemory.delete(k);
+    return jsonResponse({
+      success: true,
+      message: `Password for user '${target.username}' was updated successfully.`
+    });
+  }
+
   if (path.startsWith('/api/users/') && path.endsWith('/status') && method === 'PATCH') {
     return jsonResponse({
       success: true,

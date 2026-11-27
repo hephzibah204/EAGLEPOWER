@@ -139,7 +139,7 @@ export default function Hero({ onOpenAdmission }) {
         {/* Real Numbers Bar (Floor Rule 8: Strictly genuine real numbers) */}
         <div className="mt-12 pt-8 border-t border-slate-700/80 grid grid-cols-2 md:grid-cols-4 gap-6 text-left">
           <div>
-            <div className="font-mono text-3xl font-normal text-amber-400">99</div>
+            <div className="font-mono text-3xl font-normal text-amber-400">379</div>
             <div className="text-sm font-semibold text-white mt-1">Enrolled Scholars</div>
             <div className="text-xs text-slate-300">Active pupil population</div>
           </div>
